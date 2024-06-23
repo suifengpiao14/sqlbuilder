@@ -39,11 +39,17 @@ type _Order interface {
 }
 
 type _Select interface {
-	Select() (columns []interface{})
+	Select() (columns []any)
 }
 
 type Data interface {
-	Data() (data interface{}, err error) //容许验证参数返回错误
+	Data() (data any, err error) //容许验证参数返回错误
+}
+
+type DataFn func() (any, error)
+
+func (fn DataFn) Data() (data any, err error) {
+	return fn()
 }
 
 type DataSet []Data
@@ -95,7 +101,7 @@ func (p InsertParam) AppendData(dataSet ...Data) InsertParam {
 	return newP
 }
 
-func (p InsertParam) Data() (data interface{}, err error) {
+func (p InsertParam) Data() (data any, err error) {
 	dataIs := make(DataSet, 0)
 	dataIs = append(dataIs, p._InsertParamI)
 	dataIs = append(dataIs, p._DataSet...)
@@ -105,6 +111,10 @@ func (p InsertParam) Data() (data interface{}, err error) {
 func (p InsertParam) ToSQL() (sql string, err error) {
 	rowData, err := p.Data()
 	if err != nil {
+		return "", err
+	}
+	if IsNil(rowData) {
+		err = errors.New("InsertParam.Data() return nil data")
 		return "", err
 	}
 	table := p._InsertParamI.Table()
@@ -119,7 +129,7 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 type InsertParams []InsertParam
 
 func (rows InsertParams) ToSQL() (sql string, err error) {
-	data := make([]interface{}, 0)
+	data := make([]any, 0)
 	table := ""
 	for i, r := range rows {
 		if i == 0 {
@@ -128,6 +138,9 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 		rowData, err := r.Data()
 		if err != nil {
 			return "", err
+		}
+		if IsNil(rowData) {
+			continue
 		}
 		data = append(data, rowData)
 	}
@@ -202,7 +215,7 @@ func (p UpdateParam) AppendWhere(whereSet ...Where) UpdateParam {
 	newP._WhereSet = append(newP._WhereSet, whereSet...)
 	return newP
 }
-func (p UpdateParam) Data() (data interface{}, err error) {
+func (p UpdateParam) Data() (data any, err error) {
 	dataIs := make(DataSet, 0)
 	dataIs = append(dataIs, p._UpdateParamI)
 	dataIs = append(dataIs, p._DataSet...)
@@ -429,12 +442,15 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-func MergeData(dataIs ...Data) (newData map[string]interface{}, err error) {
-	newData = map[string]interface{}{}
+func MergeData(dataIs ...Data) (newData map[string]any, err error) {
+	newData = map[string]any{}
 	for _, dataI := range dataIs {
 		data, err := dataI.Data()
 		if err != nil {
 			return newData, err
+		}
+		if IsNil(data) {
+			continue
 		}
 		rv := reflect.Indirect(reflect.ValueOf(data))
 		switch rv.Kind() {
