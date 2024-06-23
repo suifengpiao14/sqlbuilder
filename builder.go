@@ -246,8 +246,6 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-type SorftDeleteParam UpdateParam
-
 type FirstParamI interface {
 	_Tabale
 	_Select
