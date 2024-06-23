@@ -53,33 +53,77 @@ type InsertParamI interface {
 	Data
 }
 
-// InsertParam 供子类复用,修改数据
-type InsertParam struct {
-	InsertParamI
-	_DataSet DataSet
+func ConcatOrderedExpression(orderedExpressions ...exp.OrderedExpression) []exp.OrderedExpression {
+	return orderedExpressions
 }
 
-func (p *InsertParam) AppendData(dataSet ...Data) *InsertParam {
-	if p._DataSet == nil {
-		p._DataSet = make(DataSet, 0)
+func ConcatExpression(expressions ...exp.Expression) []exp.Expression {
+	return expressions
+}
+
+// InsertParam 供子类复用,修改数据
+type InsertParam struct {
+	_InsertParamI InsertParamI
+	_DataSet      DataSet
+}
+
+func NewInsertBuilder(insertParamI InsertParamI) InsertParam {
+	return InsertParam{
+		_InsertParamI: insertParamI,
+		_DataSet:      make(DataSet, 0),
 	}
-	p._DataSet = append(p._DataSet, dataSet...)
-	return p
+}
+
+func (p InsertParam) Copy() InsertParam {
+	return InsertParam{
+		_InsertParamI: p._InsertParamI,
+		_DataSet:      p._DataSet,
+	}
+}
+func (p InsertParam) Merge(insertParams ...InsertParam) InsertParam {
+	newP := p.Copy()
+	for _, up := range insertParams {
+		newP._DataSet = append(newP._DataSet, up._DataSet...)
+	}
+	return newP
+}
+
+func (p InsertParam) AppendData(dataSet ...Data) InsertParam {
+	newP := p.Copy()
+	newP._DataSet = append(newP._DataSet, p._DataSet...)
+	newP._DataSet = append(newP._DataSet, dataSet...)
+	return newP
 }
 
 func (p InsertParam) Data() (data interface{}, err error) {
 	dataIs := make(DataSet, 0)
-	dataIs = append(dataIs, p.InsertParamI)
+	dataIs = append(dataIs, p._InsertParamI)
 	dataIs = append(dataIs, p._DataSet...)
 	return MergeData(dataIs...)
 }
 
-func Insert(rows ...InsertParam) (sql string, err error) {
+func (p InsertParam) ToSQL() (sql string, err error) {
+	rowData, err := p.Data()
+	if err != nil {
+		return "", err
+	}
+	table := p._InsertParamI.Table()
+	ds := Dialect.Insert(table).Rows(rowData)
+	sql, _, err = ds.ToSQL()
+	if err != nil {
+		return "", err
+	}
+	return sql, nil
+}
+
+type InsertParams []InsertParam
+
+func (rows InsertParams) ToSQL() (sql string, err error) {
 	data := make([]interface{}, 0)
 	table := ""
 	for i, r := range rows {
 		if i == 0 {
-			table = r.Table()
+			table = r._InsertParamI.Table()
 		}
 		rowData, err := r.Data()
 		if err != nil {
@@ -115,50 +159,73 @@ type UpdateParamI interface {
 }
 
 type UpdateParam struct {
-	UpdateParamI
-	_DataSet  DataSet  //中间件的Data 集合
-	_WhereSet WhereSet //中间件的Where 集合
+	_UpdateParamI UpdateParamI
+	_DataSet      DataSet  //中间件的Data 集合
+	_WhereSet     WhereSet //中间件的Where 集合
 }
 
-func (p *UpdateParam) AppendData(dataSet ...Data) *UpdateParam {
-	if p._DataSet == nil {
-		p._DataSet = make(DataSet, 0)
+func NewUpdateBuilder(updateParamI UpdateParamI) UpdateParam {
+	return UpdateParam{
+		_UpdateParamI: updateParamI,
+		_DataSet:      make(DataSet, 0),
+		_WhereSet:     make(WhereSet, 0),
 	}
-	p._DataSet = append(p._DataSet, dataSet...)
-	return p
 }
 
-func (p *UpdateParam) AppendWhere(whereSet ...Where) *UpdateParam {
-	if p._WhereSet == nil {
-		p._WhereSet = make(WhereSet, 0)
+func (p UpdateParam) Copy() UpdateParam {
+	return UpdateParam{
+		_UpdateParamI: p._UpdateParamI,
+		_DataSet:      p._DataSet,
+		_WhereSet:     p._WhereSet,
 	}
-	p._WhereSet = append(p._WhereSet, whereSet...)
-	return p
+}
+
+func (p UpdateParam) Merge(updateParams ...UpdateParam) UpdateParam {
+	newP := p.Copy()
+	for _, up := range updateParams {
+		newP._DataSet = append(newP._DataSet, up._DataSet...)
+		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
+	}
+	return newP
+}
+
+func (p UpdateParam) AppendData(dataSet ...Data) UpdateParam {
+	newP := p.Copy()
+	newP._DataSet = append(newP._DataSet, p._DataSet...)
+	newP._DataSet = append(newP._DataSet, dataSet...)
+	return newP
+}
+
+func (p UpdateParam) AppendWhere(whereSet ...Where) UpdateParam {
+	newP := p.Copy()
+	newP._WhereSet = append(newP._WhereSet, p._WhereSet...)
+	newP._WhereSet = append(newP._WhereSet, whereSet...)
+	return newP
 }
 func (p UpdateParam) Data() (data interface{}, err error) {
 	dataIs := make(DataSet, 0)
-	dataIs = append(dataIs, p.UpdateParamI)
+	dataIs = append(dataIs, p._UpdateParamI)
 	dataIs = append(dataIs, p._DataSet...)
 	return MergeData(dataIs...)
 }
 
 func (p UpdateParam) Where() (expressions []goqu.Expression, err error) {
 	whereIs := make([]Where, 0)
-	whereIs = append(whereIs, p.UpdateParamI)
+	whereIs = append(whereIs, p._UpdateParamI)
 	whereIs = append(whereIs, p._WhereSet...)
 	return MergeWhere(whereIs...)
 }
 
-func Update(param UpdateParam) (sql string, err error) {
-	data, err := param.Data()
+func (p UpdateParam) ToSQL() (sql string, err error) {
+	data, err := p.Data()
 	if err != nil {
 		return "", err
 	}
-	where, err := param.Where()
+	where, err := p.Where()
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.Update(param.Table()).Set(data).Where(where...)
+	ds := Dialect.Update(p._UpdateParamI.Table()).Set(data).Where(where...)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -166,7 +233,7 @@ func Update(param UpdateParam) (sql string, err error) {
 	return sql, nil
 }
 
-var SorftDelete = Update
+type SorftDeleteParam UpdateParam
 
 type FirstParamI interface {
 	_Tabale
@@ -176,30 +243,54 @@ type FirstParamI interface {
 }
 
 type FirstParam struct {
-	FirstParamI
-	_WhereSet WhereSet //中间件的Where 集合
+	_FirstParamI FirstParamI
+	_WhereSet    WhereSet //中间件的Where 集合
 }
 
-func (p *FirstParam) AppendWhere(whereSet ...Where) *FirstParam {
-	if p._WhereSet == nil {
-		p._WhereSet = make(WhereSet, 0)
+func (p FirstParam) Copy() FirstParam {
+	return FirstParam{
+		_FirstParamI: p._FirstParamI,
+		_WhereSet:    p._WhereSet,
 	}
-	p._WhereSet = append(p._WhereSet, whereSet...)
-	return p
+}
+func (p FirstParam) Merge(firstParams ...FirstParam) FirstParam {
+	newP := p.Copy()
+	for _, up := range firstParams {
+		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
+	}
+	return newP
+}
+
+func NewFirstBuilder(firstParamI FirstParamI) FirstParam {
+	return FirstParam{
+		_FirstParamI: firstParamI,
+		_WhereSet:    make(WhereSet, 0),
+	}
+}
+
+func (p FirstParam) AppendWhere(whereSet ...Where) FirstParam {
+	newP := p.Copy()
+	newP._WhereSet = append(newP._WhereSet, p._WhereSet...)
+	newP._WhereSet = append(newP._WhereSet, whereSet...)
+	return newP
 }
 func (p FirstParam) Where() (expressions []goqu.Expression, err error) {
 	whereIs := make([]Where, 0)
-	whereIs = append(whereIs, p.FirstParamI)
+	whereIs = append(whereIs, p._FirstParamI)
 	whereIs = append(whereIs, p._WhereSet...)
 	return MergeWhere(whereIs...)
 }
 
-func First(param FirstParamI) (sql string, err error) {
-	where, err := param.Where()
+func (p FirstParam) ToSQL() (sql string, err error) {
+	where, err := p.Where()
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.Select(param.Select()...).From(param.Table()).Where(where...).Order(param.Order()...).Limit(1)
+	ds := Dialect.Select(p._FirstParamI.Select()...).
+		From(p._FirstParamI.Table()).
+		Where(where...).
+		Order(p._FirstParamI.Order()...).
+		Limit(1)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -216,37 +307,59 @@ type ListParamI interface {
 }
 
 type ListParam struct {
-	ListParamI
-	_WhereSet WhereSet
+	_ListParamI ListParamI
+	_WhereSet   WhereSet
 }
 
-func (p *ListParam) AppendWhere(whereSet ...Where) *ListParam {
-	if p._WhereSet == nil {
-		p._WhereSet = make(WhereSet, 0)
+func (p ListParam) Copy() ListParam {
+	return ListParam{
+		_ListParamI: p._ListParamI,
+		_WhereSet:   p._WhereSet,
 	}
-	p._WhereSet = append(p._WhereSet, whereSet...)
-	return p
+}
+func (p ListParam) Merge(listParams ...ListParam) ListParam {
+	newP := p.Copy()
+	for _, up := range listParams {
+		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
+	}
+	return newP
+}
+
+func NewListBuilder(listParamI ListParamI) ListParam {
+	return ListParam{
+		_ListParamI: listParamI,
+		_WhereSet:   make(WhereSet, 0),
+	}
+}
+func (p ListParam) AppendWhere(whereSet ...Where) ListParam {
+	newP := p.Copy()
+	newP._WhereSet = append(newP._WhereSet, p._WhereSet...)
+	newP._WhereSet = append(newP._WhereSet, whereSet...)
+	return newP
 }
 
 func (p ListParam) Where() (expressions []goqu.Expression, err error) {
 	whereIs := make([]Where, 0)
-	whereIs = append(whereIs, p.ListParamI)
+	whereIs = append(whereIs, p._ListParamI)
 	whereIs = append(whereIs, p._WhereSet...)
 	return MergeWhere(whereIs...)
 }
 
-func List(param ListParamI) (sql string, err error) {
-	where, err := param.Where()
+func (p ListParam) ToSQL() (sql string, err error) {
+	where, err := p.Where()
 	if err != nil {
 		return "", err
 	}
-	pageIndex, pageSize := param.Pagination()
+	pageIndex, pageSize := p._ListParamI.Pagination()
 	ofsset := pageIndex * pageSize
 	if ofsset < 0 {
 		ofsset = 0
 	}
 
-	ds := Dialect.Select(param.Select()...).From(param.Table()).Where(where...).Order(param.Order()...)
+	ds := Dialect.Select(p._ListParamI.Select()...).
+		From(p._ListParamI.Table()).
+		Where(where...).
+		Order(p._ListParamI.Order()...)
 	if pageSize > 0 {
 		ds = ds.Offset(uint(ofsset)).Limit(uint(pageSize))
 	}
@@ -262,30 +375,53 @@ type TotalParamI interface {
 	Where
 }
 type TotalParam struct {
-	TotalParamI
-	_WhereSet WhereSet
+	_TotalParamI TotalParamI
+	_WhereSet    WhereSet
 }
 
-func (p *TotalParam) AppendWhere(whereSet ...Where) *TotalParam {
-	if p._WhereSet == nil {
-		p._WhereSet = make(WhereSet, 0)
+func NewTotalBuilder(totalParamI TotalParamI) TotalParam {
+	return TotalParam{
+		_TotalParamI: totalParamI,
+		_WhereSet:    make(WhereSet, 0),
 	}
-	p._WhereSet = append(p._WhereSet, whereSet...)
-	return p
 }
+
+func (p TotalParam) Copy() TotalParam {
+	return TotalParam{
+		_TotalParamI: p._TotalParamI,
+		_WhereSet:    p._WhereSet,
+	}
+}
+func (p TotalParam) Merge(totalParams ...TotalParam) TotalParam {
+	newP := p.Copy()
+	for _, up := range totalParams {
+		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
+	}
+	return newP
+}
+
+func (p TotalParam) AppendWhere(whereSet ...Where) TotalParam {
+	newP := p.Copy()
+	newP._WhereSet = append(newP._WhereSet, p._WhereSet...)
+	newP._WhereSet = append(newP._WhereSet, whereSet...)
+	return newP
+}
+
 func (p TotalParam) Where() (expressions []goqu.Expression, err error) {
 	whereIs := make([]Where, 0)
-	whereIs = append(whereIs, p.TotalParamI)
+	whereIs = append(whereIs, p._TotalParamI)
 	whereIs = append(whereIs, p._WhereSet...)
 	return MergeWhere(whereIs...)
 }
 
-func Total(param TotalParamI) (sql string, err error) {
-	where, err := param.Where()
+func (p TotalParam) ToSQL() (sql string, err error) {
+	where, err := p.Where()
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.From(param.Table()).Where(where...).Select(goqu.COUNT(goqu.Star()).As("count"))
+	ds := Dialect.From(p._TotalParamI.Table()).
+		Where(where...).
+		Select(goqu.COUNT(goqu.Star()).As("count"))
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
