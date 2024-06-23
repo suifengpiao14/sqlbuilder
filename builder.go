@@ -4,6 +4,8 @@ import (
 	"reflect"
 
 	"github.com/doug-martin/goqu/v9"
+	_ "github.com/doug-martin/goqu/v9/dialect/mysql"
+	_ "github.com/doug-martin/goqu/v9/dialect/sqlite3"
 	"github.com/doug-martin/goqu/v9/exp"
 	"github.com/pkg/errors"
 )
@@ -22,9 +24,11 @@ type _Tabale interface {
 	Table() (table string)
 }
 
-type _Where interface {
-	Where() (expressions []goqu.Expression)
+type Where interface {
+	Where() (expressions []goqu.Expression, err error) // 容许在构建where函数时验证必要参数返回报错
 }
+
+type WhereSet []Where
 
 type _Pagination interface {
 	Pagination() (index int, size int)
@@ -38,51 +42,44 @@ type _Select interface {
 	Select() (columns []interface{})
 }
 
-type _Validate interface {
-	Validate() (err error)
+type Data interface {
+	Data() (data interface{}, err error) //容许验证参数返回错误
 }
 
-type _Data interface {
-	Data() (data interface{}, err error)
-}
+type DataSet []Data
 
 type InsertParamI interface {
 	_Tabale
-	_Data
-	_Validate
+	Data
 }
 
 // InsertParam 供子类复用,修改数据
 type InsertParam struct {
 	InsertParamI
-	ExtraData map[string]any
+	_DataSet DataSet
+}
+
+func (p *InsertParam) AppendData(dataSet ...Data) *InsertParam {
+	if p._DataSet == nil {
+		p._DataSet = make(DataSet, 0)
+	}
+	p._DataSet = append(p._DataSet, dataSet...)
+	return p
 }
 
 func (p InsertParam) Data() (data interface{}, err error) {
-	return mergeData(p.InsertParamI, p.ExtraData)
+	dataIs := make(DataSet, 0)
+	dataIs = append(dataIs, p.InsertParamI)
+	dataIs = append(dataIs, p._DataSet...)
+	return MergeData(dataIs...)
 }
 
-func mergeData(dataI _Data, extraData map[string]any) (out map[string]any, err error) {
-	oldData, err := dataI.Data()
-	if err != nil {
-		return nil, err
-	}
-	mergedData, err := MergeAnyData(oldData, extraData)
-	if err != nil {
-		return nil, err
-	}
-	return mergedData, nil
-}
-
-func Insert(rows ...InsertParamI) (sql string, err error) {
+func Insert(rows ...InsertParam) (sql string, err error) {
 	data := make([]interface{}, 0)
 	table := ""
 	for i, r := range rows {
 		if i == 0 {
 			table = r.Table()
-		}
-		if err = r.Validate(); err != nil {
-			return "", err
 		}
 		rowData, err := r.Data()
 		if err != nil {
@@ -98,45 +95,70 @@ func Insert(rows ...InsertParamI) (sql string, err error) {
 	return sql, nil
 }
 
-func mergeWhere(whereI _Where, extraWhere []goqu.Expression) (mergedWhere []goqu.Expression) {
-	expressions := whereI.Where()
-	if expressions == nil {
-		expressions = make([]goqu.Expression, 0)
+func MergeWhere(whereIs ...Where) (mergedWhere []goqu.Expression, err error) {
+	expressions := make([]goqu.Expression, 0)
+	for _, whereI := range whereIs {
+		where, err := whereI.Where()
+		if err != nil {
+			return expressions, err
+		}
+		expressions = append(expressions, where...)
 	}
-	expressions = append(expressions, extraWhere...)
-	return expressions
+
+	return expressions, nil
 }
 
 type UpdateParamI interface {
 	_Tabale
-	_Where
-	_Data
-	_Validate
+	Where
+	Data
 }
 
 type UpdateParam struct {
 	UpdateParamI
-	ExtraData  map[string]any
-	ExtraWhere []goqu.Expression
+	_DataSet  DataSet  //中间件的Data 集合
+	_WhereSet WhereSet //中间件的Where 集合
 }
 
-func (p UpdateParam) Data() (data interface{}, err error) {
-	return mergeData(p.UpdateParamI, p.ExtraData)
-}
-
-func (p UpdateParam) Where() (expressions []goqu.Expression) {
-	return mergeWhere(p.UpdateParamI, p.ExtraWhere)
-}
-
-func Update(param UpdateParamI) (sql string, err error) {
-	if err = param.Validate(); err != nil {
-		return "", err
+func (p *UpdateParam) AppendData(dataSet ...Data) *UpdateParam {
+	if p._DataSet == nil {
+		p._DataSet = make(DataSet, 0)
 	}
+	p._DataSet = append(p._DataSet, dataSet...)
+	return p
+}
+
+func (p *UpdateParam) AppendWhere(whereSet ...Where) *UpdateParam {
+	if p._WhereSet == nil {
+		p._WhereSet = make(WhereSet, 0)
+	}
+	p._WhereSet = append(p._WhereSet, whereSet...)
+	return p
+}
+func (p UpdateParam) Data() (data interface{}, err error) {
+	dataIs := make(DataSet, 0)
+	dataIs = append(dataIs, p.UpdateParamI)
+	dataIs = append(dataIs, p._DataSet...)
+	return MergeData(dataIs...)
+}
+
+func (p UpdateParam) Where() (expressions []goqu.Expression, err error) {
+	whereIs := make([]Where, 0)
+	whereIs = append(whereIs, p.UpdateParamI)
+	whereIs = append(whereIs, p._WhereSet...)
+	return MergeWhere(whereIs...)
+}
+
+func Update(param UpdateParam) (sql string, err error) {
 	data, err := param.Data()
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.Update(param.Table()).Set(data).Where(param.Where()...)
+	where, err := param.Where()
+	if err != nil {
+		return "", err
+	}
+	ds := Dialect.Update(param.Table()).Set(data).Where(where...)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -149,21 +171,35 @@ var SorftDelete = Update
 type FirstParamI interface {
 	_Tabale
 	_Select
-	_Where
+	Where
 	_Order
 }
 
 type FirstParam struct {
 	FirstParamI
-	ExtraWhere []goqu.Expression
+	_WhereSet WhereSet //中间件的Where 集合
 }
 
-func (p FirstParam) Where() (expressions []goqu.Expression) {
-	return mergeWhere(p.FirstParamI, p.ExtraWhere)
+func (p *FirstParam) AppendWhere(whereSet ...Where) *FirstParam {
+	if p._WhereSet == nil {
+		p._WhereSet = make(WhereSet, 0)
+	}
+	p._WhereSet = append(p._WhereSet, whereSet...)
+	return p
+}
+func (p FirstParam) Where() (expressions []goqu.Expression, err error) {
+	whereIs := make([]Where, 0)
+	whereIs = append(whereIs, p.FirstParamI)
+	whereIs = append(whereIs, p._WhereSet...)
+	return MergeWhere(whereIs...)
 }
 
 func First(param FirstParamI) (sql string, err error) {
-	ds := Dialect.Select(param.Select()...).From(param.Table()).Where(param.Where()...).Order(param.Order()...).Limit(1)
+	where, err := param.Where()
+	if err != nil {
+		return "", err
+	}
+	ds := Dialect.Select(param.Select()...).From(param.Table()).Where(where...).Order(param.Order()...).Limit(1)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -174,29 +210,43 @@ func First(param FirstParamI) (sql string, err error) {
 type ListParamI interface {
 	_Tabale
 	_Select
-	_Where
+	Where
 	_Pagination
 	_Order
 }
 
 type ListParam struct {
 	ListParamI
-	ExtraWhere []goqu.Expression
+	_WhereSet WhereSet
 }
 
-func (p ListParam) Where() (expressions []goqu.Expression) {
-	return mergeWhere(p.ListParamI, p.ExtraWhere)
+func (p *ListParam) AppendWhere(whereSet ...Where) *ListParam {
+	if p._WhereSet == nil {
+		p._WhereSet = make(WhereSet, 0)
+	}
+	p._WhereSet = append(p._WhereSet, whereSet...)
+	return p
+}
+
+func (p ListParam) Where() (expressions []goqu.Expression, err error) {
+	whereIs := make([]Where, 0)
+	whereIs = append(whereIs, p.ListParamI)
+	whereIs = append(whereIs, p._WhereSet...)
+	return MergeWhere(whereIs...)
 }
 
 func List(param ListParamI) (sql string, err error) {
-	expressions := param.Where()
+	where, err := param.Where()
+	if err != nil {
+		return "", err
+	}
 	pageIndex, pageSize := param.Pagination()
 	ofsset := pageIndex * pageSize
 	if ofsset < 0 {
 		ofsset = 0
 	}
 
-	ds := Dialect.Select(param.Select()...).From(param.Table()).Where(expressions...).Order(param.Order()...)
+	ds := Dialect.Select(param.Select()...).From(param.Table()).Where(where...).Order(param.Order()...)
 	if pageSize > 0 {
 		ds = ds.Offset(uint(ofsset)).Limit(uint(pageSize))
 	}
@@ -209,20 +259,33 @@ func List(param ListParamI) (sql string, err error) {
 
 type TotalParamI interface {
 	_Tabale
-	_Where
+	Where
 }
 type TotalParam struct {
 	TotalParamI
-	ExtraWhere []goqu.Expression
+	_WhereSet WhereSet
 }
 
-func (p TotalParam) Where() (expressions []goqu.Expression) {
-	return mergeWhere(p.TotalParamI, p.ExtraWhere)
+func (p *TotalParam) AppendWhere(whereSet ...Where) *TotalParam {
+	if p._WhereSet == nil {
+		p._WhereSet = make(WhereSet, 0)
+	}
+	p._WhereSet = append(p._WhereSet, whereSet...)
+	return p
+}
+func (p TotalParam) Where() (expressions []goqu.Expression, err error) {
+	whereIs := make([]Where, 0)
+	whereIs = append(whereIs, p.TotalParamI)
+	whereIs = append(whereIs, p._WhereSet...)
+	return MergeWhere(whereIs...)
 }
 
 func Total(param TotalParamI) (sql string, err error) {
-	expressions := param.Where()
-	ds := Dialect.From(param.Table()).Where(expressions...).Select(goqu.COUNT(goqu.Star()).As("count"))
+	where, err := param.Where()
+	if err != nil {
+		return "", err
+	}
+	ds := Dialect.From(param.Table()).Where(where...).Select(goqu.COUNT(goqu.Star()).As("count"))
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -230,9 +293,13 @@ func Total(param TotalParamI) (sql string, err error) {
 	return sql, nil
 }
 
-func MergeAnyData(datas ...interface{}) (newData map[string]interface{}, err error) {
+func MergeData(dataIs ...Data) (newData map[string]interface{}, err error) {
 	newData = map[string]interface{}{}
-	for _, data := range datas {
+	for _, dataI := range dataIs {
+		data, err := dataI.Data()
+		if err != nil {
+			return newData, err
+		}
 		rv := reflect.Indirect(reflect.ValueOf(data))
 		switch rv.Kind() {
 		case reflect.Map:
@@ -253,5 +320,5 @@ func MergeAnyData(datas ...interface{}) (newData map[string]interface{}, err err
 		}
 	}
 
-	return
+	return newData, nil
 }
