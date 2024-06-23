@@ -1,4 +1,4 @@
-package goqucrud
+package sqlbuilder
 
 import (
 	"reflect"
