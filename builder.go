@@ -28,6 +28,12 @@ type Where interface {
 	Where() (expressions []goqu.Expression, err error) // 容许在构建where函数时验证必要参数返回报错
 }
 
+type WhereFn func() (expressions []goqu.Expression, err error)
+
+func (fn WhereFn) Where() (expressions []goqu.Expression, err error) {
+	return fn()
+}
+
 type WhereSet []Where
 
 type _Pagination interface {
