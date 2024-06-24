@@ -386,6 +386,20 @@ func (p ListParam) Format(formatFn func(ListParam) ListParam) ListParam {
 	return np
 }
 
+// CustomSQL 自定义SQL，方便构造更复杂的查询语句，如 Group,Having 等
+func (p ListParam) CustomSQL(sqlFn func(p ListParam, ds *goqu.SelectDataset) (newDs *goqu.SelectDataset, err error)) (sql string, err error) {
+	ds := Dialect.Select()
+	ds, err = sqlFn(p.Copy(), ds)
+	if err != nil {
+		return "", err
+	}
+	sql, _, err = ds.ToSQL()
+	if err != nil {
+		return "", err
+	}
+	return sql, nil
+}
+
 func (p ListParam) ToSQL() (sql string, err error) {
 	where, err := p.Where()
 	if err != nil {
