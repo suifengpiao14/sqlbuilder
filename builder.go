@@ -114,12 +114,6 @@ func (p InsertParam) Data() (data any, err error) {
 	return MergeData(dataIs...)
 }
 
-// Format 在最后转换为SQL是再格式化一次数据(字段替换)
-func (p InsertParam) Format(formatFn func(InsertParam) InsertParam) InsertParam {
-	np := formatFn(p.Copy())
-	return np
-}
-
 func (p InsertParam) ToSQL() (sql string, err error) {
 	rowData, err := p.Data()
 	if err != nil {
@@ -241,12 +235,6 @@ func (p UpdateParam) Where() (expressions []goqu.Expression, err error) {
 	return MergeWhere(whereIs...)
 }
 
-// Format 在最后转换为SQL是再格式化一次数据和Where 条件(字段替换)
-func (p UpdateParam) Format(formatFn func(UpdateParam) UpdateParam) UpdateParam {
-	np := formatFn(p.Copy())
-	return np
-}
-
 func (p UpdateParam) ToSQL() (sql string, err error) {
 	data, err := p.Data()
 	if err != nil {
@@ -310,12 +298,6 @@ func (p FirstParam) Where() (expressions []goqu.Expression, err error) {
 	return MergeWhere(whereIs...)
 }
 
-// Format 在最后转换为SQL是再格式化一次Where 条件(字段替换)
-func (p FirstParam) Format(formatFn func(FirstParam) FirstParam) FirstParam {
-	np := formatFn(p.Copy())
-	return np
-}
-
 func (p FirstParam) ToSQL() (sql string, err error) {
 	where, err := p.Where()
 	if err != nil {
@@ -374,16 +356,10 @@ func (p ListParam) AppendWhere(whereSet ...Where) ListParam {
 }
 
 func (p ListParam) Where() (expressions []goqu.Expression, err error) {
-	whereIs := make([]Where, 0)
-	whereIs = append(whereIs, p._ListParamI)
-	whereIs = append(whereIs, p._WhereSet...)
-	return MergeWhere(whereIs...)
-}
-
-// Format 在最后转换为SQL是再格式化一次Where 条件(字段替换)
-func (p ListParam) Format(formatFn func(ListParam) ListParam) ListParam {
-	np := formatFn(p.Copy())
-	return np
+	wheres := make([]Where, 0)
+	wheres = append(wheres, p._ListParamI)
+	wheres = append(wheres, p._WhereSet...)
+	return MergeWhere(wheres...)
 }
 
 // CustomSQL 自定义SQL，方便构造更复杂的查询语句，如 Group,Having 等
@@ -467,12 +443,6 @@ func (p TotalParam) Where() (expressions []goqu.Expression, err error) {
 	whereIs = append(whereIs, p._TotalParamI)
 	whereIs = append(whereIs, p._WhereSet...)
 	return MergeWhere(whereIs...)
-}
-
-// Format 在最后转换为SQL是再格式化一次Where 条件(字段替换)
-func (p TotalParam) Format(formatFn func(TotalParam) TotalParam) TotalParam {
-	np := formatFn(p.Copy())
-	return np
 }
 
 func (p TotalParam) ToSQL() (sql string, err error) {

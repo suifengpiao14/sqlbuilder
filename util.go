@@ -4,9 +4,36 @@ import "reflect"
 
 var Time_format = "2024-01-02 15:04:05"
 
-//WrapFieldName 业务组件的字段名称全部改为内置，并约定调用该函数生成，使用者可以重写这个函数实现字段名定制化
-var WrapFieldName = func(fieldName string, business string) (wrappedFieldName string) {
-	return wrappedFieldName
+// Column 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
+type Column struct {
+	Name  string `json:"name"`
+	Value func(in any) any
+}
+
+func NewColumn(name string, value func(in any) any) Column {
+	if value == nil {
+		value = func(in any) any {
+			return in
+		}
+	}
+	column := Column{
+		Name:  name,
+		Value: value,
+	}
+	return column
+}
+
+type ColumnFn func() []Column
+
+func (fn ColumnFn) Data() (data any, err error) {
+	m := map[string]any{}
+	columns := fn()
+	for _, c := range columns {
+		if c.Name != "" {
+			m[c.Name] = c.Value(nil)
+		}
+	}
+	return m, nil
 }
 
 func IsNil(v any) bool {
