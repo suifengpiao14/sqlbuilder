@@ -2,6 +2,7 @@ package sqlbuilder
 
 import (
 	"reflect"
+	"strings"
 
 	"github.com/doug-martin/goqu/v9"
 	_ "github.com/doug-martin/goqu/v9/dialect/mysql"
@@ -10,15 +11,25 @@ import (
 	"github.com/pkg/errors"
 )
 
+type Driver string
+
+func (d Driver) String() string {
+	return string(d)
+}
+
+func (d Driver) IsSame(target Driver) bool {
+	return strings.EqualFold(d.String(), target.String())
+}
+
 const (
-	Dialect_mysql   = "mysql"
-	Dialect_sqlite3 = "sqlite3"
+	Dialect_mysql   Driver = "mysql"
+	Dialect_sqlite3 Driver = "sqlite3"
 )
 
 // Dialect 设定驱动,方便直接使用
-var Dialect = goqu.Dialect(Dialect_sqlite3)
+var Dialect = goqu.Dialect(Dialect_sqlite3.String())
 
-var Dialect_Mysql = goqu.Dialect(Dialect_mysql)
+var Dialect_Mysql = goqu.Dialect(Dialect_mysql.String())
 
 type _Tabale interface {
 	Table() (table string)
