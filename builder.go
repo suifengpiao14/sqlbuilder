@@ -31,7 +31,7 @@ var Dialect = goqu.Dialect(Dialect_sqlite3.String())
 
 var Dialect_Mysql = goqu.Dialect(Dialect_mysql.String())
 
-type _Tabale interface {
+type Table interface {
 	Table() (table string)
 }
 
@@ -72,7 +72,7 @@ func (fn DataFn) Data() (data any, err error) {
 type DataSet []Data
 
 type InsertParamI interface {
-	_Tabale
+	Table
 	Data
 }
 
@@ -172,6 +172,9 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 func MergeWhere(whereIs ...Where) (mergedWhere []goqu.Expression, err error) {
 	expressions := make([]goqu.Expression, 0)
 	for _, whereI := range whereIs {
+		if IsNil(whereI) {
+			continue
+		}
 		where, err := whereI.Where()
 		if err != nil {
 			return expressions, err
@@ -183,7 +186,7 @@ func MergeWhere(whereIs ...Where) (mergedWhere []goqu.Expression, err error) {
 }
 
 type UpdateParamI interface {
-	_Tabale
+	Table
 	Where
 	Data
 }
@@ -264,7 +267,7 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 }
 
 type FirstParamI interface {
-	_Tabale
+	Table
 	_Select
 	Where
 	_Order
@@ -327,7 +330,7 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 }
 
 type ListParamI interface {
-	_Tabale
+	Table
 	_Select
 	Where
 	_Pagination
@@ -413,7 +416,7 @@ func (p ListParam) ToSQL() (sql string, err error) {
 }
 
 type TotalParamI interface {
-	_Tabale
+	Table
 	Where
 }
 type TotalParam struct {

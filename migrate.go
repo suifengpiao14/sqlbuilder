@@ -9,10 +9,17 @@ import (
 type Scene string // 迁移场景
 
 const (
-	SCENE_CREATE Scene = "create"
-	SCENE_MODIFY Scene = "modify"
-	SCENE_APPEND Scene = "append"
-	SCENE_DELETE Scene = "delete"
+	SCENE_DDL_CREATE Scene = "create"
+	SCENE_DDL_MODIFY Scene = "modify"
+	SCENE_DDL_APPEND Scene = "append"
+	SCENE_DDL_DELETE Scene = "delete"
+)
+
+const (
+	SCENE_SQL_INSERT Scene = "insert"
+	SCENE_SQL_UPDATE Scene = "update"
+	SCENE_SQL_FIRST  Scene = "first"
+	SCENE_SQL_LIST   Scene = "list"
 )
 
 func (s Scene) IsSame(target Scene) bool {
