@@ -3,6 +3,7 @@ package sqlbuilder
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/doug-martin/goqu/v9/exp"
@@ -105,18 +106,8 @@ func TryIlike(field string, value any) (expressions []goqu.Expression, ok bool) 
 		for _, arg := range iLike {
 			strArr = append(strArr, cast.ToString(arg))
 		}
-		min, max := iLike[0], iLike[1]
-		if !IsNil(min) && !IsNil(max) {
-			expressions = append(expressions, identifier.Between(exp.NewRangeVal(min, max)))
-			return expressions, true
-		}
-		if !IsNil(min) {
-			return ConcatExpression(identifier.Gte(min)), true
-		}
-
-		if !IsNil(max) {
-			return ConcatExpression(identifier.Lte(min)), true
-		}
+		val := strings.Join(strArr, ",")
+		return ConcatExpression(identifier.ILike(val)), true
 	}
 	return nil, false
 }
