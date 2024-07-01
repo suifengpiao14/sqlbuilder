@@ -34,6 +34,11 @@ var Dialect_Mysql = goqu.Dialect(Dialect_mysql.String())
 type Table interface {
 	Table() (table string)
 }
+type TableFn func() (table string)
+
+func (fn TableFn) Table() (table string) {
+	return fn()
+}
 
 type Where interface {
 	Where() (expressions []goqu.Expression, err error) // 容许在构建where函数时验证必要参数返回报错
@@ -71,11 +76,6 @@ func (fn DataFn) Data() (data any, err error) {
 
 type DataSet []Data
 
-type InsertParamI interface {
-	Table
-	Data
-}
-
 func ConcatOrderedExpression(orderedExpressions ...exp.OrderedExpression) []exp.OrderedExpression {
 	return orderedExpressions
 }
@@ -86,21 +86,21 @@ func ConcatExpression(expressions ...exp.Expression) []exp.Expression {
 
 // InsertParam 供子类复用,修改数据
 type InsertParam struct {
-	_InsertParamI InsertParamI
-	_DataSet      DataSet
+	_TableI  Table
+	_DataSet DataSet
 }
 
-func NewInsertBuilder(insertParamI InsertParamI) InsertParam {
+func NewInsertBuilder(table Table) InsertParam {
 	return InsertParam{
-		_InsertParamI: insertParamI,
-		_DataSet:      make(DataSet, 0),
+		_TableI:  table,
+		_DataSet: make(DataSet, 0),
 	}
 }
 
 func (p InsertParam) Copy() InsertParam {
 	return InsertParam{
-		_InsertParamI: p._InsertParamI,
-		_DataSet:      p._DataSet,
+		_TableI:  p._TableI,
+		_DataSet: p._DataSet,
 	}
 }
 func (p InsertParam) Merge(insertParams ...InsertParam) InsertParam {
@@ -120,7 +120,6 @@ func (p InsertParam) AppendData(dataSet ...Data) InsertParam {
 
 func (p InsertParam) Data() (data any, err error) {
 	dataIs := make(DataSet, 0)
-	dataIs = append(dataIs, p._InsertParamI)
 	dataIs = append(dataIs, p._DataSet...)
 	return MergeData(dataIs...)
 }
@@ -134,7 +133,11 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 		err = errors.New("InsertParam.Data() return nil data")
 		return "", err
 	}
-	table := p._InsertParamI.Table()
+	if p._TableI == nil {
+		err = errors.Errorf("InsertParam._Table required")
+		return "", err
+	}
+	table := p._TableI.Table()
 	ds := Dialect.Insert(table).Rows(rowData)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
@@ -150,7 +153,7 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 	table := ""
 	for i, r := range rows {
 		if i == 0 {
-			table = r._InsertParamI.Table()
+			table = r._TableI.Table()
 		}
 		rowData, err := r.Data()
 		if err != nil {
@@ -185,31 +188,25 @@ func MergeWhere(whereIs ...Where) (mergedWhere []goqu.Expression, err error) {
 	return expressions, nil
 }
 
-type UpdateParamI interface {
-	Table
-	Where
-	Data
-}
-
 type UpdateParam struct {
-	_UpdateParamI UpdateParamI
-	_DataSet      DataSet  //中间件的Data 集合
-	_WhereSet     WhereSet //中间件的Where 集合
+	_TableI   Table
+	_DataSet  DataSet  //中间件的Data 集合
+	_WhereSet WhereSet //中间件的Where 集合
 }
 
-func NewUpdateBuilder(updateParamI UpdateParamI) UpdateParam {
+func NewUpdateBuilder(table Table) UpdateParam {
 	return UpdateParam{
-		_UpdateParamI: updateParamI,
-		_DataSet:      make(DataSet, 0),
-		_WhereSet:     make(WhereSet, 0),
+		_TableI:   table,
+		_DataSet:  make(DataSet, 0),
+		_WhereSet: make(WhereSet, 0),
 	}
 }
 
 func (p UpdateParam) Copy() UpdateParam {
 	return UpdateParam{
-		_UpdateParamI: p._UpdateParamI,
-		_DataSet:      p._DataSet,
-		_WhereSet:     p._WhereSet,
+		_TableI:   p._TableI,
+		_DataSet:  p._DataSet,
+		_WhereSet: p._WhereSet,
 	}
 }
 
@@ -237,14 +234,12 @@ func (p UpdateParam) AppendWhere(whereSet ...Where) UpdateParam {
 }
 func (p UpdateParam) Data() (data any, err error) {
 	dataIs := make(DataSet, 0)
-	dataIs = append(dataIs, p._UpdateParamI)
 	dataIs = append(dataIs, p._DataSet...)
 	return MergeData(dataIs...)
 }
 
 func (p UpdateParam) Where() (expressions []goqu.Expression, err error) {
 	whereIs := make([]Where, 0)
-	whereIs = append(whereIs, p._UpdateParamI)
 	whereIs = append(whereIs, p._WhereSet...)
 	return MergeWhere(whereIs...)
 }
@@ -258,7 +253,7 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.Update(p._UpdateParamI.Table()).Set(data).Where(where...)
+	ds := Dialect.Update(p._TableI.Table()).Set(data).Where(where...)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -332,7 +327,6 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 type ListParamI interface {
 	Table
 	_Select
-	Where
 	_Pagination
 	_Order
 }
@@ -371,7 +365,6 @@ func (p ListParam) AppendWhere(whereSet ...Where) ListParam {
 
 func (p ListParam) Where() (expressions []goqu.Expression, err error) {
 	wheres := make([]Where, 0)
-	wheres = append(wheres, p._ListParamI)
 	wheres = append(wheres, p._WhereSet...)
 	return MergeWhere(wheres...)
 }
@@ -415,26 +408,22 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-type TotalParamI interface {
-	Table
-	Where
-}
 type TotalParam struct {
-	_TotalParamI TotalParamI
-	_WhereSet    WhereSet
+	_Table    Table
+	_WhereSet WhereSet
 }
 
-func NewTotalBuilder(totalParamI TotalParamI) TotalParam {
+func NewTotalBuilder(table Table) TotalParam {
 	return TotalParam{
-		_TotalParamI: totalParamI,
-		_WhereSet:    make(WhereSet, 0),
+		_Table:    table,
+		_WhereSet: make(WhereSet, 0),
 	}
 }
 
 func (p TotalParam) Copy() TotalParam {
 	return TotalParam{
-		_TotalParamI: p._TotalParamI,
-		_WhereSet:    p._WhereSet,
+		_Table:    p._Table,
+		_WhereSet: p._WhereSet,
 	}
 }
 func (p TotalParam) Merge(totalParams ...TotalParam) TotalParam {
@@ -454,7 +443,6 @@ func (p TotalParam) AppendWhere(whereSet ...Where) TotalParam {
 
 func (p TotalParam) Where() (expressions []goqu.Expression, err error) {
 	whereIs := make([]Where, 0)
-	whereIs = append(whereIs, p._TotalParamI)
 	whereIs = append(whereIs, p._WhereSet...)
 	return MergeWhere(whereIs...)
 }
@@ -464,9 +452,7 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.From(p._TotalParamI.Table()).
-		Where(where...).
-		Select(goqu.COUNT(goqu.Star()).As("count"))
+	ds := Dialect.From(p._Table.Table()).Where(where...).Select(goqu.COUNT(goqu.Star()).As("count"))
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -477,6 +463,9 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 func MergeData(dataIs ...Data) (newData map[string]any, err error) {
 	newData = map[string]any{}
 	for _, dataI := range dataIs {
+		if IsNil(dataI) {
+			continue
+		}
 		data, err := dataI.Data()
 		if err != nil {
 			return newData, err

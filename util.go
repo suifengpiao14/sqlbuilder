@@ -6,6 +6,7 @@ import (
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/doug-martin/goqu/v9/exp"
+	"github.com/spf13/cast"
 )
 
 var Time_format = "2024-01-02 15:04:05"
@@ -38,6 +39,9 @@ func (fs Fields) String() string {
 func (fs Fields) Map() (data map[string]any, err error) {
 	m := make(map[string]any)
 	for _, f := range fs {
+		if f.Value == nil {
+			continue
+		}
 		val, err := f.Value(nil)
 		if err != nil {
 			return nil, err
@@ -91,6 +95,32 @@ func IsNil(v any) bool {
 	}
 }
 
+// Ilike 不区分大小写like语句
+type Ilike [3]any
+
+func TryIlike(field string, value any) (expressions []goqu.Expression, ok bool) {
+	if iLike, ok := value.(Ilike); ok {
+		identifier := goqu.C(field)
+		strArr := make([]string, 0)
+		for _, arg := range iLike {
+			strArr = append(strArr, cast.ToString(arg))
+		}
+		min, max := iLike[0], iLike[1]
+		if !IsNil(min) && !IsNil(max) {
+			expressions = append(expressions, identifier.Between(exp.NewRangeVal(min, max)))
+			return expressions, true
+		}
+		if !IsNil(min) {
+			return ConcatExpression(identifier.Gte(min)), true
+		}
+
+		if !IsNil(max) {
+			return ConcatExpression(identifier.Lte(min)), true
+		}
+	}
+	return nil, false
+}
+
 // Between 介于2者之间(包含上下边界，对于不包含边界情况，可以修改值范围或者直接用表达式)
 type Between [2]any
 
@@ -120,6 +150,21 @@ func TryConvert2Expressions(value any) (expressions []goqu.Expression, ok bool) 
 	}
 	if ex, ok := value.(goqu.Expression); ok {
 		return ConcatExpression(ex), true
+	}
+	return nil, false
+}
+
+// TryParseExpressions 尝试解析where条件
+func TryParseExpressions(field string, value any) (expressions []goqu.Expression, ok bool) {
+	if ex, ok := TryConvert2Expressions(value); ok {
+		return ex, true
+	}
+	if ex, ok := TryConvert2Betwwen(field, value); ok {
+		return ex, true
+	}
+
+	if ex, ok := TryIlike(field, value); ok {
+		return ex, true
 	}
 	return nil, false
 }
