@@ -5,11 +5,10 @@ import (
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/doug-martin/goqu/v9/exp"
-	"github.com/pkg/errors"
 )
 
 type ColumnI interface {
-	SelectColumn() (column any)
+	SelectColumns() (columns []any)
 	SelectWhere() (expression []goqu.Expression, err error)
 	InsertData() (data any, err error)
 	UpdateData() (data any, err error)
@@ -18,10 +17,10 @@ type ColumnI interface {
 
 type ColumnIs []ColumnI
 
-func (cols ColumnIs) SelectColumn() (column any) { // 此处之所以返回any 不是[]any 是方便 ColumnIs 实现 ColumnI 接口
-	columns := make([]any, 0)
+func (cols ColumnIs) SelectColumns() (columns []any) {
+	columns = make([]any, 0)
 	for _, col := range cols {
-		columns = append(columns, col.SelectColumn())
+		columns = append(columns, col.SelectColumns()...)
 	}
 	return columns
 }
@@ -106,13 +105,7 @@ func List(tableI TableI) (rawSql string, err error) {
 	if ofsset < 0 {
 		ofsset = 0
 	}
-	columns, ok := (tableI.Columns().SelectColumn()).([]any) // 此处类型一定成功，是内部函数返回
-	if !ok {
-		err = errors.Errorf("tableI.Columns().SelectColumn() return []any")
-		panic(err)
-	}
-
-	ds := Dialect.Select(columns...).
+	ds := Dialect.Select(tableI.Columns().SelectColumns()...).
 		From(tableI.Table()).
 		Where(where...).
 		Order(tableI.Order()...)
@@ -132,13 +125,7 @@ func First(tableI TableI) (rawSql string, err error) {
 		return "", err
 	}
 
-	columns, ok := (tableI.Columns().SelectColumn()).([]any) // 此处类型一定成功，是内部函数返回
-	if !ok {
-		err = errors.Errorf("tableI.Columns().SelectColumn() return []any")
-		panic(err)
-	}
-
-	ds := Dialect.Select(columns...).
+	ds := Dialect.Select(tableI.Columns().SelectColumns()...).
 		From(tableI.Table()).
 		Where(where...).
 		Order(tableI.Order()...).Limit(1)
@@ -163,12 +150,12 @@ func Total(tableI TableI) (sql string, err error) {
 }
 
 type Column struct {
-	Name        string
-	InsertData  DataFn
-	SelectWhere WhereFn
-	UpdateWhere WhereFn
-	UpdateData  DataFn
-	Schema      ColumnSchema // 用于验证字段的规则约束
+	Name        string       `json:"name"`
+	InsertData  DataFn       `json:"-"`
+	SelectWhere WhereFn      `json:"-"`
+	UpdateWhere WhereFn      `json:"-"`
+	UpdateData  DataFn       `json:"-"`
+	Schema      ColumnSchema `json:"schema"` // 用于验证字段的规则约束
 }
 
 // Multicolumn 复合列
