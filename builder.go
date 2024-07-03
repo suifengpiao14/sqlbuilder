@@ -52,6 +52,8 @@ func (fn WhereFn) Where() (expressions []goqu.Expression, err error) {
 
 type WhereSet []Where
 
+type PaginationFn func() (index int, size int)
+
 type _Pagination interface {
 	Pagination() (index int, size int)
 }

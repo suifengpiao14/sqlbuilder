@@ -20,6 +20,7 @@ const (
 	SCENE_SQL_UPDATE Scene = "update"
 	SCENE_SQL_FIRST  Scene = "first"
 	SCENE_SQL_LIST   Scene = "list"
+	SCENE_SQL_TOTAL  Scene = "total"
 )
 
 func (s Scene) IsSame(target Scene) bool {
