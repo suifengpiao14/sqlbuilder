@@ -31,7 +31,8 @@ func (cols ColumnIs) SelectWhere() (mergedWhere []goqu.Expression, err error) {
 	for _, col := range cols {
 		wheres = append(wheres, WhereFn(col.SelectWhere))
 	}
-	return MergeWhere(wheres...)
+	mergedWhere, err = MergeWhere(wheres...)
+	return mergedWhere, err
 }
 
 func (cols ColumnIs) InsertData() (data any, err error) {
@@ -185,7 +186,7 @@ type ColumnSchema struct {
 
 // Validator 返回验证器
 // todo
-func (c ColumnSchema) Validator() {
+func (c ColumnSchema) Validator() (err error) {
 	return
 }
 
