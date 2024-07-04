@@ -12,16 +12,134 @@ import (
 
 var Time_format = "2024-01-02 15:04:05"
 
+type ValueFnInfo struct {
+	IsFnNil    bool // valueFn 函数是否为nil
+	IsValueNil bool // valueFn() 返回是否为nil
+}
+type WhereValueFnInfo struct {
+	IsFnNil             bool // valueFn 函数是否为nil
+	IsWhereValueNil     bool // valueFn() 返回是否为nil
+	IsDefaultExpression bool // 是否使用了默认表达式
+}
+
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Title      string                                                 `json:"title"`
-	Name       string                                                 `json:"name"`
-	Value      func(in any) (value any, err error)                    `json:"-"` // 增加error，方便封装字段验证规则
-	WhereValue func(in any) (value any, err error)                    `json:"-"` // 值value 和where value分开
-	Migrate    func(table string, options ...MigrateOptionI) Migrates `json:"-"`
+	Title             string                                                 `json:"title"`
+	Name              string                                                 `json:"name"`
+	ValueFn           func(in any) (value any, err error)                    `json:"-"` // 增加error，方便封装字段验证规则
+	WhereValueFn      func(in any) (value any, err error)                    `json:"-"` // 值value 和where value分开
+	Migrate           func(table string, options ...MigrateOptionI) Migrates `json:"-"`
+	_ValueFnInfo      ValueFnInfo                                            // 方便继承类判断具体情况
+	_WhereValueFnInfo WhereValueFnInfo                                       // 方便继承类判断具体情况
+}
+
+func (f Field) GetValueFnInfo() ValueFnInfo {
+	return f._ValueFnInfo
+}
+func (f Field) GetWhereValueFnInfo() WhereValueFnInfo {
+	return f._WhereValueFnInfo
+}
+
+// Field 实现 InsertParamI,UpdateParamI,ListParamI,FirstParamI,TotalParamI 几个接口
+func (f Field) Table() string {
+	return ""
+}
+func (f Field) Data() (data any, err error) {
+	m := map[string]any{}
+	if f.ValueFn == nil {
+		f._ValueFnInfo.IsFnNil = true
+		return nil, nil
+	}
+	val, err := f.ValueFn(nil)
+	if err != nil {
+		return nil, err
+	}
+	if IsNil(val) { // 返回值为nil，忽略字段
+		f._ValueFnInfo.IsValueNil = true
+		return nil, nil
+	}
+	m[f.Name] = val
+	return m, nil
+}
+
+func (f Field) Where() (expressions []goqu.Expression, err error) {
+	if f.WhereValueFn == nil {
+		f._WhereValueFnInfo.IsFnNil = true
+		return nil, nil
+	}
+	val, err := f.WhereValueFn(nil)
+	if err != nil {
+		return nil, err
+	}
+	if IsNil(val) {
+		f._WhereValueFnInfo.IsWhereValueNil = true
+		return nil, nil
+	}
+	if ex, ok := TryParseExpressions(f.Name, val); ok {
+		return ex, nil
+	}
+	f._WhereValueFnInfo.IsDefaultExpression = true
+	return ConcatExpression(goqu.Ex{f.Name: val}), nil
+}
+
+func (f Field) Select() (columns []any) {
+	return []any{f.Name}
+}
+func (f Field) Order() (orderedExpressions []exp.OrderedExpression) {
+	return
+}
+
+func (f Field) Pagination() (index int, size int) {
+	return
 }
 
 type Fields []Field
+
+func (fs Fields) Table() string {
+	tables := make([]TableI, 0)
+	for _, f := range fs {
+		tables = append(tables, f)
+	}
+	var table any
+	allTable := MergeTable(tables...)
+	for _, t := range allTable { // 取第一个
+		table = t
+		break
+	}
+	return cast.ToString(table)
+}
+
+func (fs Fields) Data() (data any, err error) {
+	dataIs := make([]DataI, 0)
+	for _, f := range fs {
+		dataIs = append(dataIs, f)
+	}
+	return MergeData(dataIs...)
+}
+
+func (fs Fields) Where() (expressions []goqu.Expression, err error) {
+	whereIs := make([]WhereI, 0)
+	for _, f := range fs {
+		whereIs = append(whereIs, f)
+	}
+	return MergeWhere(whereIs...)
+}
+
+func (fs Fields) Select() (columns []any) {
+	selectIs := make([]SelectI, 0)
+	for _, f := range fs {
+		selectIs = append(selectIs, f)
+	}
+	return MergeSelect(selectIs...)
+}
+
+func (fs Fields) Order() (orderedExpressions []exp.OrderedExpression) {
+	orderIs := make([]OrderI, 0)
+	for _, f := range fs {
+		orderIs = append(orderIs, f)
+	}
+	return MergeOrder(orderIs...)
+}
 
 func (fs Fields) Json() string {
 	b, _ := json.Marshal(fs)
@@ -30,20 +148,28 @@ func (fs Fields) Json() string {
 func (fs Fields) String() string {
 	m := make(map[string]any)
 	for _, f := range fs {
-		val, _ := f.Value(nil)
+		val, _ := f.ValueFn(nil)
 		m[f.Name] = val
 	}
 	b, _ := json.Marshal(m)
 	return string(b)
 }
 
+func (fs Fields) Pagination() (index int, size int) {
+	paginationIs := make([]PaginationI, 0)
+	for _, f := range fs {
+		paginationIs = append(paginationIs, f)
+	}
+	return MergePagination(paginationIs...)
+}
+
 func (fs Fields) Map() (data map[string]any, err error) {
 	m := make(map[string]any)
 	for _, f := range fs {
-		if f.Value == nil {
+		if f.ValueFn == nil {
 			continue
 		}
-		val, err := f.Value(nil)
+		val, err := f.ValueFn(nil)
 		if err != nil {
 			return nil, err
 		}
@@ -59,8 +185,8 @@ func NewField(name string, value func(in any) (any, error)) Field {
 		}
 	}
 	column := Field{
-		Name:  name,
-		Value: value,
+		Name:    name,
+		ValueFn: value,
 	}
 	return column
 }
@@ -72,7 +198,7 @@ func (fn FieldFn) Data() (data any, err error) {
 	columns := fn()
 	for _, c := range columns {
 		if c.Name != "" {
-			val, err := c.Value(nil)
+			val, err := c.ValueFn(nil)
 			if err == nil {
 				return nil, err
 			}

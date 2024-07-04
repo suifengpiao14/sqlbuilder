@@ -23,7 +23,7 @@ func (cols ColumnIs) SelectColumns() (columns []any) {
 }
 
 func (cols ColumnIs) SelectWhere() (mergedWhere []goqu.Expression, err error) {
-	wheres := make([]Where, 0)
+	wheres := make([]WhereI, 0)
 	for _, col := range cols {
 		wheres = append(wheres, WhereFn(col.SelectWhere))
 	}
@@ -32,7 +32,7 @@ func (cols ColumnIs) SelectWhere() (mergedWhere []goqu.Expression, err error) {
 }
 
 func (cols ColumnIs) InsertValue() (value any, err error) {
-	valueIs := make([]Data, 0)
+	valueIs := make([]DataI, 0)
 	for _, col := range cols {
 		valueIs = append(valueIs, DataFn(col.InsertValue))
 	}
@@ -40,7 +40,7 @@ func (cols ColumnIs) InsertValue() (value any, err error) {
 }
 
 func (cols ColumnIs) UpdateValue() (value any, err error) {
-	valueIs := make([]Data, 0)
+	valueIs := make([]DataI, 0)
 	for _, col := range cols {
 		valueIs = append(valueIs, DataFn(col.UpdateValue))
 	}
@@ -48,7 +48,7 @@ func (cols ColumnIs) UpdateValue() (value any, err error) {
 }
 
 func (cols ColumnIs) UpdateWhere() (mergedWhere []goqu.Expression, err error) {
-	wheres := make([]Where, 0)
+	wheres := make([]WhereI, 0)
 	for _, col := range cols {
 		wheres = append(wheres, WhereFn(col.UpdateWhere))
 	}
@@ -113,13 +113,13 @@ func (c Column) UpdateWhere() (expression []goqu.Expression, err error) {
 
 type CommandI interface {
 	Columns() ColumnIs
-	Table
+	TableI
 }
 
 type QueryI interface {
 	CommandI
-	_Pagination
-	_Order
+	PaginationI
+	OrderI
 }
 
 func Insert(commandI CommandI) (rawSql string, err error) {

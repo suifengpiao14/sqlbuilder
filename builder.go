@@ -31,7 +31,7 @@ var Dialect = goqu.Dialect(Dialect_sqlite3.String())
 
 var Dialect_Mysql = goqu.Dialect(Dialect_mysql.String())
 
-type Table interface {
+type TableI interface {
 	Table() (table string)
 }
 type TableFn func() (table string)
@@ -40,7 +40,7 @@ func (fn TableFn) Table() (table string) {
 	return fn()
 }
 
-type Where interface {
+type WhereI interface {
 	Where() (expressions []goqu.Expression, err error) // 容许在构建where函数时验证必要参数返回报错
 }
 
@@ -50,23 +50,21 @@ func (fn WhereFn) Where() (expressions []goqu.Expression, err error) {
 	return fn()
 }
 
-type WhereSet []Where
-
 type PaginationFn func() (index int, size int)
 
-type _Pagination interface {
+type PaginationI interface {
 	Pagination() (index int, size int)
 }
 
-type _Order interface {
+type OrderI interface {
 	Order() (orderedExpressions []exp.OrderedExpression)
 }
 
-type _Select interface {
+type SelectI interface {
 	Select() (columns []any)
 }
 
-type Data interface {
+type DataI interface {
 	Data() (data any, err error) //容许验证参数返回错误
 }
 
@@ -76,333 +74,247 @@ func (fn DataFn) Data() (data any, err error) {
 	return fn()
 }
 
-type DataSet []Data
-
-func ConcatOrderedExpression(orderedExpressions ...exp.OrderedExpression) []exp.OrderedExpression {
-	return orderedExpressions
+type InsertParamI interface {
+	TableI
+	DataI
 }
 
-func ConcatExpression(expressions ...exp.Expression) []exp.Expression {
-	return expressions
+type InsertParamIs []InsertParamI
+
+func NewInsertBuilder(subPs ...InsertParamI) (builder InsertParamIs) {
+	builder = InsertParamIs{}
+	builder.Append(subPs...)
+	return builder
+}
+func (ps InsertParamIs) Append(subPs ...InsertParamI) (newPs InsertParamIs) {
+	newPs = make(InsertParamIs, 0)
+	newPs = append(newPs, ps...)
+	newPs = append(newPs, subPs...)
+	return newPs
 }
 
-// InsertParam 供子类复用,修改数据
-type InsertParam struct {
-	_TableI  Table
-	_DataSet DataSet
-}
-
-func NewInsertBuilder(table Table) InsertParam {
-	return InsertParam{
-		_TableI:  table,
-		_DataSet: make(DataSet, 0),
+func (ps InsertParamIs) ToSQL() (rawSql string, err error) {
+	tables := make([]TableI, 0)
+	for _, p := range ps {
+		tables = append(tables, p)
 	}
-}
+	var table any
+	allTable := MergeTable(tables...)
 
-func (p InsertParam) Copy() InsertParam {
-	return InsertParam{
-		_TableI:  p._TableI,
-		_DataSet: p._DataSet,
+	for _, t := range allTable { // 取第一个
+		table = t
+		break
 	}
-}
-func (p InsertParam) Merge(insertParams ...InsertParam) InsertParam {
-	newP := p.Copy()
-	for _, up := range insertParams {
-		newP._DataSet = append(newP._DataSet, up._DataSet...)
+	dataIs := make([]DataI, 0)
+	for _, p := range ps {
+		dataIs = append(dataIs, p)
 	}
-	return newP
-}
-
-func (p InsertParam) AppendData(dataSet ...Data) InsertParam {
-	newP := p.Copy()
-	newP._DataSet = append(newP._DataSet, p._DataSet...)
-	newP._DataSet = append(newP._DataSet, dataSet...)
-	return newP
-}
-
-func (p InsertParam) Data() (data any, err error) {
-	dataIs := make(DataSet, 0)
-	dataIs = append(dataIs, p._DataSet...)
-	return MergeData(dataIs...)
-}
-
-func (p InsertParam) ToSQL() (sql string, err error) {
-	rowData, err := p.Data()
+	data, err := MergeData(dataIs...)
 	if err != nil {
 		return "", err
 	}
-	if IsNil(rowData) {
-		err = errors.New("InsertParam.Data() return nil data")
-		return "", err
-	}
-	if p._TableI == nil {
-		err = errors.Errorf("InsertParam._Table required")
-		return "", err
-	}
-	table := p._TableI.Table()
-	ds := Dialect.Insert(table).Rows(rowData)
-	sql, _, err = ds.ToSQL()
+	ds := Dialect.Insert(table).Rows(data)
+	rawSql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
 	}
-	return sql, nil
+	return rawSql, nil
 }
 
-type InsertParams []InsertParam
+type UpdateParamI interface {
+	TableI
+	DataI
+	WhereI
+}
 
-func (rows InsertParams) ToSQL() (sql string, err error) {
-	data := make([]any, 0)
-	table := ""
-	for i, r := range rows {
-		if i == 0 {
-			table = r._TableI.Table()
-		}
-		rowData, err := r.Data()
-		if err != nil {
-			return "", err
-		}
-		if IsNil(rowData) {
-			continue
-		}
-		data = append(data, rowData)
+type UpdateParamIs []UpdateParamI
+
+func NewUpdateBuilder(subPs ...UpdateParamI) (builder UpdateParamIs) {
+	builder = UpdateParamIs{}
+	builder.Append(subPs...)
+	return builder
+}
+func (ps UpdateParamIs) Append(subPs ...UpdateParamI) (newPs UpdateParamIs) {
+	newPs = make(UpdateParamIs, 0)
+	newPs = append(newPs, ps...)
+	newPs = append(newPs, subPs...)
+	return newPs
+}
+
+func (ps UpdateParamIs) ToSQL() (rawSql string, err error) {
+	tables := make([]TableI, 0)
+	for _, p := range ps {
+		tables = append(tables, p)
 	}
-	ds := Dialect.Insert(table).Rows(data...)
-	sql, _, err = ds.ToSQL()
+	var table any
+	allTable := MergeTable(tables...)
+
+	for _, t := range allTable { // 取第一个
+		table = t
+		break
+	}
+
+	dataIs := make([]DataI, 0)
+	for _, p := range ps {
+		dataIs = append(dataIs, p)
+	}
+	data, err := MergeData(dataIs...)
 	if err != nil {
 		return "", err
 	}
-	return sql, nil
-}
 
-func MergeWhere(whereIs ...Where) (mergedWhere []goqu.Expression, err error) {
-	expressions := make([]goqu.Expression, 0)
-	for _, whereI := range whereIs {
-		if IsNil(whereI) {
-			continue
-		}
-		where, err := whereI.Where()
-		if err != nil {
-			return expressions, err
-		}
-		expressions = append(expressions, where...)
+	whereIs := make([]WhereI, 0)
+	for _, p := range ps {
+		whereIs = append(whereIs, p)
 	}
-
-	return expressions, nil
-}
-
-type UpdateParam struct {
-	_TableI   Table
-	_DataSet  DataSet  //中间件的Data 集合
-	_WhereSet WhereSet //中间件的Where 集合
-}
-
-func NewUpdateBuilder(table Table) UpdateParam {
-	return UpdateParam{
-		_TableI:   table,
-		_DataSet:  make(DataSet, 0),
-		_WhereSet: make(WhereSet, 0),
-	}
-}
-
-func (p UpdateParam) Copy() UpdateParam {
-	return UpdateParam{
-		_TableI:   p._TableI,
-		_DataSet:  p._DataSet,
-		_WhereSet: p._WhereSet,
-	}
-}
-
-func (p UpdateParam) Merge(updateParams ...UpdateParam) UpdateParam {
-	newP := p.Copy()
-	for _, up := range updateParams {
-		newP._DataSet = append(newP._DataSet, up._DataSet...)
-		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
-	}
-	return newP
-}
-
-func (p UpdateParam) AppendData(dataSet ...Data) UpdateParam {
-	newP := p.Copy()
-	newP._DataSet = append(newP._DataSet, p._DataSet...)
-	newP._DataSet = append(newP._DataSet, dataSet...)
-	return newP
-}
-
-func (p UpdateParam) AppendWhere(whereSet ...Where) UpdateParam {
-	newP := p.Copy()
-	newP._WhereSet = append(newP._WhereSet, p._WhereSet...)
-	newP._WhereSet = append(newP._WhereSet, whereSet...)
-	return newP
-}
-func (p UpdateParam) Data() (data any, err error) {
-	dataIs := make(DataSet, 0)
-	dataIs = append(dataIs, p._DataSet...)
-	return MergeData(dataIs...)
-}
-
-func (p UpdateParam) Where() (expressions []goqu.Expression, err error) {
-	whereIs := make([]Where, 0)
-	whereIs = append(whereIs, p._WhereSet...)
-	return MergeWhere(whereIs...)
-}
-
-func (p UpdateParam) ToSQL() (sql string, err error) {
-	data, err := p.Data()
+	expressions, err := MergeWhere(whereIs...)
 	if err != nil {
 		return "", err
 	}
-	where, err := p.Where()
+
+	ds := Dialect.Update(table).Set(data).Where(expressions...)
+	rawSql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.Update(p._TableI.Table()).Set(data).Where(where...)
-	sql, _, err = ds.ToSQL()
-	if err != nil {
-		return "", err
-	}
-	return sql, nil
+	return rawSql, nil
 }
 
 type FirstParamI interface {
-	Table
-	_Select
-	Where
-	_Order
+	TableI
+	SelectI
+	WhereI
+	OrderI
 }
 
-type FirstParam struct {
-	_FirstParamI FirstParamI
-	_WhereSet    WhereSet //中间件的Where 集合
+type FirstParamIs []FirstParamI
+
+func NewFirstBuilder(subPs ...FirstParamI) (builder FirstParamIs) {
+	builder = FirstParamIs{}
+	builder.Append(subPs...)
+	return builder
+}
+func (ps FirstParamIs) Append(subPs ...FirstParamI) (newPs FirstParamIs) {
+	newPs = make(FirstParamIs, 0)
+	newPs = append(newPs, ps...)
+	newPs = append(newPs, subPs...)
+	return newPs
 }
 
-func (p FirstParam) Copy() FirstParam {
-	return FirstParam{
-		_FirstParamI: p._FirstParamI,
-		_WhereSet:    p._WhereSet,
+func (ps FirstParamIs) ToSQL() (rawSql string, err error) {
+	whereIs := make([]WhereI, 0)
+	for _, p := range ps {
+		whereIs = append(whereIs, p)
 	}
-}
-func (p FirstParam) Merge(firstParams ...FirstParam) FirstParam {
-	newP := p.Copy()
-	for _, up := range firstParams {
-		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
-	}
-	return newP
-}
-
-func NewFirstBuilder(firstParamI FirstParamI) FirstParam {
-	return FirstParam{
-		_FirstParamI: firstParamI,
-		_WhereSet:    make(WhereSet, 0),
-	}
-}
-
-func (p FirstParam) AppendWhere(whereSet ...Where) FirstParam {
-	newP := p.Copy()
-	newP._WhereSet = append(newP._WhereSet, p._WhereSet...)
-	newP._WhereSet = append(newP._WhereSet, whereSet...)
-	return newP
-}
-func (p FirstParam) Where() (expressions []goqu.Expression, err error) {
-	whereIs := make([]Where, 0)
-	whereIs = append(whereIs, p._FirstParamI)
-	whereIs = append(whereIs, p._WhereSet...)
-	return MergeWhere(whereIs...)
-}
-
-func (p FirstParam) ToSQL() (sql string, err error) {
-	where, err := p.Where()
+	expressions, err := MergeWhere(whereIs...)
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.Select(p._FirstParamI.Select()...).
-		From(p._FirstParamI.Table()).
-		Where(where...).
-		Order(p._FirstParamI.Order()...).
+	selectIs := make([]SelectI, 0)
+	for _, p := range ps {
+		selectIs = append(selectIs, p)
+	}
+	columns := MergeSelect(selectIs...)
+
+	tables := make([]TableI, 0)
+	for _, p := range ps {
+		tables = append(tables, p)
+	}
+	allTable := MergeTable(tables...)
+	orderIs := make([]OrderI, 0)
+	for _, p := range ps {
+		orderIs = append(orderIs, p)
+	}
+	allOrder := MergeOrder(orderIs...)
+
+	ds := Dialect.Select(columns).
+		From(allTable...).
+		Where(expressions...).
+		Order(allOrder...).
 		Limit(1)
-	sql, _, err = ds.ToSQL()
+	rawSql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
 	}
-	return sql, nil
+
+	return rawSql, nil
 }
 
 type ListParamI interface {
-	Table
-	_Select
-	_Pagination
-	_Order
+	TableI
+	SelectI
+	WhereI
+	PaginationI
+	OrderI
 }
 
-type ListParam struct {
-	_ListParamI ListParamI
-	_WhereSet   WhereSet
-}
+type ListParamIs []ListParamI
 
-func (p ListParam) Copy() ListParam {
-	return ListParam{
-		_ListParamI: p._ListParamI,
-		_WhereSet:   p._WhereSet,
+func NewListBuilder(subPs ...ListParamI) (builder ListParamIs) {
+	builder = ListParamIs{}
+	builder.Append(subPs...)
+	return builder
+}
+func (ps ListParamIs) Append(subPs ...ListParamI) (newPs ListParamIs) {
+	newPs = make(ListParamIs, 0)
+	newPs = append(newPs, ps...)
+	newPs = append(newPs, subPs...)
+	return newPs
+}
+func (ps ListParamIs) ToSQL() (rawSql string, err error) {
+	whereIs := make([]WhereI, 0)
+	for _, p := range ps {
+		whereIs = append(whereIs, p)
 	}
-}
-func (p ListParam) Merge(listParams ...ListParam) ListParam {
-	newP := p.Copy()
-	for _, up := range listParams {
-		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
-	}
-	return newP
-}
-
-func NewListBuilder(listParamI ListParamI) ListParam {
-	return ListParam{
-		_ListParamI: listParamI,
-		_WhereSet:   make(WhereSet, 0),
-	}
-}
-func (p ListParam) AppendWhere(whereSet ...Where) ListParam {
-	newP := p.Copy()
-	newP._WhereSet = append(newP._WhereSet, p._WhereSet...)
-	newP._WhereSet = append(newP._WhereSet, whereSet...)
-	return newP
-}
-
-func (p ListParam) Where() (expressions []goqu.Expression, err error) {
-	wheres := make([]Where, 0)
-	wheres = append(wheres, p._WhereSet...)
-	return MergeWhere(wheres...)
-}
-
-// CustomSQL 自定义SQL，方便构造更复杂的查询语句，如 Group,Having 等
-func (p ListParam) CustomSQL(sqlFn func(p ListParam, ds *goqu.SelectDataset) (newDs *goqu.SelectDataset, err error)) (sql string, err error) {
-	ds := Dialect.Select()
-	ds, err = sqlFn(p.Copy(), ds)
+	expressions, err := MergeWhere(whereIs...)
 	if err != nil {
 		return "", err
 	}
-	sql, _, err = ds.ToSQL()
-	if err != nil {
-		return "", err
+	selectIs := make([]SelectI, 0)
+	for _, p := range ps {
+		selectIs = append(selectIs, p)
 	}
-	return sql, nil
-}
+	columns := MergeSelect(selectIs...)
 
-func (p ListParam) ToSQL() (sql string, err error) {
-	where, err := p.Where()
-	if err != nil {
-		return "", err
+	tables := make([]TableI, 0)
+	for _, p := range ps {
+		tables = append(tables, p)
 	}
-	pageIndex, pageSize := p._ListParamI.Pagination()
+	allTable := MergeTable(tables...)
+	orderIs := make([]OrderI, 0)
+	for _, p := range ps {
+		orderIs = append(orderIs, p)
+	}
+	allOrder := MergeOrder(orderIs...)
+
+	paginationIs := make([]PaginationI, 0)
+	for _, p := range ps {
+		paginationIs = append(paginationIs, p)
+	}
+	pageIndex, pageSize := MergePagination(paginationIs...)
 	ofsset := pageIndex * pageSize
-	if ofsset < 0 {
-		ofsset = 0
-	}
-
-	ds := Dialect.Select(p._ListParamI.Select()...).
-		From(p._ListParamI.Table()).
-		Where(where...).
-		Order(p._ListParamI.Order()...)
+	ds := Dialect.Select(columns...).
+		From(allTable...).
+		Where(expressions...).
+		Order(allOrder...)
 	if pageSize > 0 {
 		ds = ds.Offset(uint(ofsset)).Limit(uint(pageSize))
 	}
+	rawSql, _, err = ds.ToSQL()
+	if err != nil {
+		return "", err
+	}
+	return rawSql, nil
+
+}
+
+// CustomSQL 自定义SQL，方便构造更复杂的查询语句，如 Group,Having 等
+func (ps ListParamIs) CustomSQL(sqlFn func(p ListParamIs, ds *goqu.SelectDataset) (newDs *goqu.SelectDataset, err error)) (sql string, err error) {
+	ds := Dialect.Select()
+	ds, err = sqlFn(ps, ds)
+	if err != nil {
+		return "", err
+	}
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -410,59 +322,52 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-type TotalParam struct {
-	_Table    Table
-	_WhereSet WhereSet
+type TotalParamI interface {
+	TableI
+	WhereI
 }
 
-func NewTotalBuilder(table Table) TotalParam {
-	return TotalParam{
-		_Table:    table,
-		_WhereSet: make(WhereSet, 0),
+type TotalParamIs []TotalParamI
+
+func NewTotalBuilder(subPs ...TotalParamI) (builder TotalParamIs) {
+	builder = TotalParamIs{}
+	builder.Append(subPs...)
+	return builder
+}
+func (ps TotalParamIs) Append(subPs ...TotalParamI) (newPs TotalParamIs) {
+	newPs = make(TotalParamIs, 0)
+	newPs = append(newPs, ps...)
+	newPs = append(newPs, subPs...)
+	return newPs
+}
+func (ps TotalParamIs) ToSQL() (rawSql string, err error) {
+	whereIs := make([]WhereI, 0)
+	for _, p := range ps {
+		whereIs = append(whereIs, p)
 	}
-}
-
-func (p TotalParam) Copy() TotalParam {
-	return TotalParam{
-		_Table:    p._Table,
-		_WhereSet: p._WhereSet,
-	}
-}
-func (p TotalParam) Merge(totalParams ...TotalParam) TotalParam {
-	newP := p.Copy()
-	for _, up := range totalParams {
-		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
-	}
-	return newP
-}
-
-func (p TotalParam) AppendWhere(whereSet ...Where) TotalParam {
-	newP := p.Copy()
-	newP._WhereSet = append(newP._WhereSet, p._WhereSet...)
-	newP._WhereSet = append(newP._WhereSet, whereSet...)
-	return newP
-}
-
-func (p TotalParam) Where() (expressions []goqu.Expression, err error) {
-	whereIs := make([]Where, 0)
-	whereIs = append(whereIs, p._WhereSet...)
-	return MergeWhere(whereIs...)
-}
-
-func (p TotalParam) ToSQL() (sql string, err error) {
-	where, err := p.Where()
+	expressions, err := MergeWhere(whereIs...)
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.From(p._Table.Table()).Where(where...).Select(goqu.COUNT(goqu.Star()).As("count"))
-	sql, _, err = ds.ToSQL()
+
+	tables := make([]TableI, 0)
+	for _, p := range ps {
+		tables = append(tables, p)
+	}
+	allTable := MergeTable(tables...)
+
+	ds := Dialect.Select(goqu.COUNT(goqu.Star()).As("count")).
+		From(allTable...).
+		Where(expressions...)
+	rawSql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
 	}
-	return sql, nil
+	return rawSql, nil
+
 }
 
-func MergeData(dataIs ...Data) (newData map[string]any, err error) {
+func MergeData(dataIs ...DataI) (newData map[string]any, err error) {
 	newData = map[string]any{}
 	for _, dataI := range dataIs {
 		if IsNil(dataI) {
@@ -496,4 +401,81 @@ func MergeData(dataIs ...Data) (newData map[string]any, err error) {
 	}
 
 	return newData, nil
+}
+
+func MergeWhere(whereIs ...WhereI) (mergedWhere []goqu.Expression, err error) {
+	expressions := make([]goqu.Expression, 0)
+	for _, whereI := range whereIs {
+		if IsNil(whereI) {
+			continue
+		}
+		where, err := whereI.Where()
+		if err != nil {
+			return expressions, err
+		}
+		expressions = append(expressions, where...)
+	}
+
+	return expressions, nil
+}
+
+func MergeSelect(selectIs ...SelectI) (allColumn []any) {
+	allColumn = make([]any, 0)
+	for _, selectI := range selectIs {
+		if IsNil(selectI) {
+			continue
+		}
+		columns := selectI.Select()
+		allColumn = append(allColumn, columns...)
+	}
+
+	return allColumn
+}
+func MergeTable(tables ...TableI) (allTable []any) {
+	allTable = make([]any, 0)
+	for _, selectI := range tables {
+		if IsNil(selectI) {
+			continue
+		}
+		table := selectI.Table()
+		if table == "" {
+			continue
+		}
+		allTable = append(allTable, table)
+	}
+	return allTable
+}
+func MergeOrder(orderIs ...OrderI) (allOrder []exp.OrderedExpression) {
+	allOrder = make([]exp.OrderedExpression, 0)
+	for _, orderI := range orderIs {
+		if IsNil(orderI) {
+			continue
+		}
+		allOrder = append(allOrder, orderI.Order()...)
+	}
+	return allOrder
+}
+
+func MergePagination(paginationIs ...PaginationI) (index int, size int) {
+	for _, paginationI := range paginationIs {
+		if IsNil(paginationI) {
+			continue
+		}
+		index, size = paginationI.Pagination()
+		if index < 0 {
+			index = 0
+		}
+		if size < 0 {
+			size = 0
+		}
+		return index, size
+	}
+	return 0, 0
+}
+func ConcatOrderedExpression(orderedExpressions ...exp.OrderedExpression) []exp.OrderedExpression {
+	return orderedExpressions
+}
+
+func ConcatExpression(expressions ...exp.Expression) []exp.Expression {
+	return expressions
 }
