@@ -1,17 +1,14 @@
 package sqlbuilder
 
 import (
-	"encoding/json"
-
 	"github.com/doug-martin/goqu/v9"
-	"github.com/doug-martin/goqu/v9/exp"
 )
 
 type ColumnI interface {
 	SelectColumns() (columns []any)
 	SelectWhere() (expression []goqu.Expression, err error)
-	InsertData() (data any, err error)
-	UpdateData() (data any, err error)
+	InsertValue() (value any, err error)
+	UpdateValue() (value any, err error)
 	UpdateWhere() (expression []goqu.Expression, err error)
 }
 
@@ -34,20 +31,20 @@ func (cols ColumnIs) SelectWhere() (mergedWhere []goqu.Expression, err error) {
 	return mergedWhere, err
 }
 
-func (cols ColumnIs) InsertData() (data any, err error) {
-	dataIs := make([]Data, 0)
+func (cols ColumnIs) InsertValue() (value any, err error) {
+	valueIs := make([]Data, 0)
 	for _, col := range cols {
-		dataIs = append(dataIs, DataFn(col.InsertData))
+		valueIs = append(valueIs, DataFn(col.InsertValue))
 	}
-	return MergeData(dataIs...)
+	return MergeData(valueIs...)
 }
 
-func (cols ColumnIs) UpdateData() (data any, err error) {
-	dataIs := make([]Data, 0)
+func (cols ColumnIs) UpdateValue() (value any, err error) {
+	valueIs := make([]Data, 0)
 	for _, col := range cols {
-		dataIs = append(dataIs, DataFn(col.UpdateData))
+		valueIs = append(valueIs, DataFn(col.UpdateValue))
 	}
-	return MergeData(dataIs...)
+	return MergeData(valueIs...)
 }
 
 func (cols ColumnIs) UpdateWhere() (mergedWhere []goqu.Expression, err error) {
@@ -58,19 +55,79 @@ func (cols ColumnIs) UpdateWhere() (mergedWhere []goqu.Expression, err error) {
 	return MergeWhere(wheres...)
 }
 
-type TableI interface {
+func (cols ColumnIs) Columns() ColumnIs { // 实现CommandI 接口部分函数
+	return cols
+}
+
+type Column struct {
+	Name               string          `json:"name"`
+	InsertValueFn      DataFn          `json:"-"`
+	SelectWhereValueFn DataFn          `json:"-"`
+	UpdateWhereValueFn DataFn          `json:"-"`
+	UpdateValueFn      DataFn          `json:"-"`
+	Schema             ColumnSchema    `json:"schema"`          // 用于验证字段的规则约束
+	BusinessSchemas    BusinessSchemas `json:"businessSchemas"` // 基于业务的验证规则
+}
+
+func (c Column) SelectColumns() (columns []any) {
+	return []any{c.Name}
+}
+func (c Column) SelectWhere() (expression []goqu.Expression, err error) {
+	if c.SelectWhereValueFn != nil {
+		return nil, nil
+	}
+	val, err := c.SelectWhereValueFn()
+	if err != nil {
+		return nil, err
+	}
+	if ex, ok := TryParseExpressions(c.Name, val); ok {
+		return ex, nil
+	}
+	return ConcatExpression(goqu.Ex{c.Name: val}), nil
+}
+func (c Column) InsertValue() (value any, err error) {
+	if c.InsertValueFn == nil {
+		return nil, nil
+	}
+	return c.InsertValueFn()
+}
+func (c Column) UpdateValue() (value any, err error) {
+	if c.UpdateValueFn == nil {
+		return nil, nil
+	}
+	return c.UpdateValueFn()
+}
+func (c Column) UpdateWhere() (expression []goqu.Expression, err error) {
+	if c.UpdateWhereValueFn != nil {
+		return nil, nil
+	}
+	val, err := c.UpdateWhereValueFn()
+	if err != nil {
+		return nil, err
+	}
+	if ex, ok := TryParseExpressions(c.Name, val); ok {
+		return ex, nil
+	}
+	return ConcatExpression(goqu.Ex{c.Name: val}), nil
+}
+
+type CommandI interface {
 	Columns() ColumnIs
 	Table
+}
+
+type QueryI interface {
+	CommandI
 	_Pagination
 	_Order
 }
 
-func Insert(tableI TableI) (rawSql string, err error) {
-	data, err := tableI.Columns().InsertData()
+func Insert(commandI CommandI) (rawSql string, err error) {
+	value, err := commandI.Columns().InsertValue()
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.Insert(tableI.Table()).Rows(data)
+	ds := Dialect.Insert(commandI.Table()).Rows(value)
 	rawSql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -78,16 +135,16 @@ func Insert(tableI TableI) (rawSql string, err error) {
 	return rawSql, nil
 }
 
-func Update(tableI TableI) (rawSql string, err error) {
-	data, err := tableI.Columns().UpdateData()
+func Update(commandI CommandI) (rawSql string, err error) {
+	value, err := commandI.Columns().UpdateValue()
 	if err != nil {
 		return "", err
 	}
-	where, err := tableI.Columns().UpdateWhere()
+	where, err := commandI.Columns().UpdateWhere()
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.Update(tableI.Table()).Set(data).Where(where...)
+	ds := Dialect.Update(commandI.Table()).Set(value).Where(where...)
 	rawSql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -95,20 +152,20 @@ func Update(tableI TableI) (rawSql string, err error) {
 	return rawSql, nil
 }
 
-func List(tableI TableI) (rawSql string, err error) {
-	where, err := tableI.Columns().SelectWhere()
+func List(queryI QueryI) (rawSql string, err error) {
+	where, err := queryI.Columns().SelectWhere()
 	if err != nil {
 		return "", err
 	}
-	pageIndex, pageSize := tableI.Pagination()
+	pageIndex, pageSize := queryI.Pagination()
 	ofsset := pageIndex * pageSize
 	if ofsset < 0 {
 		ofsset = 0
 	}
-	ds := Dialect.Select(tableI.Columns().SelectColumns()...).
-		From(tableI.Table()).
+	ds := Dialect.Select(queryI.Columns().SelectColumns()...).
+		From(queryI.Table()).
 		Where(where...).
-		Order(tableI.Order()...)
+		Order(queryI.Order()...)
 	if pageSize > 0 {
 		ds = ds.Offset(uint(ofsset)).Limit(uint(pageSize))
 	}
@@ -119,16 +176,16 @@ func List(tableI TableI) (rawSql string, err error) {
 	return rawSql, nil
 }
 
-func First(tableI TableI) (rawSql string, err error) {
-	where, err := tableI.Columns().SelectWhere()
+func First(queryI QueryI) (rawSql string, err error) {
+	where, err := queryI.Columns().SelectWhere()
 	if err != nil {
 		return "", err
 	}
 
-	ds := Dialect.Select(tableI.Columns().SelectColumns()...).
-		From(tableI.Table()).
+	ds := Dialect.Select(queryI.Columns().SelectColumns()...).
+		From(queryI.Table()).
 		Where(where...).
-		Order(tableI.Order()...).Limit(1)
+		Order(queryI.Order()...).Limit(1)
 	rawSql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -136,12 +193,12 @@ func First(tableI TableI) (rawSql string, err error) {
 	return rawSql, nil
 }
 
-func Total(tableI TableI) (sql string, err error) {
-	where, err := tableI.Columns().SelectWhere()
+func Total(commandI CommandI) (sql string, err error) {
+	where, err := commandI.Columns().SelectWhere()
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.From(tableI.Table()).Where(where...).Select(goqu.COUNT(goqu.Star()).As("count"))
+	ds := Dialect.From(commandI.Table()).Where(where...).Select(goqu.COUNT(goqu.Star()).As("count"))
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -149,26 +206,36 @@ func Total(tableI TableI) (sql string, err error) {
 	return sql, nil
 }
 
-type Column struct {
-	Name        string       `json:"name"`
-	InsertData  DataFn       `json:"-"`
-	SelectWhere WhereFn      `json:"-"`
-	UpdateWhere WhereFn      `json:"-"`
-	UpdateData  DataFn       `json:"-"`
-	Schema      ColumnSchema `json:"schema"` // 用于验证字段的规则约束
+func QuerySQL(sqlFn func(ds *goqu.SelectDataset) (newDs *goqu.SelectDataset, err error)) (sql string, err error) {
+	ds := Dialect.Select()
+	ds, err = sqlFn(ds)
+	if err != nil {
+		return "", err
+	}
+	sql, _, err = ds.ToSQL()
+	if err != nil {
+		return "", err
+	}
+	return sql, nil
 }
 
-// Multicolumn 复合列
-type Multicolumn struct {
-	Columns Columns
-}
-
+// 基于数据表填充对应数据，同时也可以基于此生成SQL DDL
 type ColumnSchema struct {
-	Title       string `json:"title"`
-	Required    bool   `json:"required,string"`
-	AllowEmpty  bool   `json:"allowEmpty,string"`
-	Description string `json:"description"`
-	Type        string `json:"type"`
+	Title      string `json:"title"`
+	Required   bool   `json:"required,string"` // 对应数据库的not null
+	AllowEmpty bool   `json:"allowEmpty,string"`
+	Comment    string `json:"comment"`
+	Type       string `json:"type"`
+	Default    any    `json:"default"`
+	Enums      Enums  `json:"enums"`
+}
+
+type Enums []Enum
+
+type Enum struct {
+	Title string `json:"title"`
+	Const string `json:"const"`
+	Value string `json:"value"`
 }
 
 // Validator 返回验证器
@@ -177,162 +244,34 @@ func (c ColumnSchema) Validator() (err error) {
 	return
 }
 
-type SQLBuilder struct {
-	Select goqu.SelectDataset
+type BusinessSchema struct {
+	Name string `json:"name"`
+	Expr string `json:"expr"`
 }
 
-type Columns []Column
+type BusinessSchemas []BusinessSchema
 
-func (fs Columns) Insert(table string) (rawSql string, err error) {
-	rowData, err := fs.MapInsertData()
-	if err != nil {
-		return rawSql, err
-	}
-	ds := Dialect.Insert(table).Rows(rowData)
-	rawSql, _, err = ds.ToSQL()
-	if err != nil {
-		return "", err
-	}
-	return rawSql, nil
+type Model struct {
+	QueryI
 }
 
-func (fs Columns) Update(table string) (rawSql string, err error) {
-	data, err := fs.MapUpdateData()
-	if err != nil {
-		return "", err
-	}
-	where, err := fs._SelectWhere()
-	if err != nil {
-		return "", err
-	}
-	ds := Dialect.Update(table).Set(data).Where(where...)
-	rawSql, _, err = ds.ToSQL()
-	if err != nil {
-		return "", err
-	}
-	return rawSql, nil
+func (m Model) Insert() (rawSql string, err error) {
+	return Insert(m.QueryI)
+}
+func (m Model) Update() (rawSql string, err error) {
+	return Update(m.QueryI)
+}
+func (m Model) List() (rawSql string, err error) {
+	return List(m.QueryI)
 }
 
-func (fs Columns) First(table string, orderedExpressions []exp.OrderedExpression) (rawSql string, err error) {
-	where, err := fs._SelectWhere()
-	if err != nil {
-		return "", err
-	}
-	ds := Dialect.Select(fs._Column()...).
-		From(table).
-		Where(where...).
-		Order(orderedExpressions...).
-		Limit(1)
-	rawSql, _, err = ds.ToSQL()
-	if err != nil {
-		return "", err
-	}
-	return rawSql, nil
+func (m Model) First() (rawSql string, err error) {
+	return First(m.QueryI)
+}
+func (m Model) Total() (rawSql string, err error) {
+	return Total(m.QueryI)
 }
 
-func (fs Columns) List(table string, pagination PaginationFn, orderedExpressions []exp.OrderedExpression) (rawSql string, err error) {
-	where, err := fs._SelectWhere()
-	if err != nil {
-		return "", err
-	}
-	pageIndex, pageSize := pagination()
-	ofsset := pageIndex * pageSize
-	if ofsset < 0 {
-		ofsset = 0
-	}
-
-	ds := Dialect.Select(fs._Column()...).
-		From(table).
-		Where(where...).
-		Order(orderedExpressions...)
-	if pageSize > 0 {
-		ds = ds.Offset(uint(ofsset)).Limit(uint(pageSize))
-	}
-	rawSql, _, err = ds.ToSQL()
-	if err != nil {
-		return "", err
-	}
-	return rawSql, nil
-}
-
-func (fs Columns) Total(table string) (sql string, err error) {
-	where, err := fs._SelectWhere()
-	if err != nil {
-		return "", err
-	}
-	ds := Dialect.From(table).Where(where...).Select(goqu.COUNT(goqu.Star()).As("count"))
-	sql, _, err = ds.ToSQL()
-	if err != nil {
-		return "", err
-	}
-	return sql, nil
-}
-
-func (fs Columns) _SelectWhere() (where []goqu.Expression, err error) {
-	where = make([]exp.Expression, 0)
-	for _, f := range fs {
-		ex, err := f.SelectWhere()
-		if err != nil {
-			return where, err
-		}
-		if IsNil(ex) {
-			continue
-		}
-		where = append(where, ex...)
-	}
-	return where, nil
-}
-
-func (fs Columns) _Column() (columns []any) {
-	columns = make([]any, 0)
-	for _, f := range fs {
-		key := f.Name
-		if key != "" {
-			columns = append(columns, key)
-		}
-	}
-	return columns
-}
-
-func (fs Columns) Json() string {
-	b, _ := json.Marshal(fs)
-	return string(b)
-}
-func (fs Columns) String() string {
-	m := make(map[string]any)
-	for _, f := range fs {
-		val, _ := f.InsertData()
-		m[f.Name] = val
-	}
-	b, _ := json.Marshal(m)
-	return string(b)
-}
-
-func (fs Columns) MapInsertData() (data map[string]any, err error) {
-	m := make(map[string]any)
-	for _, f := range fs {
-		if f.InsertData == nil {
-			continue
-		}
-		val, err := f.InsertData()
-		if err != nil {
-			return nil, err
-		}
-		m[f.Name] = val
-	}
-	return m, nil
-}
-func (fs Columns) MapUpdateData() (data map[string]any, err error) {
-	m := make(map[string]any)
-	for _, f := range fs {
-		if f.UpdateData == nil {
-			continue
-		}
-		val, err := f.UpdateData()
-		if err != nil {
-			return nil, err
-		}
-		m[f.Name] = val
-	}
-	return m, nil
+func (m Model) Query(sqlFn func(ds *goqu.SelectDataset) (newDs *goqu.SelectDataset, err error)) (rawSql string, err error) {
+	return QuerySQL(sqlFn)
 }

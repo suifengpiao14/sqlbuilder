@@ -159,3 +159,7 @@ func TryParseExpressions(field string, value any) (expressions []goqu.Expression
 	}
 	return nil, false
 }
+func Expression2String(expressions ...goqu.Expression) string {
+	sql, _, _ := Dialect.Select().Where(expressions...).ToSQL()
+	return sql
+}
