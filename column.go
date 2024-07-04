@@ -119,7 +119,7 @@ type CommandI interface {
 type QueryI interface {
 	CommandI
 	_Pagination
-	_Order
+	Order
 }
 
 func Insert(commandI CommandI) (rawSql string, err error) {

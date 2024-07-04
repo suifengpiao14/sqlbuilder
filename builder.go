@@ -58,9 +58,11 @@ type _Pagination interface {
 	Pagination() (index int, size int)
 }
 
-type _Order interface {
+type Order interface {
 	Order() (orderedExpressions []exp.OrderedExpression)
 }
+
+type OrderSet []Order
 
 type _Select interface {
 	Select() (columns []any)
@@ -115,15 +117,12 @@ func (p InsertParam) Merge(insertParams ...InsertParam) InsertParam {
 
 func (p InsertParam) AppendData(dataSet ...Data) InsertParam {
 	newP := p.Copy()
-	newP._DataSet = append(newP._DataSet, p._DataSet...)
 	newP._DataSet = append(newP._DataSet, dataSet...)
 	return newP
 }
 
 func (p InsertParam) Data() (data any, err error) {
-	dataIs := make(DataSet, 0)
-	dataIs = append(dataIs, p._DataSet...)
-	return MergeData(dataIs...)
+	return MergeData(p._DataSet...)
 }
 
 func (p InsertParam) ToSQL() (sql string, err error) {
@@ -174,22 +173,6 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-func MergeWhere(whereIs ...Where) (mergedWhere []goqu.Expression, err error) {
-	expressions := make([]goqu.Expression, 0)
-	for _, whereI := range whereIs {
-		if IsNil(whereI) {
-			continue
-		}
-		where, err := whereI.Where()
-		if err != nil {
-			return expressions, err
-		}
-		expressions = append(expressions, where...)
-	}
-
-	return expressions, nil
-}
-
 type UpdateParam struct {
 	_TableI   Table
 	_DataSet  DataSet  //中间件的Data 集合
@@ -223,27 +206,21 @@ func (p UpdateParam) Merge(updateParams ...UpdateParam) UpdateParam {
 
 func (p UpdateParam) AppendData(dataSet ...Data) UpdateParam {
 	newP := p.Copy()
-	newP._DataSet = append(newP._DataSet, p._DataSet...)
 	newP._DataSet = append(newP._DataSet, dataSet...)
 	return newP
 }
 
 func (p UpdateParam) AppendWhere(whereSet ...Where) UpdateParam {
 	newP := p.Copy()
-	newP._WhereSet = append(newP._WhereSet, p._WhereSet...)
 	newP._WhereSet = append(newP._WhereSet, whereSet...)
 	return newP
 }
 func (p UpdateParam) Data() (data any, err error) {
-	dataIs := make(DataSet, 0)
-	dataIs = append(dataIs, p._DataSet...)
-	return MergeData(dataIs...)
+	return MergeData(p._DataSet...)
 }
 
 func (p UpdateParam) Where() (expressions []goqu.Expression, err error) {
-	whereIs := make([]Where, 0)
-	whereIs = append(whereIs, p._WhereSet...)
-	return MergeWhere(whereIs...)
+	return MergeWhere(p._WhereSet...)
 }
 
 func (p UpdateParam) ToSQL() (sql string, err error) {
@@ -266,25 +243,28 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 type FirstParamI interface {
 	Table
 	_Select
-	Where
-	_Order
+	//Where
+	Order
 }
 
 type FirstParam struct {
 	_FirstParamI FirstParamI
 	_WhereSet    WhereSet //中间件的Where 集合
+	_OrderSet    OrderSet
 }
 
 func (p FirstParam) Copy() FirstParam {
 	return FirstParam{
 		_FirstParamI: p._FirstParamI,
 		_WhereSet:    p._WhereSet,
+		_OrderSet:    p._OrderSet,
 	}
 }
 func (p FirstParam) Merge(firstParams ...FirstParam) FirstParam {
 	newP := p.Copy()
 	for _, up := range firstParams {
 		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
+		newP._OrderSet = append(newP._OrderSet, up._OrderSet...)
 	}
 	return newP
 }
@@ -298,15 +278,21 @@ func NewFirstBuilder(firstParamI FirstParamI) FirstParam {
 
 func (p FirstParam) AppendWhere(whereSet ...Where) FirstParam {
 	newP := p.Copy()
-	newP._WhereSet = append(newP._WhereSet, p._WhereSet...)
 	newP._WhereSet = append(newP._WhereSet, whereSet...)
 	return newP
 }
 func (p FirstParam) Where() (expressions []goqu.Expression, err error) {
-	whereIs := make([]Where, 0)
-	whereIs = append(whereIs, p._FirstParamI)
-	whereIs = append(whereIs, p._WhereSet...)
-	return MergeWhere(whereIs...)
+	return MergeWhere(p._WhereSet...)
+}
+
+func (p FirstParam) AppendOrder(orderSet ...Order) FirstParam {
+	newP := p.Copy()
+	newP._OrderSet = append(newP._OrderSet, orderSet...)
+	return newP
+}
+
+func (p FirstParam) Order() (orderedExpression []exp.OrderedExpression) {
+	return MergeOrder(p._OrderSet...)
 }
 
 func (p FirstParam) ToSQL() (sql string, err error) {
@@ -330,24 +316,26 @@ type ListParamI interface {
 	Table
 	_Select
 	_Pagination
-	_Order
 }
 
 type ListParam struct {
 	_ListParamI ListParamI
 	_WhereSet   WhereSet
+	_OrderSet   OrderSet
 }
 
 func (p ListParam) Copy() ListParam {
 	return ListParam{
 		_ListParamI: p._ListParamI,
 		_WhereSet:   p._WhereSet,
+		_OrderSet:   p._OrderSet,
 	}
 }
 func (p ListParam) Merge(listParams ...ListParam) ListParam {
 	newP := p.Copy()
 	for _, up := range listParams {
 		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
+		newP._OrderSet = append(newP._OrderSet, up._OrderSet...)
 	}
 	return newP
 }
@@ -360,15 +348,21 @@ func NewListBuilder(listParamI ListParamI) ListParam {
 }
 func (p ListParam) AppendWhere(whereSet ...Where) ListParam {
 	newP := p.Copy()
-	newP._WhereSet = append(newP._WhereSet, p._WhereSet...)
 	newP._WhereSet = append(newP._WhereSet, whereSet...)
 	return newP
 }
 
+func (p ListParam) AppendOrder(orderSet ...Order) ListParam {
+	newP := p.Copy()
+	newP._OrderSet = append(newP._OrderSet, orderSet...)
+	return newP
+}
+
 func (p ListParam) Where() (expressions []goqu.Expression, err error) {
-	wheres := make([]Where, 0)
-	wheres = append(wheres, p._WhereSet...)
-	return MergeWhere(wheres...)
+	return MergeWhere(p._WhereSet...)
+}
+func (p ListParam) Order() (orderedExpression []exp.OrderedExpression) {
+	return MergeOrder(p._OrderSet...)
 }
 
 // CustomSQL 自定义SQL，方便构造更复杂的查询语句，如 Group,Having 等
@@ -399,7 +393,7 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	ds := Dialect.Select(p._ListParamI.Select()...).
 		From(p._ListParamI.Table()).
 		Where(where...).
-		Order(p._ListParamI.Order()...)
+		Order(p.Order()...)
 	if pageSize > 0 {
 		ds = ds.Offset(uint(ofsset)).Limit(uint(pageSize))
 	}
@@ -438,15 +432,12 @@ func (p TotalParam) Merge(totalParams ...TotalParam) TotalParam {
 
 func (p TotalParam) AppendWhere(whereSet ...Where) TotalParam {
 	newP := p.Copy()
-	newP._WhereSet = append(newP._WhereSet, p._WhereSet...)
 	newP._WhereSet = append(newP._WhereSet, whereSet...)
 	return newP
 }
 
 func (p TotalParam) Where() (expressions []goqu.Expression, err error) {
-	whereIs := make([]Where, 0)
-	whereIs = append(whereIs, p._WhereSet...)
-	return MergeWhere(whereIs...)
+	return MergeWhere(p._WhereSet...)
 }
 
 func (p TotalParam) ToSQL() (sql string, err error) {
@@ -496,4 +487,28 @@ func MergeData(dataIs ...Data) (newData map[string]any, err error) {
 	}
 
 	return newData, nil
+}
+
+func MergeWhere(whereIs ...Where) (mergedWhere []goqu.Expression, err error) {
+	expressions := make([]goqu.Expression, 0)
+	for _, whereI := range whereIs {
+		if IsNil(whereI) {
+			continue
+		}
+		where, err := whereI.Where()
+		if err != nil {
+			return expressions, err
+		}
+		expressions = append(expressions, where...)
+	}
+
+	return expressions, nil
+}
+
+func MergeOrder(orders ...Order) (orderedExpressions []exp.OrderedExpression) {
+	orderedExpressions = make([]exp.OrderedExpression, 0)
+	for _, o := range orders {
+		orderedExpressions = append(orderedExpressions, o.Order()...)
+	}
+	return orderedExpressions
 }
