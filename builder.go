@@ -40,7 +40,7 @@ func (fn TableFn) Table() (table string) {
 	return fn()
 }
 
-type Where interface {
+type WhereI interface {
 	Where() (expressions []goqu.Expression, err error) // 容许在构建where函数时验证必要参数返回报错
 }
 
@@ -50,7 +50,7 @@ func (fn WhereFn) Where() (expressions []goqu.Expression, err error) {
 	return fn()
 }
 
-type WhereSet []Where
+type WhereSet []WhereI
 
 type PaginationFn func() (index int, size int)
 
@@ -74,7 +74,19 @@ type _Select interface {
 	Select() (columns []any)
 }
 
-type Data interface {
+type ValidateI interface {
+	Validate() (err error) // 流程上的验证,使用该签名接口,更符合语意
+}
+
+type ValidateFn func() (err error)
+
+func (fn ValidateFn) Validate() (err error) {
+	return fn()
+}
+
+type ValidateSet []ValidateI
+
+type DataI interface {
 	Data() (data any, err error) //容许验证参数返回错误
 }
 
@@ -84,7 +96,7 @@ func (fn DataFn) Data() (data any, err error) {
 	return fn()
 }
 
-type DataSet []Data
+type DataSet []DataI
 
 func ConcatOrderedExpression(orderedExpressions ...exp.OrderedExpression) []exp.OrderedExpression {
 	return orderedExpressions
@@ -96,8 +108,9 @@ func ConcatExpression(expressions ...exp.Expression) []exp.Expression {
 
 // InsertParam 供子类复用,修改数据
 type InsertParam struct {
-	_TableI  Table
-	_DataSet DataSet
+	_TableI      Table
+	_DataSet     DataSet
+	_ValidateSet ValidateSet
 }
 
 func NewInsertBuilder(table Table) InsertParam {
@@ -109,19 +122,36 @@ func NewInsertBuilder(table Table) InsertParam {
 
 func (p InsertParam) _Copy() InsertParam {
 	return InsertParam{
-		_TableI:  p._TableI,
-		_DataSet: p._DataSet,
+		_TableI:      p._TableI,
+		_DataSet:     p._DataSet,
+		_ValidateSet: p._ValidateSet,
 	}
 }
 func (p InsertParam) Merge(insertParams ...InsertParam) InsertParam {
 	newP := p._Copy()
 	for _, up := range insertParams {
 		newP._DataSet = append(newP._DataSet, up._DataSet...)
+		newP._ValidateSet = append(newP._ValidateSet, up._ValidateSet...)
 	}
 	return newP
 }
+func (p InsertParam) AppendValidate(validateSet ...ValidateI) InsertParam {
+	newP := p._Copy()
+	newP._ValidateSet = append(newP._ValidateSet, validateSet...)
+	return newP
+}
 
-func (p InsertParam) AppendData(dataSet ...Data) InsertParam {
+func (p InsertParam) _Validate() (err error) {
+	for _, v := range p._ValidateSet {
+		err = v.Validate()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p InsertParam) AppendData(dataSet ...DataI) InsertParam {
 	newP := p._Copy()
 	newP._DataSet = append(newP._DataSet, dataSet...)
 	return newP
@@ -142,6 +172,10 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 	}
 	if p._TableI == nil {
 		err = errors.Errorf("InsertParam._Table required")
+		return "", err
+	}
+	err = p._Validate()
+	if err != nil {
 		return "", err
 	}
 	table := p._TableI.Table()
@@ -180,9 +214,10 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 }
 
 type UpdateParam struct {
-	_TableI   Table
-	_DataSet  DataSet  //中间件的Data 集合
-	_WhereSet WhereSet //中间件的Where 集合
+	_TableI      Table
+	_DataSet     DataSet  //中间件的Data 集合
+	_WhereSet    WhereSet //中间件的Where 集合
+	_ValidateSet ValidateSet
 }
 
 func NewUpdateBuilder(table Table) UpdateParam {
@@ -195,9 +230,10 @@ func NewUpdateBuilder(table Table) UpdateParam {
 
 func (p UpdateParam) _Copy() UpdateParam {
 	return UpdateParam{
-		_TableI:   p._TableI,
-		_DataSet:  p._DataSet,
-		_WhereSet: p._WhereSet,
+		_TableI:      p._TableI,
+		_DataSet:     p._DataSet,
+		_WhereSet:    p._WhereSet,
+		_ValidateSet: p._ValidateSet,
 	}
 }
 
@@ -206,17 +242,34 @@ func (p UpdateParam) Merge(updateParams ...UpdateParam) UpdateParam {
 	for _, up := range updateParams {
 		newP._DataSet = append(newP._DataSet, up._DataSet...)
 		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
+		newP._ValidateSet = append(newP._ValidateSet, up._ValidateSet...)
 	}
 	return newP
 }
 
-func (p UpdateParam) AppendData(dataSet ...Data) UpdateParam {
+func (p UpdateParam) AppendValidate(validateSet ...ValidateI) UpdateParam {
+	newP := p._Copy()
+	newP._ValidateSet = append(newP._ValidateSet, validateSet...)
+	return newP
+}
+
+func (p UpdateParam) _Validate() (err error) {
+	for _, v := range p._ValidateSet {
+		err = v.Validate()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p UpdateParam) AppendData(dataSet ...DataI) UpdateParam {
 	newP := p._Copy()
 	newP._DataSet = append(newP._DataSet, dataSet...)
 	return newP
 }
 
-func (p UpdateParam) AppendWhere(whereSet ...Where) UpdateParam {
+func (p UpdateParam) AppendWhere(whereSet ...WhereI) UpdateParam {
 	newP := p._Copy()
 	newP._WhereSet = append(newP._WhereSet, whereSet...)
 	return newP
@@ -231,6 +284,10 @@ func (p UpdateParam) _Where() (expressions []goqu.Expression, err error) {
 
 func (p UpdateParam) ToSQL() (sql string, err error) {
 	data, err := p._Data()
+	if err != nil {
+		return "", err
+	}
+	err = p._Validate()
 	if err != nil {
 		return "", err
 	}
@@ -282,7 +339,7 @@ func NewFirstBuilder(firstParamI FirstParamI) FirstParam {
 	}
 }
 
-func (p FirstParam) AppendWhere(whereSet ...Where) FirstParam {
+func (p FirstParam) AppendWhere(whereSet ...WhereI) FirstParam {
 	newP := p._Copy()
 	newP._WhereSet = append(newP._WhereSet, whereSet...)
 	return newP
@@ -352,7 +409,7 @@ func NewListBuilder(listParamI ListParamI) ListParam {
 		_WhereSet:   make(WhereSet, 0),
 	}
 }
-func (p ListParam) AppendWhere(whereSet ...Where) ListParam {
+func (p ListParam) AppendWhere(whereSet ...WhereI) ListParam {
 	newP := p._Copy()
 	newP._WhereSet = append(newP._WhereSet, whereSet...)
 	return newP
@@ -436,7 +493,7 @@ func (p TotalParam) Merge(totalParams ...TotalParam) TotalParam {
 	return newP
 }
 
-func (p TotalParam) AppendWhere(whereSet ...Where) TotalParam {
+func (p TotalParam) AppendWhere(whereSet ...WhereI) TotalParam {
 	newP := p._Copy()
 	newP._WhereSet = append(newP._WhereSet, whereSet...)
 	return newP
@@ -459,7 +516,7 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-func MergeData(dataIs ...Data) (newData map[string]any, err error) {
+func MergeData(dataIs ...DataI) (newData map[string]any, err error) {
 	newData = map[string]any{}
 	for _, dataI := range dataIs {
 		if IsNil(dataI) {
@@ -495,7 +552,7 @@ func MergeData(dataIs ...Data) (newData map[string]any, err error) {
 	return newData, nil
 }
 
-func MergeWhere(whereIs ...Where) (mergedWhere []goqu.Expression, err error) {
+func MergeWhere(whereIs ...WhereI) (mergedWhere []goqu.Expression, err error) {
 	expressions := make([]goqu.Expression, 0)
 	for _, whereI := range whereIs {
 		if IsNil(whereI) {

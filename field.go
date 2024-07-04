@@ -2,6 +2,7 @@ package sqlbuilder
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -33,11 +34,35 @@ type Field struct {
 	_WhereValueFnInfo WhereValueFnInfo                                       // 方便继承类判断具体情况
 }
 
+// LogString 日志字符串格式
+func (f Field) LogString() string {
+	title := f.Title
+	if title == "" {
+		title = f.Name
+	}
+	val, _ := f.ValueFn(nil)
+	str := cast.ToString(val)
+	out := fmt.Sprintf("%s(%s)", title, str)
+	return out
+}
 func (f Field) GetValueFnInfo() ValueFnInfo {
 	return f._ValueFnInfo
 }
 func (f Field) GetWhereValueFnInfo() WhereValueFnInfo {
 	return f._WhereValueFnInfo
+}
+
+// IsEqual 判断名称值是否相等
+func (f Field) IsEqual(o Field) bool {
+	fv, err := f.ValueFn(nil)
+	if err != nil || IsNil(fv) {
+		return false
+	}
+	ov, err := o.ValueFn(nil)
+	if err != nil || IsNil(ov) {
+		return false
+	}
+	return strings.EqualFold(cast.ToString(fv), cast.ToString(ov)) && strings.EqualFold(f.Name, o.Name)
 }
 
 func (f Field) Data() (data any, err error) {
@@ -107,19 +132,6 @@ func (fs Fields) Map() (data map[string]any, err error) {
 		m[f.Name] = val
 	}
 	return m, nil
-}
-
-func NewField(name string, value func(in any) (any, error)) Field {
-	if value == nil {
-		value = func(in any) (any, error) {
-			return in, nil
-		}
-	}
-	column := Field{
-		Name:    name,
-		ValueFn: value,
-	}
-	return column
 }
 
 type FieldFn func() []Field
