@@ -18,24 +18,42 @@ type ValueFn func(in any) (value any, err error) // 函数之所有接收in 入�
 
 type ValueFns []ValueFn
 
-func (fns *ValueFns) Append(subFns ...ValueFn) {
+func (fns *ValueFns) Insert(index int, subFns ...ValueFn) {
 	if *fns == nil {
 		*fns = make(ValueFns, 0)
 	}
-	*fns = append(*fns, subFns...)
-}
-
-// AppendIfNotEmpty 当存在工序函数时，才加入新的工序，方便有些不能作为第一个工序的函数(第一个工序需要提供值),比如 where 条件 like 如果值为空 增加 % 毫无意义 ,中间件建议使用该函数
-func (fns *ValueFns) AppendWhenNotFirst(subFns ...ValueFn) {
-	if len(*fns) == 0 {
+	if index < 0 { // index 小于0,则直接追加,最好采用-1,后续可能细化负数
+		*fns = append(*fns, subFns...)
+	}
+	if index == 0 { // index =0 插入第一个
+		tmp := make(ValueFns, 0)
+		tmp = append(tmp, subFns...)
+		tmp = append(tmp, *fns...)
+		*fns = tmp
 		return
 	}
-	*fns = append(*fns, subFns...)
+	if len(*fns) < index { // 当前长度小于指定的开始索引,则不插入,通过这个方法能确保中间件修改函数不会插入到第一个
+		return
+	}
+	pre, after := (*fns)[:index], (*fns)[index:]
+	tmp := make(ValueFns, 0)
+	tmp = append(tmp, pre...)
+	tmp = append(tmp, subFns...)
+	tmp = append(tmp, after...)
+	*fns = tmp
+
 }
 
-// DirectValue 原样返回
-func DirectValue(val any) (value any, err error) {
+// ValueFnDirect 原样返回
+func ValueFnDirect(val any) (value any, err error) {
 	return val, nil
+}
+
+// ValueFnFromData 从 field.Data获取数据
+func ValueFnFromData(field Field) ValueFn {
+	return func(in any) (value any, err error) {
+		return field.Data()
+	}
 }
 
 // ShieldFormat 屏蔽值，常用于取消某个字段作为查询条件
@@ -179,6 +197,18 @@ func (f Field) Where() (expressions Expressions, err error) {
 
 type Fields []Field
 
+func (fs Fields) Where() (expressions Expressions, err error) {
+	expressions = make(Expressions, 0)
+	for _, field := range fs {
+		subExprs, err := field.Where()
+		if err != nil {
+			return nil, err
+		}
+		expressions = append(expressions, subExprs...)
+	}
+	return expressions, nil
+}
+
 func (fs Fields) Json() string {
 	b, _ := json.Marshal(fs)
 	return string(b)
@@ -193,7 +223,7 @@ func (fs Fields) String() string {
 	return string(b)
 }
 
-func (fs Fields) Map() (data map[string]any, err error) {
+func (fs Fields) Data() (data any, err error) {
 	m := make(map[string]any)
 	for _, f := range fs {
 		val, err := f.GetValue(nil)
