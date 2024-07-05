@@ -18,12 +18,15 @@ type ValueFn func(in any) (value any, err error) // 函数之所有接收in 入�
 
 type ValueFns []ValueFn
 
+// Insert 追加元素,不建议使用,建议用InsertAsFirst,InsertAsSecond
 func (fns *ValueFns) Insert(index int, subFns ...ValueFn) {
 	if *fns == nil {
 		*fns = make(ValueFns, 0)
 	}
-	if index < 0 { // index 小于0,则直接追加,最好采用-1,后续可能细化负数
+	l := len(*fns)
+	if l == 0 || index < 0 || l <= index { // 本身没有,直接添加,或者计划添加到结尾,或者指定位置比现有数组长,直接追加
 		*fns = append(*fns, subFns...)
+		return
 	}
 	if index == 0 { // index =0 插入第一个
 		tmp := make(ValueFns, 0)
@@ -32,16 +35,22 @@ func (fns *ValueFns) Insert(index int, subFns ...ValueFn) {
 		*fns = tmp
 		return
 	}
-	if len(*fns) < index { // 当前长度小于指定的开始索引,则不插入,通过这个方法能确保中间件修改函数不会插入到第一个
-		return
-	}
 	pre, after := (*fns)[:index], (*fns)[index:]
 	tmp := make(ValueFns, 0)
 	tmp = append(tmp, pre...)
 	tmp = append(tmp, subFns...)
 	tmp = append(tmp, after...)
 	*fns = tmp
+}
 
+// InsertAsFirst 作为第一个元素插入,一般用于将数据导入到whereFn 中
+func (fns *ValueFns) InsertAsFirst(subFns ...ValueFn) {
+	fns.Insert(0, subFns...)
+}
+
+// InsertAsSecond 作为第二个元素插入,一般用于在获取数据后立即验证器插入
+func (fns *ValueFns) InsertAsSecond(subFns ...ValueFn) {
+	fns.Insert(1, subFns...)
 }
 
 // ValueFnDirect 原样返回
