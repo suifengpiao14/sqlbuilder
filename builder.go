@@ -86,10 +86,10 @@ type ValidateI interface {
 	Validate(val any) (err error) // 流程上的验证,使用该签名接口,更符合语意
 }
 
-type ValidateFn func() (err error)
+type ValidateFn func(val any) (err error)
 
-func (fn ValidateFn) Validate() (err error) {
-	return fn()
+func (fn ValidateFn) Validate(val any) (err error) {
+	return fn(val)
 }
 
 type ValidateSet []ValidateI
