@@ -53,6 +53,11 @@ func (fns *ValueFns) InsertAsSecond(subFns ...ValueFn) {
 	fns.Insert(1, subFns...)
 }
 
+// Append 常规添加
+func (fns *ValueFns) Append(subFns ...ValueFn) {
+	fns.Insert(-1, subFns...)
+}
+
 // ValueFnDirect 原样返回
 func ValueFnDirect(val any) (value any, err error) {
 	return val, nil
