@@ -32,6 +32,7 @@ type Field struct {
 	Migrate           func(table string, options ...MigrateOptionI) Migrates `json:"-"`
 	_ValueFnInfo      ValueFnInfo                                            // 方便继承类判断具体情况
 	_WhereValueFnInfo WhereValueFnInfo                                       // 方便继承类判断具体情况
+	DBSchema          *DBSchema                                              // 可以为空，为空建议设置默认值
 }
 
 // LogString 日志字符串格式
@@ -63,6 +64,20 @@ func (f Field) IsEqual(o Field) bool {
 		return false
 	}
 	return strings.EqualFold(cast.ToString(fv), cast.ToString(ov)) && strings.EqualFold(f.Name, o.Name)
+}
+
+// Validate  实现ValidateI 接口 可以再 valueFn ,whereValueFn 中手动调用
+func (c Field) Validate(val any) (err error) {
+	if c.DBSchema == nil {
+		return nil
+	}
+	rv := reflect.Indirect(reflect.ValueOf(val))
+	err = c.DBSchema.Validate(c.Name, rv)
+	if err != nil {
+		return err
+	}
+
+	return
 }
 
 func (f Field) Data() (data any, err error) {

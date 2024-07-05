@@ -83,7 +83,7 @@ type _Select interface {
 }
 
 type ValidateI interface {
-	Validate() (err error) // 流程上的验证,使用该签名接口,更符合语意
+	Validate(val any) (err error) // 流程上的验证,使用该签名接口,更符合语意
 }
 
 type ValidateFn func() (err error)
@@ -151,7 +151,7 @@ func (p InsertParam) AppendValidate(validateSet ...ValidateI) InsertParam {
 
 func (p InsertParam) _Validate() (err error) {
 	for _, v := range p._ValidateSet {
-		err = v.Validate()
+		err = v.Validate(nil)
 		if err != nil {
 			return err
 		}
@@ -263,7 +263,7 @@ func (p UpdateParam) AppendValidate(validateSet ...ValidateI) UpdateParam {
 
 func (p UpdateParam) _Validate() (err error) {
 	for _, v := range p._ValidateSet {
-		err = v.Validate()
+		err = v.Validate(nil)
 		if err != nil {
 			return err
 		}

@@ -65,7 +65,7 @@ type Column struct {
 	SelectWhereValueFn DataFn          `json:"-"`
 	UpdateWhereValueFn DataFn          `json:"-"`
 	UpdateValueFn      DataFn          `json:"-"`
-	Schema             ColumnSchema    `json:"schema"`          // 用于验证字段的规则约束
+	Schema             DBSchema        `json:"schema"`          // 用于验证字段的规则约束
 	BusinessSchemas    BusinessSchemas `json:"businessSchemas"` // 基于业务的验证规则
 }
 
@@ -217,31 +217,6 @@ func QuerySQL(sqlFn func(ds *goqu.SelectDataset) (newDs *goqu.SelectDataset, err
 		return "", err
 	}
 	return sql, nil
-}
-
-// 基于数据表填充对应数据，同时也可以基于此生成SQL DDL
-type ColumnSchema struct {
-	Title      string `json:"title"`
-	Required   bool   `json:"required,string"` // 对应数据库的not null
-	AllowEmpty bool   `json:"allowEmpty,string"`
-	Comment    string `json:"comment"`
-	Type       string `json:"type"`
-	Default    any    `json:"default"`
-	Enums      Enums  `json:"enums"`
-}
-
-type Enums []Enum
-
-type Enum struct {
-	Title string `json:"title"`
-	Const string `json:"const"`
-	Value string `json:"value"`
-}
-
-// Validator 返回验证器
-// todo
-func (c ColumnSchema) Validator() (err error) {
-	return
 }
 
 type BusinessSchema struct {
