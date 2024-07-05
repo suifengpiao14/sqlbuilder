@@ -83,7 +83,7 @@ func (f Field) Data() (data any, err error) {
 	return m, nil
 }
 
-func (f Field) Where() (expressions []goqu.Expression, err error) {
+func (f Field) Where() (expressions Expressions, err error) {
 	if f.WhereValueFn == nil {
 		f._WhereValueFnInfo.IsFnNil = true
 		return nil, nil
@@ -168,7 +168,7 @@ func IsNil(v any) bool {
 // Ilike 不区分大小写like语句
 type Ilike [3]any
 
-func TryIlike(field string, value any) (expressions []goqu.Expression, ok bool) {
+func TryIlike(field string, value any) (expressions Expressions, ok bool) {
 	if iLike, ok := value.(Ilike); ok {
 		identifier := goqu.C(field)
 		strArr := make([]string, 0)
@@ -184,7 +184,7 @@ func TryIlike(field string, value any) (expressions []goqu.Expression, ok bool) 
 // Between 介于2者之间(包含上下边界，对于不包含边界情况，可以修改值范围或者直接用表达式)
 type Between [2]any
 
-func TryConvert2Betwwen(field string, value any) (expressions []goqu.Expression, ok bool) {
+func TryConvert2Betwwen(field string, value any) (expressions Expressions, ok bool) {
 	if between, ok := value.(Between); ok {
 		identifier := goqu.C(field)
 		min, max := between[0], between[1]
@@ -204,8 +204,8 @@ func TryConvert2Betwwen(field string, value any) (expressions []goqu.Expression,
 }
 
 // TryConvert2Expressions 业务where 条件判断，优先判断是否符可以转换为条件，可以直接应用
-func TryConvert2Expressions(value any) (expressions []goqu.Expression, ok bool) {
-	if ex, ok := value.([]goqu.Expression); ok {
+func TryConvert2Expressions(value any) (expressions Expressions, ok bool) {
+	if ex, ok := value.(Expressions); ok {
 		return ex, true
 	}
 	if ex, ok := value.(goqu.Expression); ok {
@@ -215,7 +215,7 @@ func TryConvert2Expressions(value any) (expressions []goqu.Expression, ok bool) 
 }
 
 // TryParseExpressions 尝试解析where条件
-func TryParseExpressions(field string, value any) (expressions []goqu.Expression, ok bool) {
+func TryParseExpressions(field string, value any) (expressions Expressions, ok bool) {
 	if ex, ok := TryConvert2Expressions(value); ok {
 		return ex, true
 	}

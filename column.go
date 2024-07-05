@@ -6,10 +6,10 @@ import (
 
 type ColumnI interface {
 	SelectColumns() (columns []any)
-	SelectWhere() (expression []goqu.Expression, err error)
+	SelectWhere() (expression Expressions, err error)
 	InsertValue() (value any, err error)
 	UpdateValue() (value any, err error)
-	UpdateWhere() (expression []goqu.Expression, err error)
+	UpdateWhere() (expression Expressions, err error)
 }
 
 type ColumnIs []ColumnI
@@ -22,7 +22,7 @@ func (cols ColumnIs) SelectColumns() (columns []any) {
 	return columns
 }
 
-func (cols ColumnIs) SelectWhere() (mergedWhere []goqu.Expression, err error) {
+func (cols ColumnIs) SelectWhere() (mergedWhere Expressions, err error) {
 	wheres := make([]WhereI, 0)
 	for _, col := range cols {
 		wheres = append(wheres, WhereFn(col.SelectWhere))
@@ -47,7 +47,7 @@ func (cols ColumnIs) UpdateValue() (value any, err error) {
 	return MergeData(valueIs...)
 }
 
-func (cols ColumnIs) UpdateWhere() (mergedWhere []goqu.Expression, err error) {
+func (cols ColumnIs) UpdateWhere() (mergedWhere Expressions, err error) {
 	wheres := make([]WhereI, 0)
 	for _, col := range cols {
 		wheres = append(wheres, WhereFn(col.UpdateWhere))
@@ -72,7 +72,7 @@ type Column struct {
 func (c Column) SelectColumns() (columns []any) {
 	return []any{c.Name}
 }
-func (c Column) SelectWhere() (expression []goqu.Expression, err error) {
+func (c Column) SelectWhere() (expression Expressions, err error) {
 	if c.SelectWhereValueFn != nil {
 		return nil, nil
 	}
@@ -97,7 +97,7 @@ func (c Column) UpdateValue() (value any, err error) {
 	}
 	return c.UpdateValueFn()
 }
-func (c Column) UpdateWhere() (expression []goqu.Expression, err error) {
+func (c Column) UpdateWhere() (expression Expressions, err error) {
 	if c.UpdateWhereValueFn != nil {
 		return nil, nil
 	}

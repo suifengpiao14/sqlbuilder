@@ -21,6 +21,14 @@ func (d Driver) IsSame(target Driver) bool {
 	return strings.EqualFold(d.String(), target.String())
 }
 
+type Expressions []goqu.Expression
+
+func (exs Expressions) IsEmpty() bool {
+	return len(exs) == 0
+}
+
+var ERROR_EMPTY_WHERE = errors.New("error  empty where")
+
 const (
 	Dialect_mysql   Driver = "mysql"
 	Dialect_sqlite3 Driver = "sqlite3"
@@ -41,12 +49,12 @@ func (fn TableFn) Table() (table string) {
 }
 
 type WhereI interface {
-	Where() (expressions []goqu.Expression, err error) // 容许在构建where函数时验证必要参数返回报错
+	Where() (expressions Expressions, err error) // 容许在构建where函数时验证必要参数返回报错
 }
 
-type WhereFn func() (expressions []goqu.Expression, err error)
+type WhereFn func() (expressions Expressions, err error)
 
-func (fn WhereFn) Where() (expressions []goqu.Expression, err error) {
+func (fn WhereFn) Where() (expressions Expressions, err error) {
 	return fn()
 }
 
@@ -102,7 +110,7 @@ func ConcatOrderedExpression(orderedExpressions ...exp.OrderedExpression) []exp.
 	return orderedExpressions
 }
 
-func ConcatExpression(expressions ...exp.Expression) []exp.Expression {
+func ConcatExpression(expressions ...exp.Expression) Expressions {
 	return expressions
 }
 
@@ -157,12 +165,12 @@ func (p InsertParam) AppendData(dataSet ...DataI) InsertParam {
 	return newP
 }
 
-func (p InsertParam) _Data() (data any, err error) {
+func (p InsertParam) Data() (data any, err error) {
 	return MergeData(p._DataSet...)
 }
 
 func (p InsertParam) ToSQL() (sql string, err error) {
-	rowData, err := p._Data()
+	rowData, err := p.Data()
 	if err != nil {
 		return "", err
 	}
@@ -196,7 +204,7 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 		if i == 0 {
 			table = r._TableI.Table()
 		}
-		rowData, err := r._Data()
+		rowData, err := r.Data()
 		if err != nil {
 			return "", err
 		}
@@ -274,16 +282,23 @@ func (p UpdateParam) AppendWhere(whereSet ...WhereI) UpdateParam {
 	newP._WhereSet = append(newP._WhereSet, whereSet...)
 	return newP
 }
-func (p UpdateParam) _Data() (data any, err error) {
+func (p UpdateParam) Data() (data any, err error) {
 	return MergeData(p._DataSet...)
 }
 
-func (p UpdateParam) _Where() (expressions []goqu.Expression, err error) {
-	return MergeWhere(p._WhereSet...)
+func (p UpdateParam) Where() (expressions Expressions, err error) {
+	expressions, err = MergeWhere(p._WhereSet...)
+	if err != nil {
+		return nil, err
+	}
+	if expressions.IsEmpty() {
+		return nil, ERROR_EMPTY_WHERE // 更新条件下，内置不容许条件为空，明确需要，可以增加1=1 条件
+	}
+	return expressions, nil
 }
 
 func (p UpdateParam) ToSQL() (sql string, err error) {
-	data, err := p._Data()
+	data, err := p.Data()
 	if err != nil {
 		return "", err
 	}
@@ -291,7 +306,7 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
-	where, err := p._Where()
+	where, err := p.Where()
 	if err != nil {
 		return "", err
 	}
@@ -344,7 +359,7 @@ func (p FirstParam) AppendWhere(whereSet ...WhereI) FirstParam {
 	newP._WhereSet = append(newP._WhereSet, whereSet...)
 	return newP
 }
-func (p FirstParam) _Where() (expressions []goqu.Expression, err error) {
+func (p FirstParam) Where() (expressions Expressions, err error) {
 	return MergeWhere(p._WhereSet...)
 }
 
@@ -359,7 +374,7 @@ func (p FirstParam) _Order() (orderedExpression []exp.OrderedExpression) {
 }
 
 func (p FirstParam) ToSQL() (sql string, err error) {
-	where, err := p._Where()
+	where, err := p.Where()
 	if err != nil {
 		return "", err
 	}
@@ -421,7 +436,7 @@ func (p ListParam) AppendOrder(orderSet ...Order) ListParam {
 	return newP
 }
 
-func (p ListParam) _Where() (expressions []goqu.Expression, err error) {
+func (p ListParam) Where() (expressions Expressions, err error) {
 	return MergeWhere(p._WhereSet...)
 }
 func (p ListParam) _Order() (orderedExpression []exp.OrderedExpression) {
@@ -443,7 +458,7 @@ func (p ListParam) CustomSQL(sqlFn func(p ListParam, ds *goqu.SelectDataset) (ne
 }
 
 func (p ListParam) ToSQL() (sql string, err error) {
-	where, err := p._Where()
+	where, err := p.Where()
 	if err != nil {
 		return "", err
 	}
@@ -499,7 +514,7 @@ func (p TotalParam) AppendWhere(whereSet ...WhereI) TotalParam {
 	return newP
 }
 
-func (p TotalParam) Where() (expressions []goqu.Expression, err error) {
+func (p TotalParam) Where() (expressions Expressions, err error) {
 	return MergeWhere(p._WhereSet...)
 }
 
@@ -552,8 +567,8 @@ func MergeData(dataIs ...DataI) (newData map[string]any, err error) {
 	return newData, nil
 }
 
-func MergeWhere(whereIs ...WhereI) (mergedWhere []goqu.Expression, err error) {
-	expressions := make([]goqu.Expression, 0)
+func MergeWhere(whereIs ...WhereI) (mergedWhere Expressions, err error) {
+	expressions := make(Expressions, 0)
 	for _, whereI := range whereIs {
 		if IsNil(whereI) {
 			continue
