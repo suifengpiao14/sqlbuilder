@@ -108,3 +108,14 @@ func contains(slice []string, item string) bool {
 	}
 	return false
 }
+
+// ValueFnDBSchemaValidator 将DBSchema validator 封装成 ValueFn 中间件函数
+func ValueFnDBSchemaValidator(field Field) (valueFn ValueFn) {
+	return func(in any) (value any, err error) {
+		err = field.Validate(in)
+		if err != nil {
+			return nil, err
+		}
+		return in, nil
+	}
+}
