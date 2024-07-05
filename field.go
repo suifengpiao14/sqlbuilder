@@ -8,6 +8,7 @@ import (
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/doug-martin/goqu/v9/exp"
+	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 )
 
@@ -26,6 +27,13 @@ type WhereValueFnInfo struct {
 type ValueFn func(in any) (value any, err error) // 函数之所有接收in 入参，有时模型内部加工生成的数据需要存储，需要定制格式化，比如多边形产生的边界框4个点坐标
 
 type ValueFns []ValueFn
+
+func (fns *ValueFns) Append(subFns ...ValueFn) {
+	if *fns == nil {
+		*fns = make(ValueFns, 0)
+	}
+	*fns = append(*fns, subFns...)
+}
 
 // DirectValue 原样返回
 func DirectValue(val any) (value any, err error) {
@@ -63,8 +71,7 @@ type Format struct {
 type Field struct {
 	Title          string                                                 `json:"title"`
 	Name           string                                                 `json:"name"`
-	ValueFns       ValueFn                                                `json:"-"` // 增加error，方便封装字段验证规则
-	ValueFormatFns FormatFns                                              `json:"-"` // 中间件操作数据
+	ValueFns       ValueFns                                               `json:"-"` // 增加error，方便封装字段验证规则
 	WhereFormatFns FormatFns                                              `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
 	Migrate        func(table string, options ...MigrateOptionI) Migrates `json:"-"`
 	Validator      func(field Field) ValidateI                            `json:"-"` // 设置验证参数验证器
@@ -82,11 +89,11 @@ func (f Field) AppendWhereFomatFn(fns ...FormatFn) {
 }
 
 // 给当前列增加value数据修改
-func (f Field) AppendValueFomatFn(fns ...FormatFn) {
-	if f.ValueFormatFns == nil {
-		f.ValueFormatFns = make(FormatFns, 0)
+func (f Field) AppendValueFn(fns ...ValueFn) {
+	if f.ValueFns == nil {
+		f.ValueFns = make(ValueFns, 0)
 	}
-	addr := &f.ValueFormatFns
+	addr := &f.ValueFns
 	*addr = append(*addr, fns...)
 }
 
@@ -99,7 +106,7 @@ func (f Field) LogString() string {
 	if title == "" {
 		title = f.Name
 	}
-	val, _ := f.ValueFns(nil)
+	val, _ := f.GetValue(nil)
 	str := cast.ToString(val)
 	out := fmt.Sprintf("%s(%s)", title, str)
 	return out
@@ -107,19 +114,24 @@ func (f Field) LogString() string {
 func (f Field) GetValueFnInfo() ValueFnInfo {
 	return f._ValueFnInfo
 }
+
+var ERROR_VALUE_NIL = errors.New("error value nil")
+
+func IsErrorValueNil(err error) bool {
+	return errors.Is(ERROR_VALUE_NIL, err)
+}
+
 func (f Field) GetValue(in any) (value any, err error) {
 	value = in
-	if f.ValueFns != nil {
-		value, err = f.ValueFns(value) // 调用最原始的修改值函数
-		if err != nil {
-			return value, err
-		}
-	}
-	for _, fn := range f.ValueFormatFns {
+	for _, fn := range f.ValueFns {
 		value, err = fn(value) //格式化值
 		if err != nil {
 			return value, err
 		}
+	}
+	if IsNil(value) {
+		err = ERROR_VALUE_NIL //相比返回 nil,nil; 此处抛出错误，其它地方更容易感知中断处理，如需要继续执行，执行忽略这个类型Error 即可
+		return nil, err
 	}
 	return value, nil
 }
@@ -130,11 +142,9 @@ func (f Field) GetWhereValue(in any) (value any, err error) {
 		return nil, nil
 	}
 	value = in
-	if f.ValueFns != nil {
-		value, err = f.ValueFns(value) //重新获取value值
-		if err != nil {
-			return value, err
-		}
+	value, err = f.GetValue(in)
+	if err != nil {
+		return value, err
 	}
 
 	for _, fn := range f.WhereFormatFns {
@@ -152,11 +162,11 @@ func (f Field) GetWhereValue(in any) (value any, err error) {
 
 // IsEqual 判断名称值是否相等
 func (f Field) IsEqual(o Field) bool {
-	fv, err := f.ValueFns(nil)
+	fv, err := f.GetValue(nil)
 	if err != nil || IsNil(fv) {
 		return false
 	}
-	ov, err := o.ValueFns(nil)
+	ov, err := o.GetValue(nil)
 	if err != nil || IsNil(ov) {
 		return false
 	}
@@ -183,7 +193,7 @@ func (f Field) Data() (data any, err error) {
 		f._ValueFnInfo.IsFnNil = true
 		return nil, nil
 	}
-	val, err := f.ValueFns(nil)
+	val, err := f.GetValue(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +228,7 @@ func (fs Fields) Json() string {
 func (fs Fields) String() string {
 	m := make(map[string]any)
 	for _, f := range fs {
-		val, _ := f.ValueFns(nil)
+		val, _ := f.GetValue(nil)
 		m[f.Name] = val
 	}
 	b, _ := json.Marshal(m)
@@ -228,10 +238,10 @@ func (fs Fields) String() string {
 func (fs Fields) Map() (data map[string]any, err error) {
 	m := make(map[string]any)
 	for _, f := range fs {
-		if f.ValueFns == nil {
+		val, err := f.GetValue(nil)
+		if IsErrorValueNil(err) {
 			continue
 		}
-		val, err := f.ValueFns(nil)
 		if err != nil {
 			return nil, err
 		}
@@ -247,7 +257,11 @@ func (fn FieldFn) Data() (data any, err error) {
 	columns := fn()
 	for _, c := range columns {
 		if c.Name != "" {
-			val, err := c.ValueFns(nil)
+			val, err := c.GetValue(nil)
+			if IsErrorValueNil(err) {
+				continue
+			}
+
 			if err == nil {
 				return nil, err
 			}
