@@ -9,18 +9,27 @@ import (
 
 // 基于数据表填充对应数据，同时也可以基于此生成SQL DDL
 type DBSchema struct {
-	Title      string `json:"title"`
-	Required   bool   `json:"required,string"`   // 对应数据库的not null
-	AllowEmpty bool   `json:"allowEmpty,string"` // 是否可以为空 空定义：转为为字符串后为"",数字0不是空字符
-	Comment    string `json:"comment"`
-	Type       string `json:"type"`
-	Default    any    `json:"default"`
-	Enums      Enums  `json:"enums"`
-	MaxLength  int    `json:"maxLength"` // 字符串最大长度
-	MinLength  int    `json:"minLength"` // 字符串最小长度
-	Maximum    int    `json:"maximum"`   // 数字最大值
-	Minimum    int    `json:"minimum"`   // 数字最小值
+	Title    string `json:"title"`
+	Required bool   `json:"required,string"` // 对应数据库的not null
+	//AllowEmpty bool   `json:"allowEmpty,string"` // 是否可以为空 空定义：转为为字符串后为"",数字0不是空字符 通过最小长度 1 表达
+	Comment   string `json:"comment"`
+	Type      string `json:"type"`
+	Default   any    `json:"default"`
+	Enums     Enums  `json:"enums"`
+	MaxLength int    `json:"maxLength"` // 字符串最大长度
+	MinLength int    `json:"minLength"` // 字符串最小长度
+	Maximum   int    `json:"maximum"`   // 数字最大值
+	Minimum   int    `json:"minimum"`   // 数字最小值
+	RegExp    string `json:"regExp"`    //正则表达式
 }
+
+const (
+	DBSchema_Type_string = "string"
+	DBSchema_Type_int    = "int"
+	DBSchema_Type_phone  = "phone"
+	DBSchema_Type_email  = "email"
+	DBSchema_Type_Enum   = "enum"
+)
 
 type Enums []Enum
 
@@ -42,10 +51,6 @@ func (schema DBSchema) Validate(fieldName string, field reflect.Value) error {
 	// 验证 required
 	if schema.Required && isEmptyValue(field) {
 		return fmt.Errorf("%s is required", fieldName)
-	}
-	// 验证 allowEmpty
-	if !schema.AllowEmpty && isEmptyValue(field) {
-		return fmt.Errorf("%s cannot be empty", fieldName)
 	}
 	// 验证 maxLength
 	if schema.MaxLength > 0 && field.Kind() == reflect.String && len(field.String()) > schema.MaxLength {

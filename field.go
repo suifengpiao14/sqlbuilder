@@ -23,16 +23,74 @@ type WhereValueFnInfo struct {
 	IsDefaultExpression bool // 是否使用了默认表达式
 }
 
+type ValueFn func(in any) (value any, err error) // 函数之所有接收in 入参，有时模型内部加工生成的数据需要存储，需要定制格式化，比如多边形产生的边界框4个点坐标
+
+type ValueFns []ValueFn
+
+// DirectValue 原样返回
+func DirectValue(val any) (value any, err error) {
+	return val, nil
+}
+
+type FormatFn ValueFn // 格式化值函数，语义化
+
+// DirectFormat 原样返回
+func DirectFormat(val any) (value any, err error) {
+	return val, nil
+}
+
+// ShieldFormat 屏蔽值，常用于取消某个字段作为查询条件
+func ShieldFormat(val any) (value any, err error) {
+	return nil, nil
+}
+
+type FormatFns []FormatFn // 采用类型别名定义，使用时不用先判断是否为空
+
+func (fns *FormatFns) Append(subFns ...FormatFn) {
+	if *fns == nil {
+		*fns = make(FormatFns, 0)
+	}
+	*fns = append(*fns, subFns...)
+}
+
+// Format 给格式化 函数增加优先级，暂时不用，有序根据需求再采用该方案
+type Format struct {
+	Fns      FormatFns
+	Priority int
+}
+
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Title             string                                                 `json:"title"`
-	Name              string                                                 `json:"name"`
-	ValueFn           func(in any) (value any, err error)                    `json:"-"` // 增加error，方便封装字段验证规则
-	WhereValueFn      func(in any) (value any, err error)                    `json:"-"` // 值value 和where value分开
-	Migrate           func(table string, options ...MigrateOptionI) Migrates `json:"-"`
-	_ValueFnInfo      ValueFnInfo                                            // 方便继承类判断具体情况
-	_WhereValueFnInfo WhereValueFnInfo                                       // 方便继承类判断具体情况
-	DBSchema          *DBSchema                                              // 可以为空，为空建议设置默认值
+	Title          string                                                 `json:"title"`
+	Name           string                                                 `json:"name"`
+	ValueFns       ValueFn                                                `json:"-"` // 增加error，方便封装字段验证规则
+	ValueFormatFns FormatFns                                              `json:"-"` // 中间件操作数据
+	WhereFormatFns FormatFns                                              `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	Migrate        func(table string, options ...MigrateOptionI) Migrates `json:"-"`
+	Validator      func(field Field) ValidateI                            `json:"-"` // 设置验证参数验证器
+	_ValueFnInfo   ValueFnInfo                                            // 方便继承类判断具体情况
+	DBSchema       *DBSchema                                              // 可以为空，为空建议设置默认值
+}
+
+// 给当前列增加where条件修改
+func (f Field) AppendWhereFomatFn(fns ...FormatFn) {
+	if f.WhereFormatFns == nil {
+		f.WhereFormatFns = make(FormatFns, 0)
+	}
+	addr := &f.WhereFormatFns
+	*addr = append(*addr, fns...)
+}
+
+// 给当前列增加value数据修改
+func (f Field) AppendValueFomatFn(fns ...FormatFn) {
+	if f.ValueFormatFns == nil {
+		f.ValueFormatFns = make(FormatFns, 0)
+	}
+	addr := &f.ValueFormatFns
+	*addr = append(*addr, fns...)
+}
+
+type MiddlewareI interface {
 }
 
 // LogString 日志字符串格式
@@ -41,7 +99,7 @@ func (f Field) LogString() string {
 	if title == "" {
 		title = f.Name
 	}
-	val, _ := f.ValueFn(nil)
+	val, _ := f.ValueFns(nil)
 	str := cast.ToString(val)
 	out := fmt.Sprintf("%s(%s)", title, str)
 	return out
@@ -49,17 +107,56 @@ func (f Field) LogString() string {
 func (f Field) GetValueFnInfo() ValueFnInfo {
 	return f._ValueFnInfo
 }
-func (f Field) GetWhereValueFnInfo() WhereValueFnInfo {
-	return f._WhereValueFnInfo
+func (f Field) GetValue(in any) (value any, err error) {
+	value = in
+	if f.ValueFns != nil {
+		value, err = f.ValueFns(value) // 调用最原始的修改值函数
+		if err != nil {
+			return value, err
+		}
+	}
+	for _, fn := range f.ValueFormatFns {
+		value, err = fn(value) //格式化值
+		if err != nil {
+			return value, err
+		}
+	}
+	return value, nil
+}
+
+// GetWhereValue 获取Where 值
+func (f Field) GetWhereValue(in any) (value any, err error) {
+	if len(f.WhereFormatFns) == 0 {
+		return nil, nil
+	}
+	value = in
+	if f.ValueFns != nil {
+		value, err = f.ValueFns(value) //重新获取value值
+		if err != nil {
+			return value, err
+		}
+	}
+
+	for _, fn := range f.WhereFormatFns {
+		value, err = fn(value)
+		if err != nil {
+			return value, err
+		}
+	}
+	if IsNil(value) {
+		return nil, nil
+	}
+
+	return value, nil
 }
 
 // IsEqual 判断名称值是否相等
 func (f Field) IsEqual(o Field) bool {
-	fv, err := f.ValueFn(nil)
+	fv, err := f.ValueFns(nil)
 	if err != nil || IsNil(fv) {
 		return false
 	}
-	ov, err := o.ValueFn(nil)
+	ov, err := o.ValueFns(nil)
 	if err != nil || IsNil(ov) {
 		return false
 	}
@@ -82,11 +179,11 @@ func (c Field) Validate(val any) (err error) {
 
 func (f Field) Data() (data any, err error) {
 	m := map[string]any{}
-	if f.ValueFn == nil {
+	if f.ValueFns == nil {
 		f._ValueFnInfo.IsFnNil = true
 		return nil, nil
 	}
-	val, err := f.ValueFn(nil)
+	val, err := f.ValueFns(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -99,22 +196,16 @@ func (f Field) Data() (data any, err error) {
 }
 
 func (f Field) Where() (expressions Expressions, err error) {
-	if f.WhereValueFn == nil {
-		f._WhereValueFnInfo.IsFnNil = true
-		return nil, nil
-	}
-	val, err := f.WhereValueFn(nil)
+	val, err := f.GetWhereValue(nil)
 	if err != nil {
 		return nil, err
 	}
-	if IsNil(val) {
-		f._WhereValueFnInfo.IsWhereValueNil = true
+	if val == nil {
 		return nil, nil
 	}
 	if ex, ok := TryParseExpressions(f.Name, val); ok {
 		return ex, nil
 	}
-	f._WhereValueFnInfo.IsDefaultExpression = true
 	return ConcatExpression(goqu.Ex{f.Name: val}), nil
 }
 
@@ -127,7 +218,7 @@ func (fs Fields) Json() string {
 func (fs Fields) String() string {
 	m := make(map[string]any)
 	for _, f := range fs {
-		val, _ := f.ValueFn(nil)
+		val, _ := f.ValueFns(nil)
 		m[f.Name] = val
 	}
 	b, _ := json.Marshal(m)
@@ -137,10 +228,10 @@ func (fs Fields) String() string {
 func (fs Fields) Map() (data map[string]any, err error) {
 	m := make(map[string]any)
 	for _, f := range fs {
-		if f.ValueFn == nil {
+		if f.ValueFns == nil {
 			continue
 		}
-		val, err := f.ValueFn(nil)
+		val, err := f.ValueFns(nil)
 		if err != nil {
 			return nil, err
 		}
@@ -156,7 +247,7 @@ func (fn FieldFn) Data() (data any, err error) {
 	columns := fn()
 	for _, c := range columns {
 		if c.Name != "" {
-			val, err := c.ValueFn(nil)
+			val, err := c.ValueFns(nil)
 			if err == nil {
 				return nil, err
 			}
