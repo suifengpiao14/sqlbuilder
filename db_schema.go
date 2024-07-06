@@ -111,10 +111,32 @@ func contains(slice []string, item string) bool {
 
 // ValueFnDBSchemaValidator 将DBSchema validator 封装成 ValueFn 中间件函数
 func ValueFnDBSchemaValidator(field Field) (valueFn ValueFn) {
-	return func(in any) (value any, err error) {
-		err = field.Validate(in)
+	return func(in any) (any, error) {
+		err := field.Validate(in)
 		if err != nil {
 			return nil, err
+		}
+		return in, nil
+	}
+}
+
+// ValueFnDBSchemaFormat 根据DB类型要求,转换数据类型
+func ValueFnDBSchemaFormatType(field Field) (valueFn ValueFn) {
+	return func(in any) (any, error) {
+		value := field.FormatType(in)
+		return value, nil
+	}
+}
+
+// ValueFnEmptyStr2Nil 空字符串改成nil,值改成nil后,sql语句中会忽略该字段,常常用在update,where 字句中
+func ValueFnEmptyStr2Nil(field Field, exceptFileds ...Field) (valueFn ValueFn) {
+	return func(in any) (any, error) {
+		if Fields(exceptFileds).Contains(field) {
+			return in, nil
+		}
+		str := cast.ToString(in)
+		if str == "" {
+			return nil, nil
 		}
 		return in, nil
 	}

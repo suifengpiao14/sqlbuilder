@@ -14,7 +14,8 @@ import (
 
 var Time_format = "2024-01-02 15:04:05"
 
-type ValueFn func(in any) (value any, err error) // 函数之所有接收in 入参，有时模型内部加工生成的数据需要存储，需要定制格式化，比如多边形产生的边界框4个点坐标
+// type ValueFnfunc(in any) (value any,err error) //函数签名返回参数命名后,容易误导写成 func(in any) (value any,err error){return value,nil};  正确代码:func(in any) (value any,err error){return in,nil};
+type ValueFn func(in any) (any, error) // 函数之所有接收in 入参，有时模型内部加工生成的数据需要存储，需要定制格式化，比如多边形产生的边界框4个点坐标
 
 type ValueFns []ValueFn
 
@@ -58,6 +59,14 @@ func (fns *ValueFns) Append(subFns ...ValueFn) {
 	fns.Insert(-1, subFns...)
 }
 
+// AppendIfNotFirst 追加到最后,但是不能是第一个,一般用于生成SQL时格式化数据
+func (fns *ValueFns) AppendIfNotFirst(subFns ...ValueFn) {
+	if len(*fns) == 0 {
+		return
+	}
+	fns.Append(subFns...)
+}
+
 // ValueFnDirect 原样返回
 func ValueFnDirect(val any) (value any, err error) {
 	return val, nil
@@ -69,6 +78,13 @@ func ValueFnFromData(field Field) ValueFn {
 		return field.Data()
 	}
 }
+func NewValueFns(fn func() (value any, err error)) ValueFns {
+	return ValueFns{
+		func(in any) (value any, err error) {
+			return fn()
+		},
+	}
+}
 
 // ShieldFormat 屏蔽值，常用于取消某个字段作为查询条件
 func ShieldFormat(val any) (value any, err error) {
@@ -77,13 +93,14 @@ func ShieldFormat(val any) (value any, err error) {
 
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Title     string                                                 `json:"title"`
 	Name      string                                                 `json:"name"`
 	ValueFns  ValueFns                                               `json:"-"` // 增加error，方便封装字段验证规则
 	WhereFns  ValueFns                                               `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
 	Migrate   func(table string, options ...MigrateOptionI) Migrates `json:"-"`
 	Validator func(field Field) ValidateI                            `json:"-"` // 设置验证参数验证器
 	DBSchema  *DBSchema                                              // 可以为空，为空建议设置默认值
+	Table     Table                                                  // 关联表,方便收集Table全量信息
+	Api       interface{}                                            // 关联Api对象,方便收集Api全量信息
 }
 
 // 给当前列增加where条件修改
@@ -109,9 +126,9 @@ type MiddlewareI interface {
 
 // LogString 日志字符串格式
 func (f Field) LogString() string {
-	title := f.Title
-	if title == "" {
-		title = f.Name
+	title := f.Name
+	if f.DBSchema != nil && f.DBSchema.Title == "" {
+		title = f.DBSchema.Title
 	}
 	val, _ := f.GetValue(nil)
 	str := cast.ToString(val)
@@ -125,8 +142,27 @@ func IsErrorValueNil(err error) bool {
 	return errors.Is(ERROR_VALUE_NIL, err)
 }
 
+// ValueFnArgEmptyStr2NilExceptFields 将空字符串值转换为nil值时排除的字段,常见的有 deleted_at 字段,空置代表正常
+var ValueFnArgEmptyStr2NilExceptFields = Fields{}
+
+var GlobalFnValueFns = func(f Field) ValueFns {
+	return ValueFns{
+		ValueFnEmptyStr2Nil(f, ValueFnArgEmptyStr2NilExceptFields...), // 将空置转换为nil,代替对数据判断 if v==""{//ignore}
+		ValueFnDBSchemaFormatType(f),                                  // 在转换为SQL前,将所有数据类型按照DB类型转换,主要是格式化int和string,提升SQL性能
+		//todo 统一实现数据库字段前缀处理
+		//todo 统一实现代码字段驼峰形转数据库字段蛇形
+		//todo 统一实现数据库字段替换,方便数据库字段更名
+		//todo 统一实现数据库字段屏蔽,方便废弃数据库字段
+		//todo 虽然单次只有一个字段信息,但是所有SQL语句的字段都一定经过该节点,这就能收集到全量信息,进一步拓展其用途如(发布事件,其它订阅):
+		//todo 1. 统一收集数据库字段名形成数据字典
+		//todo 2. 统一收集api字段生成文档
+		//todo ...
+	}
+}
+
 func (f Field) GetValue(in any) (value any, err error) {
 	value = in
+	f.ValueFns.AppendIfNotFirst(GlobalFnValueFns(f)...) // 在最后生成SQL数据时追加格式化数据
 	for _, fn := range f.ValueFns {
 		value, err = fn(value) //格式化值
 		if err != nil {
@@ -191,6 +227,21 @@ func (c Field) Validate(val any) (err error) {
 	return
 }
 
+func (c Field) FormatType(val any) (value any) {
+	value = val
+	if c.DBSchema == nil {
+		return value
+	}
+	switch c.DBSchema.Type {
+	case DBSchema_Type_string, DBSchema_Type_email, DBSchema_Type_phone:
+		value = cast.ToString(value)
+	case DBSchema_Type_int:
+		value = cast.ToInt(value)
+	}
+
+	return value
+}
+
 func (f Field) Data() (data any, err error) {
 	return f.GetValue(nil)
 }
@@ -210,6 +261,15 @@ func (f Field) Where() (expressions Expressions, err error) {
 }
 
 type Fields []Field
+
+func (fs Fields) Contains(field Field) (exists bool) {
+	for _, f := range fs {
+		if strings.EqualFold(f.Name, field.Name) { // 暂时值判断名称,后续根据需求,再增加类型
+			return true
+		}
+	}
+	return false
+}
 
 func (fs Fields) Where() (expressions Expressions, err error) {
 	expressions = make(Expressions, 0)
@@ -301,6 +361,16 @@ func TryIlike(field string, value any) (expressions Expressions, ok bool) {
 		return ConcatExpression(identifier.ILike(val)), true
 	}
 	return nil, false
+}
+
+// GlobalFnFormatFieldName 全局函数钩子,统一修改字段列名称,比如统一增加列前缀F
+var GlobalFnFormatFieldName = func(filedName string) string {
+	return filedName
+}
+
+// GlobalFnFormatTableName 全局函数钩子,统一修改表名称,比如统一增加表前缀t_
+var GlobalFnFormatTableName = func(tableName string) string {
+	return tableName
 }
 
 // Between 介于2者之间(包含上下边界，对于不包含边界情况，可以修改值范围或者直接用表达式)
