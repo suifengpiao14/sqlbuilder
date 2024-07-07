@@ -3,6 +3,7 @@ package sqlbuilder
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/spf13/cast"
 )
@@ -45,6 +46,41 @@ func (es Enums) Values() (values []string) {
 type Enum struct {
 	Title string `json:"title"`
 	Key   string `json:"key"`
+}
+
+type ValidatorI interface {
+	Name() string
+	ValidateI
+}
+
+type ValidatorIs []ValidatorI
+
+func (vis ValidatorIs) GetByNames(names ...string) (validatorIs ValidatorIs) {
+	validatorIs = make(ValidatorIs, 0)
+	for _, vi := range vis {
+		for _, name := range names {
+			if strings.EqualFold(vi.Name(), name) {
+				validatorIs = append(validatorIs, vi)
+			}
+		}
+
+	}
+	return validatorIs
+}
+func (vis ValidatorIs) Validate(val any) (err error) {
+	for _, vi := range vis {
+		err = vi.Validate(val)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var validatorIs = make(ValidatorIs, 0)
+
+func RegisterValidator(validators ...ValidatorI) {
+	validatorIs = append(validatorIs, validators...)
 }
 
 func (schema DBSchema) Validate(fieldName string, field reflect.Value) error {

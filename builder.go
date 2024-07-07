@@ -92,6 +92,7 @@ func (fn ValidateFn) Validate(val any) (err error) {
 	return fn(val)
 }
 
+type ValidateFns []ValidateFn
 type ValidateSet []ValidateI
 
 type DataI interface {

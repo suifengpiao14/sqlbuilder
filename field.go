@@ -93,14 +93,14 @@ func ShieldFormat(val any) (value any, err error) {
 
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Name      string                                                 `json:"name"`
-	ValueFns  ValueFns                                               `json:"-"` // 增加error，方便封装字段验证规则
-	WhereFns  ValueFns                                               `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	Migrate   func(table string, options ...MigrateOptionI) Migrates `json:"-"`
-	Validator func(field Field) ValidateI                            `json:"-"` // 设置验证参数验证器
-	DBSchema  *DBSchema                                              // 可以为空，为空建议设置默认值
-	Table     Table                                                  // 关联表,方便收集Table全量信息
-	Api       interface{}                                            // 关联Api对象,方便收集Api全量信息
+	Name        string                                                 `json:"name"`
+	ValueFns    ValueFns                                               `json:"-"` // 增加error，方便封装字段验证规则
+	WhereFns    ValueFns                                               `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	Migrate     func(table string, options ...MigrateOptionI) Migrates `json:"-"`
+	ValidateFns ValidateFns                                            `json:"-"` // 设置验证参数验证器
+	DBSchema    *DBSchema                                              // 可以为空，为空建议设置默认值
+	Table       Table                                                  // 关联表,方便收集Table全量信息
+	Api         interface{}                                            // 关联Api对象,方便收集Api全量信息
 }
 
 // 给当前列增加where条件修改
@@ -120,8 +120,12 @@ func (f Field) AppendValueFn(fns ...ValueFn) {
 	addr := &f.ValueFns
 	*addr = append(*addr, fns...)
 }
-
-type MiddlewareI interface {
+func (f Field) AppendValidateFn(fns ...ValidateFn) {
+	if f.ValidateFns == nil {
+		f.ValidateFns = make(ValidateFns, 0)
+	}
+	addr := &f.ValidateFns
+	*addr = append(*addr, fns...)
 }
 
 // LogString 日志字符串格式
@@ -162,6 +166,13 @@ var GlobalFnValueFns = func(f Field) ValueFns {
 
 func (f Field) GetValue(in any) (value any, err error) {
 	value = in
+	f.ValueFns.InsertAsSecond(func(in any) (any, error) { //插入数据验证
+		err = f.Validate(in)
+		if err != nil {
+			return in, err
+		}
+		return in, nil
+	})
 	f.ValueFns.AppendIfNotFirst(GlobalFnValueFns(f)...) // 在最后生成SQL数据时追加格式化数据
 	for _, fn := range f.ValueFns {
 		value, err = fn(value) //格式化值
@@ -215,6 +226,12 @@ func (f Field) IsEqual(o Field) bool {
 
 // Validate  实现ValidateI 接口 可以再 valueFn ,whereValueFn 中手动调用
 func (c Field) Validate(val any) (err error) {
+	for _, vFn := range c.ValidateFns {
+		err = vFn.Validate(val)
+		if err != nil {
+			return err
+		}
+	}
 	if c.DBSchema == nil {
 		return nil
 	}
