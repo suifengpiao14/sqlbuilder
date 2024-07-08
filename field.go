@@ -1,6 +1,7 @@
 package sqlbuilder
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -164,6 +165,68 @@ var GlobalFnValueFns = func(f Field) ValueFns {
 	}
 }
 
+type DocRequestArg struct {
+	Name        string `json:"name"`
+	Required    bool   `json:"required,string"`
+	AllowEmpty  bool   `json:"allowEmpty,string"`
+	Title       string `json:"title"`
+	Type        string `json:"type"`
+	Format      string `json:"format"`
+	Default     string `json:"default"`
+	Description string `json:"description"`
+	Example     string `json:"example"`
+	Enums       Enums  `json:"enums"`
+	RegExp      string `json:"regExp"`
+}
+
+type DocRequestArgs []DocRequestArg
+
+func (args DocRequestArgs) Makedown() string {
+	var w bytes.Buffer
+	w.WriteString(`|名称|标题|必填|类型|格式|可空|默认值|案例|描述|\n|:--|:--|:--|:--|:--|:--|:--|:--|:--|\n`)
+	for _, arg := range args {
+		description := arg.Description
+		if len(arg.Enums) > 0 {
+			description = fmt.Sprintf("%s(%s)", description, arg.Enums.String())
+		}
+		row := fmt.Sprintf(`|%s|%s|%s|%s|%s|%s|%s|%s|%s|`,
+			arg.Name,
+			arg.Title,
+			cast.ToString(arg.Required),
+			arg.Type,
+			arg.Format,
+			cast.ToString(arg.AllowEmpty),
+			cast.ToString(arg.Default),
+			cast.ToString(arg.Example),
+			description,
+		)
+		w.WriteString(row)
+	}
+	return w.String()
+}
+
+func (f Field) DocRequestArg() (doc *DocRequestArg, err error) {
+	dbSchema := f.DBSchema
+	if dbSchema == nil {
+		err = errors.Errorf("dbSchema required ,filed.Name:%s", f.Name)
+		return nil, err
+	}
+	allowEmpty := dbSchema.MinLength < 1 && dbSchema.Type == DBSchema_Type_string
+	doc = &DocRequestArg{
+		Name:        f.Name,
+		Required:    f.DBSchema.Required,
+		AllowEmpty:  allowEmpty,
+		Title:       dbSchema.Title,
+		Type:        "string",
+		Format:      dbSchema.Type,
+		Default:     cast.ToString(dbSchema.Default),
+		Description: dbSchema.Comment,
+		Enums:       make(Enums, 0),
+		RegExp:      dbSchema.RegExp,
+	}
+	return doc, nil
+}
+
 func (f Field) GetValue(in any) (value any, err error) {
 	value = in
 	f.ValueFns.InsertAsSecond(func(in any) (any, error) { //插入数据验证
@@ -314,6 +377,19 @@ func (fs Fields) String() string {
 	return string(b)
 }
 
+// DocRequestArg 生成文档请求参数部分
+func (fs Fields) DocRequestArg() (args DocRequestArgs, err error) {
+	args = make(DocRequestArgs, 0)
+	for _, f := range fs {
+		arg, err := f.DocRequestArg()
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, *arg)
+	}
+	return args, nil
+}
+
 func (fs Fields) Data() (data any, err error) {
 	m := make(map[string]any)
 	for _, f := range fs {
@@ -381,8 +457,8 @@ func TryIlike(field string, value any) (expressions Expressions, ok bool) {
 }
 
 // GlobalFnFormatFieldName 全局函数钩子,统一修改字段列名称,比如统一增加列前缀F
-var GlobalFnFormatFieldName = func(filedName string) string {
-	return filedName
+var GlobalFnFormatFieldName = func(fieldName string) string {
+	return fieldName
 }
 
 // GlobalFnFormatTableName 全局函数钩子,统一修改表名称,比如统一增加表前缀t_

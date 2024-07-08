@@ -40,7 +40,15 @@ func (es Enums) Values() (values []string) {
 		values = append(values, e.Key)
 	}
 	return values
+}
 
+// String 生成文档有使用
+func (es Enums) String() (str string) {
+	values := make([]string, 0)
+	for _, e := range es {
+		values = append(values, fmt.Sprintf("%s-%s", e.Key, e.Title))
+	}
+	return strings.Join(values, " ")
 }
 
 type Enum struct {

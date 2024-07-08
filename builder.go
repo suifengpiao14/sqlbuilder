@@ -542,29 +542,41 @@ func MergeData(dataIs ...DataI) (newData map[string]any, err error) {
 		if err != nil {
 			return newData, err
 		}
-		if IsNil(data) {
-			continue
+		subMap, err := dataAny2Map(data)
+		if err != nil {
+			return nil, err
 		}
-		rv := reflect.Indirect(reflect.ValueOf(data))
-		switch rv.Kind() {
-		case reflect.Map:
-			keys := rv.MapKeys()
-			for _, key := range keys {
-				newData[key.String()] = rv.MapIndex(key).Interface()
-			}
-		case reflect.Struct:
-			r, err := exp.NewRecordFromStruct(rv.Interface(), false, true)
-			if err != nil {
-				return nil, err
-			}
-			for k, v := range r {
-				newData[k] = v
-			}
-		default:
-			return nil, errors.Errorf("unsupported update interface type %+v", rv.Type())
+		for k, v := range subMap {
+			newData[k] = v
 		}
 	}
+	return newData, nil
+}
 
+// dataAny2Map data 从any 格式转为map格式
+func dataAny2Map(data any) (newData map[string]any, err error) {
+	newData = map[string]any{}
+	if IsNil(data) {
+		return nil, nil
+	}
+	rv := reflect.Indirect(reflect.ValueOf(data))
+	switch rv.Kind() {
+	case reflect.Map:
+		keys := rv.MapKeys()
+		for _, key := range keys {
+			newData[key.String()] = rv.MapIndex(key).Interface()
+		}
+	case reflect.Struct:
+		r, err := exp.NewRecordFromStruct(rv.Interface(), false, true)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range r {
+			newData[k] = v
+		}
+	default:
+		return nil, errors.Errorf("unsupported update interface type %+v", rv.Type())
+	}
 	return newData, nil
 }
 
