@@ -24,6 +24,11 @@ type DBSchema struct {
 	RegExp    string `json:"regExp"`    //正则表达式
 }
 
+// AllowEmpty 是否可以为空
+func (dbSchema DBSchema) AllowEmpty() bool {
+	return dbSchema.MinLength < 1 && dbSchema.Type == DBSchema_Type_string
+}
+
 const (
 	DBSchema_Type_string = "string"
 	DBSchema_Type_int    = "int"

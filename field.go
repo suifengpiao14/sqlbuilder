@@ -211,11 +211,10 @@ func (f Field) DocRequestArg() (doc *DocRequestArg, err error) {
 		err = errors.Errorf("dbSchema required ,filed.Name:%s", f.Name)
 		return nil, err
 	}
-	allowEmpty := dbSchema.MinLength < 1 && dbSchema.Type == DBSchema_Type_string
 	doc = &DocRequestArg{
 		Name:        f.Name,
 		Required:    f.DBSchema.Required,
-		AllowEmpty:  allowEmpty,
+		AllowEmpty:  dbSchema.AllowEmpty(),
 		Title:       dbSchema.Title,
 		Type:        "string",
 		Format:      dbSchema.Type,
