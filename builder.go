@@ -153,6 +153,9 @@ func (p InsertParam) AppendValidate(validateSet ...ValidateI) InsertParam {
 func (p InsertParam) _Validate() (err error) {
 	for _, v := range p._ValidateSet {
 		err = v.Validate(nil)
+		if IsErrorValueNil(err) {
+			err = nil
+		}
 		if err != nil {
 			return err
 		}
@@ -532,13 +535,16 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-func MergeData(dataIs ...DataI) (newData map[string]any, err error) {
-	newData = map[string]any{}
+func MergeData(dataIs ...DataI) (map[string]any, error) {
+	newData := map[string]any{}
 	for _, dataI := range dataIs {
 		if IsNil(dataI) {
 			continue
 		}
 		data, err := dataI.Data()
+		if IsErrorValueNil(err) {
+			err = nil // 消除error
+		}
 		if err != nil {
 			return newData, err
 		}
@@ -575,7 +581,7 @@ func dataAny2Map(data any) (newData map[string]any, err error) {
 			newData[k] = v
 		}
 	default:
-		return nil, errors.Errorf("unsupported update interface type %+v", rv.Type())
+		return nil, errors.Errorf("unsupported update interface type %+v,got:%+v", rv.Type(), data)
 	}
 	return newData, nil
 }

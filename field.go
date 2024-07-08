@@ -105,12 +105,13 @@ type Field struct {
 }
 
 // 给当前列增加where条件修改
-func (f Field) AppendWhereFn(fns ...ValueFn) {
+func (f Field) AppendWhereFn(fns ...ValueFn) Field {
 	if f.WhereFns == nil {
 		f.WhereFns = make(ValueFns, 0)
 	}
 	addr := &f.WhereFns
 	*addr = append(*addr, fns...)
+	return f // 返回f 方便连续书写
 }
 
 // 给当前列增加value数据修改
@@ -129,6 +130,64 @@ func (f Field) AppendValidateFn(fns ...ValidateFn) {
 	*addr = append(*addr, fns...)
 }
 
+func (f Field) SetName(name string) Field {
+	f.Name = name
+	return f
+}
+func (f Field) SetTitle(title string) Field {
+	dbSchema := DBSchema{}
+	dbSchema.Title = title
+	return f.MergeDBSchema(dbSchema)
+}
+
+func (f Field) MergeDBSchema(dbSchema DBSchema) Field {
+	if f.DBSchema == nil {
+		f.DBSchema = &DBSchema{}
+		return f
+	}
+
+	if dbSchema.Title != "" {
+		f.DBSchema.Title = dbSchema.Title
+	}
+	f.DBSchema.Required = dbSchema.Required
+
+	if dbSchema.Comment != "" {
+		f.DBSchema.Comment = dbSchema.Comment
+	}
+	if dbSchema.Type != "" {
+		f.DBSchema.Type = dbSchema.Type
+	}
+	if dbSchema.Default != "" {
+		f.DBSchema.Default = dbSchema.Default
+	}
+
+	if len(dbSchema.Enums) > 0 {
+		f.DBSchema.Enums = dbSchema.Enums
+	}
+
+	if dbSchema.MaxLength > 0 {
+		f.DBSchema.MaxLength = dbSchema.MaxLength
+	}
+
+	if dbSchema.MinLength > 0 {
+		f.DBSchema.MinLength = dbSchema.MinLength
+	}
+
+	if dbSchema.Maximum > 0 {
+		f.DBSchema.Maximum = dbSchema.Maximum
+	}
+
+	if dbSchema.Minimum > 0 {
+		f.DBSchema.Minimum = dbSchema.Minimum
+	}
+
+	if dbSchema.RegExp != "" {
+		f.DBSchema.RegExp = dbSchema.RegExp
+	}
+
+	return f
+}
+
 // LogString 日志字符串格式
 func (f Field) LogString() string {
 	title := f.Name
@@ -141,10 +200,17 @@ func (f Field) LogString() string {
 	return out
 }
 
+// NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
+func NewField(valueFn ValueFn) (field Field) {
+	field = Field{}
+	field.ValueFns.InsertAsFirst(valueFn)
+	return field
+}
+
 var ERROR_VALUE_NIL = errors.New("error value nil")
 
 func IsErrorValueNil(err error) bool {
-	return errors.Is(ERROR_VALUE_NIL, err)
+	return errors.Is(err, ERROR_VALUE_NIL)
 }
 
 // ValueFnArgEmptyStr2NilExceptFields 将空字符串值转换为nil值时排除的字段,常见的有 deleted_at 字段,空置代表正常
@@ -322,7 +388,17 @@ func (c Field) FormatType(val any) (value any) {
 }
 
 func (f Field) Data() (data any, err error) {
-	return f.GetValue(nil)
+	val, err := f.GetValue(nil)
+	if IsErrorValueNil(err) {
+		return nil, nil // 忽略空值错误
+	}
+	if err != nil {
+		return nil, err
+	}
+	data = map[string]any{
+		f.Name: val,
+	}
+	return data, nil
 }
 
 func (f Field) Where() (expressions Expressions, err error) {
@@ -390,39 +466,22 @@ func (fs Fields) DocRequestArg() (args DocRequestArgs, err error) {
 }
 
 func (fs Fields) Data() (data any, err error) {
-	m := make(map[string]any)
+	dataSet := make(DataSet, 0)
 	for _, f := range fs {
-		val, err := f.GetValue(nil)
-		if IsErrorValueNil(err) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		m[f.Name] = val
+		dataSet = append(dataSet, DataFn(f.Data))
 	}
-	return m, nil
+	return MergeData(dataSet...)
 }
 
 type FieldFn func() []Field
 
 func (fn FieldFn) Data() (data any, err error) {
-	m := map[string]any{}
+	dataSet := make(DataSet, 0)
 	columns := fn()
 	for _, c := range columns {
-		if c.Name != "" {
-			val, err := c.GetValue(nil)
-			if IsErrorValueNil(err) {
-				continue
-			}
-
-			if err == nil {
-				return nil, err
-			}
-			m[c.Name] = val
-		}
+		dataSet = append(dataSet, DataFn(c.Data))
 	}
-	return m, nil
+	return MergeData(dataSet...)
 }
 
 func IsNil(v any) bool {
