@@ -115,12 +115,13 @@ func (f Field) AppendWhereFn(fns ...ValueFn) Field {
 }
 
 // 给当前列增加value数据修改
-func (f Field) AppendValueFn(fns ...ValueFn) {
+func (f Field) AppendValueFn(fns ...ValueFn) Field {
 	if f.ValueFns == nil {
 		f.ValueFns = make(ValueFns, 0)
 	}
 	addr := &f.ValueFns
 	*addr = append(*addr, fns...)
+	return f
 }
 func (f Field) AppendValidateFn(fns ...ValidateFn) {
 	if f.ValidateFns == nil {
