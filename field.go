@@ -138,13 +138,13 @@ func (f Field) SetName(name string) Field {
 func (f Field) SetTitle(title string) Field {
 	dbSchema := DBSchema{}
 	dbSchema.Title = title
-	return f.MergeDBSchema(dbSchema)
+	f.MergeDBSchema(dbSchema)
+	return f
 }
 
 func (f Field) MergeDBSchema(dbSchema DBSchema) Field {
 	if f.DBSchema == nil {
 		f.DBSchema = &DBSchema{}
-		return f
 	}
 
 	if dbSchema.Title != "" {
@@ -202,8 +202,8 @@ func (f Field) LogString() string {
 }
 
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
-func NewField(valueFn ValueFn) (field Field) {
-	field = Field{}
+func NewField(valueFn ValueFn) (field *Field) {
+	field = &Field{}
 	field.ValueFns.InsertAsFirst(valueFn)
 	return field
 }
@@ -250,7 +250,10 @@ type DocRequestArgs []DocRequestArg
 
 func (args DocRequestArgs) Makedown() string {
 	var w bytes.Buffer
-	w.WriteString(`|名称|标题|必填|类型|格式|可空|默认值|案例|描述|\n|:--|:--|:--|:--|:--|:--|:--|:--|:--|\n`)
+	w.WriteString(`|名称|标题|必填|类型|格式|可空|默认值|案例|描述|`)
+	w.WriteString("\n")
+	w.WriteString(`|:--|:--|:--|:--|:--|:--|:--|:--|:--|`)
+	w.WriteString("\n")
 	for _, arg := range args {
 		description := arg.Description
 		if len(arg.Enums) > 0 {
@@ -268,6 +271,7 @@ func (args DocRequestArgs) Makedown() string {
 			description,
 		)
 		w.WriteString(row)
+		w.WriteString("\n")
 	}
 	return w.String()
 }
@@ -453,8 +457,8 @@ func (fs Fields) String() string {
 	return string(b)
 }
 
-// DocRequestArg 生成文档请求参数部分
-func (fs Fields) DocRequestArg() (args DocRequestArgs, err error) {
+// DocRequestArgs 生成文档请求参数部分
+func (fs Fields) DocRequestArgs() (args DocRequestArgs, err error) {
 	args = make(DocRequestArgs, 0)
 	for _, f := range fs {
 		arg, err := f.DocRequestArg()
