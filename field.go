@@ -95,8 +95,9 @@ func ShieldFormat(val any) (value any, err error) {
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
 	Name        string                                                 `json:"name"`
-	ValueFns    ValueFns                                               `json:"-"` // 增加error，方便封装字段验证规则
-	WhereFns    ValueFns                                               `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	DBName      func() string                                          `json:"dbName"` //数据库字段
+	ValueFns    ValueFns                                               `json:"-"`      // 增加error，方便封装字段验证规则
+	WhereFns    ValueFns                                               `json:"-"`      // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
 	Migrate     func(table string, options ...MigrateOptionI) Migrates `json:"-"`
 	ValidateFns ValidateFns                                            `json:"-"` // 设置验证参数验证器
 	DBSchema    *DBSchema                                              // 可以为空，为空建议设置默认值
@@ -105,7 +106,7 @@ type Field struct {
 }
 
 // 给当前列增加where条件修改
-func (f Field) AppendWhereFn(fns ...ValueFn) Field {
+func (f *Field) AppendWhereFn(fns ...ValueFn) *Field {
 	if f.WhereFns == nil {
 		f.WhereFns = make(ValueFns, 0)
 	}
@@ -115,7 +116,7 @@ func (f Field) AppendWhereFn(fns ...ValueFn) Field {
 }
 
 // 给当前列增加value数据修改
-func (f Field) AppendValueFn(fns ...ValueFn) Field {
+func (f *Field) AppendValueFn(fns ...ValueFn) *Field {
 	if f.ValueFns == nil {
 		f.ValueFns = make(ValueFns, 0)
 	}
@@ -123,26 +124,27 @@ func (f Field) AppendValueFn(fns ...ValueFn) Field {
 	*addr = append(*addr, fns...)
 	return f
 }
-func (f Field) AppendValidateFn(fns ...ValidateFn) {
+func (f *Field) AppendValidateFn(fns ...ValidateFn) *Field {
 	if f.ValidateFns == nil {
 		f.ValidateFns = make(ValidateFns, 0)
 	}
 	addr := &f.ValidateFns
 	*addr = append(*addr, fns...)
+	return f
 }
 
-func (f Field) SetName(name string) Field {
+func (f *Field) SetName(name string) *Field {
 	f.Name = name
 	return f
 }
-func (f Field) SetTitle(title string) Field {
+func (f *Field) SetTitle(title string) *Field {
 	dbSchema := DBSchema{}
 	dbSchema.Title = title
 	f.MergeDBSchema(dbSchema)
 	return f
 }
 
-func (f Field) MergeDBSchema(dbSchema DBSchema) Field {
+func (f *Field) MergeDBSchema(dbSchema DBSchema) *Field {
 	if f.DBSchema == nil {
 		f.DBSchema = &DBSchema{}
 	}
@@ -190,7 +192,7 @@ func (f Field) MergeDBSchema(dbSchema DBSchema) Field {
 }
 
 // LogString 日志字符串格式
-func (f Field) LogString() string {
+func (f *Field) LogString() string {
 	title := f.Name
 	if f.DBSchema != nil && f.DBSchema.Title == "" {
 		title = f.DBSchema.Title
@@ -274,6 +276,22 @@ func (args DocRequestArgs) Makedown() string {
 		w.WriteString("\n")
 	}
 	return w.String()
+}
+
+func (args DocRequestArgs) JsonExample(pretty bool) string {
+	m := map[string]any{}
+	for _, arg := range args {
+		m[arg.Name] = arg.Example
+		if m[arg.Name] == "" {
+			m[arg.Name] = arg.Default
+		}
+	}
+	var w bytes.Buffer
+	marshal := json.NewEncoder(&w)
+	marshal.SetIndent("", " ")
+	marshal.Encode(m)
+	return w.String()
+
 }
 
 func (f Field) DocRequestArg() (doc *DocRequestArg, err error) {
