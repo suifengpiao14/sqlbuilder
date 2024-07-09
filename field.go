@@ -472,7 +472,7 @@ func (fs Fields) String() string {
 	m := make(map[string]any)
 	for _, f := range fs {
 		val, _ := f.GetValue(nil)
-		m[f.Name] = val
+		m[FieldName2DBColumnName(f.Name)] = val
 	}
 	b, _ := json.Marshal(m)
 	return string(b)
