@@ -344,6 +344,10 @@ func (f Field) GetWhereValue(in any) (value any, err error) {
 	}
 	value = in
 	value, err = f.GetValue(in)
+	if IsErrorValueNil(err) {
+		err = nil
+		return nil, nil
+	}
 	if err != nil {
 		return value, err
 	}
@@ -418,7 +422,7 @@ func (f Field) Data() (data any, err error) {
 		return nil, err
 	}
 	data = map[string]any{
-		f.Name: val,
+		FieldName2DBColumnName(f.Name): val,
 	}
 	return data, nil
 }
@@ -431,10 +435,10 @@ func (f Field) Where() (expressions Expressions, err error) {
 	if val == nil {
 		return nil, nil
 	}
-	if ex, ok := TryParseExpressions(f.Name, val); ok {
+	if ex, ok := TryParseExpressions(FieldName2DBColumnName(f.Name), val); ok {
 		return ex, nil
 	}
-	return ConcatExpression(goqu.Ex{f.Name: val}), nil
+	return ConcatExpression(goqu.Ex{FieldName2DBColumnName(f.Name): val}), nil
 }
 
 type Fields []Field
