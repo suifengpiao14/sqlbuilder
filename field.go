@@ -11,6 +11,7 @@ import (
 	"github.com/doug-martin/goqu/v9/exp"
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
+	"github.com/suifengpiao14/funcs"
 )
 
 var Time_format = "2024-01-02 15:04:05"
@@ -600,4 +601,11 @@ func TryParseExpressions(field string, value any) (expressions Expressions, ok b
 func Expression2String(expressions ...goqu.Expression) string {
 	sql, _, _ := Dialect.Select().Where(expressions...).ToSQL()
 	return sql
+}
+
+// FieldName2DBColumnName 将接口字段转换为数据表字段列名称
+var FieldName2DBColumnName = func(fieldName string) (dbColumnName string) {
+	dbColumnName = funcs.ToSnakeCase(fieldName)
+	dbColumnName = fmt.Sprintf("F%s", strings.TrimPrefix(dbColumnName, "f")) // 增加F前缀
+	return dbColumnName
 }

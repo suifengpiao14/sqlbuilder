@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cast"
-	"github.com/suifengpiao14/funcs"
 )
 
 // 基于数据表填充对应数据，同时也可以基于此生成SQL DDL
@@ -190,11 +189,4 @@ func ValueFnEmptyStr2Nil(field Field, exceptFileds ...Field) (valueFn ValueFn) {
 		}
 		return in, nil
 	}
-}
-
-// FieldName2DBColumnName 将接口字段转换为数据表字段列名称
-var FieldName2DBColumnName = func(fieldName string) (dbColumnName string) {
-	dbColumnName = funcs.ToSnakeCase(fieldName)
-	dbColumnName = fmt.Sprintf("F%s", strings.TrimPrefix(dbColumnName, "F")) // 增加F前缀
-	return dbColumnName
 }
