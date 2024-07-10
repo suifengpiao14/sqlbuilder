@@ -101,7 +101,7 @@ type Field struct {
 	Migrate     func(table string, options ...MigrateOptionI) Migrates `json:"-"`
 	ValidateFns ValidateFns                                            `json:"-"` // 设置验证参数验证器
 	DBSchema    *DBSchema                                              // 可以为空，为空建议设置默认值
-	Table       Table                                                  // 关联表,方便收集Table全量信息
+	Table       TableI                                                 // 关联表,方便收集Table全量信息
 	Api         interface{}                                            // 关联Api对象,方便收集Api全量信息
 }
 

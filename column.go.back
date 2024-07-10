@@ -113,7 +113,7 @@ func (c Column) UpdateWhere() (expression Expressions, err error) {
 
 type CommandI interface {
 	Columns() ColumnIs
-	Table
+	TableI
 }
 
 type QueryI interface {

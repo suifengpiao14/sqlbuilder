@@ -39,7 +39,7 @@ var Dialect = goqu.Dialect(Dialect_sqlite3.String())
 
 var Dialect_Mysql = goqu.Dialect(Dialect_mysql.String())
 
-type Table interface {
+type TableI interface {
 	Table() (table string)
 }
 type TableFn func() (table string)
@@ -117,12 +117,12 @@ func ConcatExpression(expressions ...exp.Expression) Expressions {
 
 // InsertParam 供子类复用,修改数据
 type InsertParam struct {
-	_TableI      Table
+	_TableI      TableI
 	_DataSet     DataSet
 	_ValidateSet ValidateSet
 }
 
-func NewInsertBuilder(table Table) InsertParam {
+func NewInsertBuilder(table TableI) InsertParam {
 	return InsertParam{
 		_TableI:  table,
 		_DataSet: make(DataSet, 0),
@@ -226,13 +226,13 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 }
 
 type UpdateParam struct {
-	_TableI      Table
+	_TableI      TableI
 	_DataSet     DataSet  //中间件的Data 集合
 	_WhereSet    WhereSet //中间件的Where 集合
 	_ValidateSet ValidateSet
 }
 
-func NewUpdateBuilder(table Table) UpdateParam {
+func NewUpdateBuilder(table TableI) UpdateParam {
 	return UpdateParam{
 		_TableI:   table,
 		_DataSet:  make(DataSet, 0),
@@ -323,7 +323,7 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 }
 
 type FirstParamI interface {
-	Table
+	TableI
 	_Select
 	//Where
 	//Order
@@ -395,7 +395,7 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 }
 
 type ListParamI interface {
-	Table
+	TableI
 	_Select
 	_Pagination
 }
@@ -487,11 +487,11 @@ func (p ListParam) ToSQL() (sql string, err error) {
 }
 
 type TotalParam struct {
-	_Table    Table
+	_Table    TableI
 	_WhereSet WhereSet
 }
 
-func NewTotalBuilder(table Table) TotalParam {
+func NewTotalBuilder(table TableI) TotalParam {
 	return TotalParam{
 		_Table:    table,
 		_WhereSet: make(WhereSet, 0),
