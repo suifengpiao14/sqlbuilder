@@ -79,6 +79,20 @@ var TypeReflectsString = TypeReflects[int]{
 	{UpperLimit: 4294967295, DBType: "LONGTEXT"},
 }
 
+const (
+	UnsinedInt_maximum_tinyint   = 1<<8 - 1
+	UnsinedInt_maximum_smallint  = 1<<16 - 1
+	UnsinedInt_maximum_mediumint = 1<<24 - 1
+	UnsinedInt_maximum_int       = 1<<32 - 1
+	UnsinedInt_maximum_bigint    = 1<<64 - 1
+
+	Int_maximum_tinyint   = 1<<7 - 1
+	Int_maximum_smallint  = 1<<15 - 1
+	Int_maximum_mediumint = 1<<23 - 1
+	Int_maximum_int       = 1<<31 - 1
+	Int_maximum_bigint    = 1<<63 - 1
+)
+
 // 无符号整型
 var TypeReflectsUnsinedInt = TypeReflects[uint]{
 	{UpperLimit: 1<<8 - 1, DBType: "TINYINT", Size: 1},
