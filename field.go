@@ -137,54 +137,54 @@ func (f *Field) SetName(name string) *Field {
 	return f
 }
 func (f *Field) SetTitle(title string) *Field {
-	dbSchema := Schema{}
-	dbSchema.Title = title
-	f.MergeDBSchema(dbSchema)
+	schema := Schema{}
+	schema.Title = title
+	f.MergeSchema(schema)
 	return f
 }
 
-func (f *Field) MergeDBSchema(dbSchema Schema) *Field {
+func (f *Field) MergeSchema(schema Schema) *Field {
 	if f.Schema == nil {
 		f.Schema = &Schema{}
 	}
 
-	if dbSchema.Title != "" {
-		f.Schema.Title = dbSchema.Title
+	if schema.Title != "" {
+		f.Schema.Title = schema.Title
 	}
-	f.Schema.Required = dbSchema.Required
+	f.Schema.Required = schema.Required
 
-	if dbSchema.Comment != "" {
-		f.Schema.Comment = dbSchema.Comment
+	if schema.Comment != "" {
+		f.Schema.Comment = schema.Comment
 	}
-	if dbSchema.Type != "" {
-		f.Schema.Type = dbSchema.Type
+	if schema.Type != "" {
+		f.Schema.Type = schema.Type
 	}
-	if dbSchema.Default != "" {
-		f.Schema.Default = dbSchema.Default
-	}
-
-	if len(dbSchema.Enums) > 0 {
-		f.Schema.Enums = dbSchema.Enums
+	if schema.Default != "" {
+		f.Schema.Default = schema.Default
 	}
 
-	if dbSchema.MaxLength > 0 {
-		f.Schema.MaxLength = dbSchema.MaxLength
+	if len(schema.Enums) > 0 {
+		f.Schema.Enums = schema.Enums
 	}
 
-	if dbSchema.MinLength > 0 {
-		f.Schema.MinLength = dbSchema.MinLength
+	if schema.MaxLength > 0 {
+		f.Schema.MaxLength = schema.MaxLength
 	}
 
-	if dbSchema.Maximum > 0 {
-		f.Schema.Maximum = dbSchema.Maximum
+	if schema.MinLength > 0 {
+		f.Schema.MinLength = schema.MinLength
 	}
 
-	if dbSchema.Minimum > 0 {
-		f.Schema.Minimum = dbSchema.Minimum
+	if schema.Maximum > 0 {
+		f.Schema.Maximum = schema.Maximum
 	}
 
-	if dbSchema.RegExp != "" {
-		f.Schema.RegExp = dbSchema.RegExp
+	if schema.Minimum > 0 {
+		f.Schema.Minimum = schema.Minimum
+	}
+
+	if schema.RegExp != "" {
+		f.Schema.RegExp = schema.RegExp
 	}
 
 	return f
@@ -260,10 +260,7 @@ func (f Field) DBColumn() (doc *Column, err error) {
 		err = errors.Errorf("dbSchema required ,filed.Name:%s", f.Name)
 		return nil, err
 	}
-	comment := schema.Comment
-	if comment == "" {
-		comment = schema.Title
-	}
+
 	unsigned := schema.Minimum > -1 // 默认为无符号，需要符号，则最小值设置为最大负数即可
 	typeMap := map[string]string{}
 	typ := typeMap[schema.Type]
@@ -274,9 +271,10 @@ func (f Field) DBColumn() (doc *Column, err error) {
 			typ = "string"
 		}
 	}
+
 	doc = &Column{
-		Name:      f.Name,
-		Comment:   comment,
+		Name:      FieldName2DBColumnName(f.Name),
+		Comment:   f.Schema.FullComment(),
 		Unsigned:  unsigned,
 		Type:      typ,
 		Default:   schema.Default,
@@ -379,9 +377,9 @@ func (c Field) FormatType(val any) (value any) {
 		return value
 	}
 	switch c.Schema.Type {
-	case DBSchema_Type_string, DBSchema_Type_email, DBSchema_Type_phone:
+	case Schema_Type_string:
 		value = cast.ToString(value)
-	case DBSchema_Type_int:
+	case Schema_Type_int:
 		value = cast.ToInt(value)
 	}
 

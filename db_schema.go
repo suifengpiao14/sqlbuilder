@@ -18,32 +18,80 @@ type Schema struct {
 	Enums     Enums  `json:"enums"`
 	MaxLength int    `json:"maxLength"` // 字符串最大长度
 	MinLength int    `json:"minLength"` // 字符串最小长度
-	Maximum   int    `json:"maximum"`   // 数字最大值
+	Maximum   uint   `json:"maximum"`   // 数字最大值
 	Minimum   int    `json:"minimum"`   // 数字最小值
 	RegExp    string `json:"regExp"`    //正则表达式
 }
 
+func (schema Schema) FullComment() string {
+	if schema.Comment == "" {
+		schema.Comment = schema.Title
+	}
+	if len(schema.Enums) == 0 {
+		return schema.Comment
+	}
+	return fmt.Sprintf("%s%s", schema.Comment, schema.Enums.String())
+}
+
 // AllowEmpty 是否可以为空
-func (dbSchema Schema) AllowEmpty() bool {
-	return dbSchema.MinLength < 1 && dbSchema.Type == DBSchema_Type_string
+func (schema Schema) AllowEmpty() bool {
+	return schema.MinLength < 1 && schema.Type == Schema_Type_string
 }
 
 const (
-	DBSchema_Type_string = "string"
-	DBSchema_Type_int    = "int"
-	DBSchema_Type_phone  = "phone"
-	DBSchema_Type_email  = "email"
-	DBSchema_Type_Enum   = "enum"
+	Schema_Type_string = "string"
+	Schema_Type_int    = "int"
 )
 
 type Enums []Enum
 
-func (es Enums) Values() (values []string) {
-	values = make([]string, 0)
+func (es Enums) Values() (values []any) {
+	values = make([]any, 0)
 	for _, e := range es {
 		values = append(values, e.Key)
 	}
 	return values
+}
+
+func (es Enums) ValuesStr() (valuesStr []string) {
+	values := es.Values()
+	valuesStr = make([]string, 0)
+	for _, v := range values {
+		valuesStr = append(valuesStr, cast.ToString(v))
+	}
+	return valuesStr
+}
+
+func (es Enums) Type() (typ string) {
+	if len(es) == 0 {
+		return Schema_Type_string
+	}
+	e := es[0]
+	if _, ok := e.Key.(int); ok {
+		return Schema_Type_int
+	}
+	return Schema_Type_string
+}
+
+func (es Enums) MaxLengthMaximum() (maxLength int, maximum uint) {
+	typ := es.Type()
+	switch typ {
+	case Schema_Type_int:
+		for _, e := range es {
+			num := cast.ToUint(e.Key)
+			if num > maximum {
+				maximum = num
+			}
+		}
+	case Schema_Type_string:
+		for _, e := range es {
+			length := len(cast.ToString(e.Key))
+			if length > maxLength {
+				maxLength = length
+			}
+		}
+	}
+	return maxLength, maximum
 }
 
 // String 生成文档有使用
@@ -52,12 +100,12 @@ func (es Enums) String() (str string) {
 	for _, e := range es {
 		values = append(values, fmt.Sprintf("%s-%s", e.Key, e.Title))
 	}
-	return strings.Join(values, " ")
+	return fmt.Sprintf("(%s)", strings.Join(values, ","))
 }
 
 type Enum struct {
 	Title string `json:"title"`
-	Key   string `json:"key"`
+	Key   any    `json:"key"`
 }
 
 type ValidatorI interface {
@@ -118,7 +166,7 @@ func (schema Schema) Validate(fieldName string, field reflect.Value) error {
 	}
 	// 验证 enums
 	if len(schema.Enums) > 0 {
-		if !contains(schema.Enums.Values(), cast.ToString(field.Interface())) {
+		if !contains(schema.Enums.ValuesStr(), cast.ToString(field.Interface())) {
 			return fmt.Errorf("%s must be one of %v", fieldName, schema.Enums.Values())
 		}
 	}
