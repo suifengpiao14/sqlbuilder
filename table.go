@@ -27,6 +27,7 @@ type TypeReflect struct {
 	UpperLimit int    `json:"upperLimit"` //上限
 	DBType     string `json:"dbType"`     //上限
 	IsDefault  bool   `json:"isDefault"`  // 是否为默认类型
+	Size       int    `json:"size"`       //大小
 }
 
 type TypeReflects []TypeReflect
@@ -78,12 +79,20 @@ var TypeReflectsString = TypeReflects{
 	{UpperLimit: 4294967295, DBType: "LONGTEXT"},
 }
 
+// 无符号整型
+var TypeReflectsUnsinedInt = TypeReflects{
+	{UpperLimit: 1<<8 - 1, DBType: "TINYINT", Size: 1},
+	{UpperLimit: 1<<16 - 1, DBType: "SMALLINT", Size: 11},
+	{UpperLimit: 1<<24 - 1, DBType: "mediumint", Size: 11},
+	{UpperLimit: 1<<23 - 1, DBType: "int", Size: 11, IsDefault: true},
+	{UpperLimit: 1<<63 - 1, DBType: "bigint", Size: 11}, // go 内是有符号的，无法表达无符号最大整数，此处取有符号最大值
+}
 var TypeReflectsInt = TypeReflects{
-	{UpperLimit: 64, DBType: "char"},                      // 小于64位往往是ID、日期等类型，长度较为固定，直接使用char 效率高
-	{UpperLimit: 255, DBType: "varchar", IsDefault: true}, // 小字符串类型，节省空间
-	{UpperLimit: 65535, DBType: "TEXT"},
-	{UpperLimit: 16777215, DBType: "MEDIUMTEXT"},
-	{UpperLimit: 4294967295, DBType: "LONGTEXT"},
+	{UpperLimit: 1<<7 - 1, DBType: "TINYINT", Size: 1},
+	{UpperLimit: 1<<15 - 1, DBType: "SMALLINT", Size: 11},
+	{UpperLimit: 1<<23 - 1, DBType: "mediumint", Size: 11},
+	{UpperLimit: 1<<31 - 1, DBType: "int", Size: 11, IsDefault: true},
+	{UpperLimit: 1<<63 - 1, DBType: "bigint", Size: 11},
 }
 
 func (col *Column) DDL(driver Driver) (ddl string) {
@@ -113,10 +122,18 @@ func (col *Column) DDL(driver Driver) (ddl string) {
 		if col.Size < 1 {
 			col.Size = 11
 		}
-		tr := TypeReflectsInt.GetByUpperLimitWithDefault(col.Maximum)
-		if tr != nil {
-			typ = fmt.Sprintf("%s(%d)", tr.DBType, col.Size)
+		if col.Unsigned {
+			tr := TypeReflectsUnsinedInt.GetByUpperLimitWithDefault(col.Maximum)
+			if tr != nil {
+				typ = fmt.Sprintf("%s(%d) unsigned", tr.DBType, col.Size)
+			}
+		} else {
+			tr := TypeReflectsInt.GetByUpperLimitWithDefault(col.Maximum)
+			if tr != nil {
+				typ = fmt.Sprintf("%s(%d)", tr.DBType, col.Size)
+			}
 		}
+
 	default:
 		typ = col.Type
 	}

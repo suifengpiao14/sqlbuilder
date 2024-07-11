@@ -9,10 +9,9 @@ import (
 )
 
 // 基于数据表填充对应数据，同时也可以基于此生成SQL DDL
-type DBSchema struct {
-	Title    string `json:"title"`
-	Required bool   `json:"required,string"` // 对应数据库的not null
-	//AllowEmpty bool   `json:"allowEmpty,string"` // 是否可以为空 空定义：转为为字符串后为"",数字0不是空字符 通过最小长度 1 表达
+type Schema struct {
+	Title     string `json:"title"`
+	Required  bool   `json:"required,string"` // 对应数据库的not null
 	Comment   string `json:"comment"`
 	Type      string `json:"type"`
 	Default   any    `json:"default"`
@@ -25,7 +24,7 @@ type DBSchema struct {
 }
 
 // AllowEmpty 是否可以为空
-func (dbSchema DBSchema) AllowEmpty() bool {
+func (dbSchema Schema) AllowEmpty() bool {
 	return dbSchema.MinLength < 1 && dbSchema.Type == DBSchema_Type_string
 }
 
@@ -96,7 +95,7 @@ func RegisterValidator(validators ...ValidatorI) {
 	validatorIs = append(validatorIs, validators...)
 }
 
-func (schema DBSchema) Validate(fieldName string, field reflect.Value) error {
+func (schema Schema) Validate(fieldName string, field reflect.Value) error {
 	// 验证 required
 	if schema.Required && isEmptyValue(field) {
 		return fmt.Errorf("%s is required", fieldName)

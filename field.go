@@ -1,7 +1,6 @@
 package sqlbuilder
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -100,7 +99,7 @@ type Field struct {
 	WhereFns    ValueFns                                               `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
 	Migrate     func(table string, options ...MigrateOptionI) Migrates `json:"-"`
 	ValidateFns ValidateFns                                            `json:"-"` // 设置验证参数验证器
-	DBSchema    *DBSchema                                              // 可以为空，为空建议设置默认值
+	Schema      *Schema                                                // 可以为空，为空建议设置默认值
 	Table       TableI                                                 // 关联表,方便收集Table全量信息
 	Api         interface{}                                            // 关联Api对象,方便收集Api全量信息
 }
@@ -138,54 +137,54 @@ func (f *Field) SetName(name string) *Field {
 	return f
 }
 func (f *Field) SetTitle(title string) *Field {
-	dbSchema := DBSchema{}
+	dbSchema := Schema{}
 	dbSchema.Title = title
 	f.MergeDBSchema(dbSchema)
 	return f
 }
 
-func (f *Field) MergeDBSchema(dbSchema DBSchema) *Field {
-	if f.DBSchema == nil {
-		f.DBSchema = &DBSchema{}
+func (f *Field) MergeDBSchema(dbSchema Schema) *Field {
+	if f.Schema == nil {
+		f.Schema = &Schema{}
 	}
 
 	if dbSchema.Title != "" {
-		f.DBSchema.Title = dbSchema.Title
+		f.Schema.Title = dbSchema.Title
 	}
-	f.DBSchema.Required = dbSchema.Required
+	f.Schema.Required = dbSchema.Required
 
 	if dbSchema.Comment != "" {
-		f.DBSchema.Comment = dbSchema.Comment
+		f.Schema.Comment = dbSchema.Comment
 	}
 	if dbSchema.Type != "" {
-		f.DBSchema.Type = dbSchema.Type
+		f.Schema.Type = dbSchema.Type
 	}
 	if dbSchema.Default != "" {
-		f.DBSchema.Default = dbSchema.Default
+		f.Schema.Default = dbSchema.Default
 	}
 
 	if len(dbSchema.Enums) > 0 {
-		f.DBSchema.Enums = dbSchema.Enums
+		f.Schema.Enums = dbSchema.Enums
 	}
 
 	if dbSchema.MaxLength > 0 {
-		f.DBSchema.MaxLength = dbSchema.MaxLength
+		f.Schema.MaxLength = dbSchema.MaxLength
 	}
 
 	if dbSchema.MinLength > 0 {
-		f.DBSchema.MinLength = dbSchema.MinLength
+		f.Schema.MinLength = dbSchema.MinLength
 	}
 
 	if dbSchema.Maximum > 0 {
-		f.DBSchema.Maximum = dbSchema.Maximum
+		f.Schema.Maximum = dbSchema.Maximum
 	}
 
 	if dbSchema.Minimum > 0 {
-		f.DBSchema.Minimum = dbSchema.Minimum
+		f.Schema.Minimum = dbSchema.Minimum
 	}
 
 	if dbSchema.RegExp != "" {
-		f.DBSchema.RegExp = dbSchema.RegExp
+		f.Schema.RegExp = dbSchema.RegExp
 	}
 
 	return f
@@ -194,8 +193,8 @@ func (f *Field) MergeDBSchema(dbSchema DBSchema) *Field {
 // LogString 日志字符串格式
 func (f *Field) LogString() string {
 	title := f.Name
-	if f.DBSchema != nil && f.DBSchema.Title == "" {
-		title = f.DBSchema.Title
+	if f.Schema != nil && f.Schema.Title == "" {
+		title = f.Schema.Title
 	}
 	val, _ := f.GetValue(nil)
 	str := cast.ToString(val)
@@ -234,75 +233,15 @@ var GlobalFnValueFns = func(f Field) ValueFns {
 	}
 }
 
-type DocRequestArg struct {
-	Name        string `json:"name"`
-	Required    bool   `json:"required,string"`
-	AllowEmpty  bool   `json:"allowEmpty,string"`
-	Title       string `json:"title"`
-	Type        string `json:"type"`
-	Format      string `json:"format"`
-	Default     string `json:"default"`
-	Description string `json:"description"`
-	Example     string `json:"example"`
-	Enums       Enums  `json:"enums"`
-	RegExp      string `json:"regExp"`
-}
-
-type DocRequestArgs []DocRequestArg
-
-func (args DocRequestArgs) Makedown() string {
-	var w bytes.Buffer
-	w.WriteString(`|名称|标题|必填|类型|格式|可空|默认值|案例|描述|`)
-	w.WriteString("\n")
-	w.WriteString(`|:--|:--|:--|:--|:--|:--|:--|:--|:--|`)
-	w.WriteString("\n")
-	for _, arg := range args {
-		description := arg.Description
-		if len(arg.Enums) > 0 {
-			description = fmt.Sprintf("%s(%s)", description, arg.Enums.String())
-		}
-		row := fmt.Sprintf(`|%s|%s|%s|%s|%s|%s|%s|%s|%s|`,
-			arg.Name,
-			arg.Title,
-			cast.ToString(arg.Required),
-			arg.Type,
-			arg.Format,
-			cast.ToString(arg.AllowEmpty),
-			cast.ToString(arg.Default),
-			cast.ToString(arg.Example),
-			description,
-		)
-		w.WriteString(row)
-		w.WriteString("\n")
-	}
-	return w.String()
-}
-
-func (args DocRequestArgs) JsonExample(pretty bool) string {
-	m := map[string]any{}
-	for _, arg := range args {
-		m[arg.Name] = arg.Example
-		if m[arg.Name] == "" {
-			m[arg.Name] = arg.Default
-		}
-	}
-	var w bytes.Buffer
-	marshal := json.NewEncoder(&w)
-	marshal.SetIndent("", " ")
-	marshal.Encode(m)
-	return w.String()
-
-}
-
 func (f Field) DocRequestArg() (doc *DocRequestArg, err error) {
-	dbSchema := f.DBSchema
+	dbSchema := f.Schema
 	if dbSchema == nil {
 		err = errors.Errorf("dbSchema required ,filed.Name:%s", f.Name)
 		return nil, err
 	}
 	doc = &DocRequestArg{
 		Name:        f.Name,
-		Required:    f.DBSchema.Required,
+		Required:    f.Schema.Required,
 		AllowEmpty:  dbSchema.AllowEmpty(),
 		Title:       dbSchema.Title,
 		Type:        "string",
@@ -311,6 +250,41 @@ func (f Field) DocRequestArg() (doc *DocRequestArg, err error) {
 		Description: dbSchema.Comment,
 		Enums:       make(Enums, 0),
 		RegExp:      dbSchema.RegExp,
+	}
+	return doc, nil
+}
+
+func (f Field) DBColumn() (doc *Column, err error) {
+	schema := f.Schema
+	if schema == nil {
+		err = errors.Errorf("dbSchema required ,filed.Name:%s", f.Name)
+		return nil, err
+	}
+	comment := schema.Comment
+	if comment == "" {
+		comment = schema.Title
+	}
+	unsigned := schema.Minimum > -1 // 默认为无符号，需要符号，则最小值设置为最大负数即可
+	typeMap := map[string]string{}
+	typ := typeMap[schema.Type]
+	if typ == "" {
+		if schema.Minimum > 0 || schema.Maximum > 0 { // 如果规定了最小值,最大值，默认为整型
+			typ = "int"
+		} else {
+			typ = "string"
+		}
+	}
+	doc = &Column{
+		Name:      f.Name,
+		Comment:   comment,
+		Unsigned:  unsigned,
+		Type:      typ,
+		Default:   schema.Default,
+		Enums:     schema.Enums,
+		MaxLength: schema.MaxLength,
+		MinLength: schema.MinLength,
+		Maximum:   schema.Maximum,
+		Minimum:   schema.Minimum,
 	}
 	return doc, nil
 }
@@ -387,11 +361,11 @@ func (c Field) Validate(val any) (err error) {
 			return err
 		}
 	}
-	if c.DBSchema == nil {
+	if c.Schema == nil {
 		return nil
 	}
 	rv := reflect.Indirect(reflect.ValueOf(val))
-	err = c.DBSchema.Validate(c.Name, rv)
+	err = c.Schema.Validate(c.Name, rv)
 	if err != nil {
 		return err
 	}
@@ -401,10 +375,10 @@ func (c Field) Validate(val any) (err error) {
 
 func (c Field) FormatType(val any) (value any) {
 	value = val
-	if c.DBSchema == nil {
+	if c.Schema == nil {
 		return value
 	}
-	switch c.DBSchema.Type {
+	switch c.Schema.Type {
 	case DBSchema_Type_string, DBSchema_Type_email, DBSchema_Type_phone:
 		value = cast.ToString(value)
 	case DBSchema_Type_int:
@@ -490,6 +464,17 @@ func (fs Fields) DocRequestArgs() (args DocRequestArgs, err error) {
 		args = append(args, *arg)
 	}
 	return args, nil
+}
+func (fs Fields) DBColumns() (columns Columns, err error) {
+	columns = make(Columns, 0)
+	for _, f := range fs {
+		column, err := f.DBColumn()
+		if err != nil {
+			return nil, err
+		}
+		columns = append(columns, *column)
+	}
+	return columns, nil
 }
 
 func (fs Fields) Data() (data any, err error) {
