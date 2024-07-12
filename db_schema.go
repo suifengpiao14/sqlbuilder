@@ -52,6 +52,15 @@ func (es Enums) Values() (values []any) {
 	}
 	return values
 }
+func (es Enums) Contains(val any) (ok bool) {
+	for _, e := range es {
+		if ok = e.IsEqual(val); ok {
+			return true
+		}
+
+	}
+	return false
+}
 
 func (es Enums) ValuesStr() (valuesStr []string) {
 	values := es.Values()
@@ -91,7 +100,7 @@ func (es Enums) MaxLengthMaximum() (maxLength int, maximum uint) {
 			}
 		}
 	}
-	return maxLength, maximum
+	return maxLength << 1, maximum // 字符串长度扩大1倍
 }
 
 // String 生成文档有使用
@@ -106,6 +115,11 @@ func (es Enums) String() (str string) {
 type Enum struct {
 	Title string `json:"title"`
 	Key   any    `json:"key"`
+}
+
+func (e Enum) IsEqual(val any) (ok bool) {
+	ok = strings.EqualFold(cast.ToString(e.Key), cast.ToString(val))
+	return ok
 }
 
 type ValidatorI interface {
