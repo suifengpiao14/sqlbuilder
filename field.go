@@ -68,17 +68,6 @@ func (fns *ValueFns) AppendIfNotFirst(subFns ...ValueFn) {
 	fns.Append(subFns...)
 }
 
-// ValueFnDirect 原样返回
-func ValueFnDirect(val any) (value any, err error) {
-	return val, nil
-}
-
-// ValueFnFromData 从 field.Data获取数据
-func ValueFnFromData(field Field) ValueFn {
-	return func(in any) (value any, err error) {
-		return field.Data()
-	}
-}
 func NewValueFns(fn func() (value any, err error)) ValueFns {
 	return ValueFns{
 		func(in any) (value any, err error) {
@@ -87,24 +76,76 @@ func NewValueFns(fn func() (value any, err error)) ValueFns {
 	}
 }
 
-// ShieldFormat 屏蔽值，常用于取消某个字段作为查询条件
-func ShieldFormat(val any) (value any, err error) {
-	return nil, nil
+type WhereValueFn func(dbColumnName string, data any) (any, error) // whereFn 中会使用到数据库字段名 需要将dbColumnName传入
+
+type WhereValueFns []WhereValueFn
+
+// Insert 追加元素,不建议使用,建议用InsertAsFirst,InsertAsSecond
+func (fns *WhereValueFns) Insert(index int, subFns ...WhereValueFn) {
+	if *fns == nil {
+		*fns = make(WhereValueFns, 0)
+	}
+	l := len(*fns)
+	if l == 0 || index < 0 || l <= index { // 本身没有,直接添加,或者计划添加到结尾,或者指定位置比现有数组长,直接追加
+		*fns = append(*fns, subFns...)
+		return
+	}
+	if index == 0 { // index =0 插入第一个
+		tmp := make(WhereValueFns, 0)
+		tmp = append(tmp, subFns...)
+		tmp = append(tmp, *fns...)
+		*fns = tmp
+		return
+	}
+	pre, after := (*fns)[:index], (*fns)[index:]
+	tmp := make(WhereValueFns, 0)
+	tmp = append(tmp, pre...)
+	tmp = append(tmp, subFns...)
+	tmp = append(tmp, after...)
+	*fns = tmp
 }
 
-type FieldI[T any] interface {
-	AppendValueFn(fns ...ValueFn) T
-	AppendWhereFn(fns ...ValueFn) T
-	SetName(name string) T
-	MergeSchema(schema Schema) T
-	SetTitle(title string) T
+// InsertAsFirst 作为第一个元素插入,一般用于将数据导入到whereFn 中
+func (fns *WhereValueFns) InsertAsFirst(subFns ...WhereValueFn) {
+	fns.Insert(0, subFns...)
+}
+
+// InsertAsSecond 作为第二个元素插入,一般用于在获取数据后立即验证器插入
+func (fns *WhereValueFns) InsertAsSecond(subFns ...WhereValueFn) {
+	fns.Insert(1, subFns...)
+}
+
+// Append 常规添加
+func (fns *WhereValueFns) Append(subFns ...WhereValueFn) {
+	fns.Insert(-1, subFns...)
+}
+
+// AppendIfNotFirst 追加到最后,但是不能是第一个,一般用于生成SQL时格式化数据
+func (fns *WhereValueFns) AppendIfNotFirst(subFns ...WhereValueFn) {
+	if len(*fns) == 0 {
+		return
+	}
+	fns.Append(subFns...)
+}
+
+func NewWhereValueFns(fn func() (value any, err error)) WhereValueFns {
+	return WhereValueFns{
+		func(filedName string, data any) (value any, err error) {
+			return fn()
+		},
+	}
+}
+
+// ValueFnShield 屏蔽值，常用于取消某个字段作为查询条件
+func WhereValueFnShield(dbColumnName string, val any) (value any, err error) {
+	return nil, nil
 }
 
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
 	Name        string                                                 `json:"name"`
 	ValueFns    ValueFns                                               `json:"-"` // 增加error，方便封装字段验证规则
-	WhereFns    ValueFns                                               `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	WhereFns    WhereValueFns                                          `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
 	Migrate     func(table string, options ...MigrateOptionI) Migrates `json:"-"`
 	ValidateFns ValidateFns                                            `json:"-"` // 设置验证参数验证器
 	Schema      *Schema                                                // 可以为空，为空建议设置默认值
@@ -112,25 +153,6 @@ type Field struct {
 	Api         interface{}                                            // 关联Api对象,方便收集Api全量信息
 }
 
-// 给当前列增加where条件修改
-func (f *Field) AppendWhereFn(fns ...ValueFn) *Field {
-	if f.WhereFns == nil {
-		f.WhereFns = make(ValueFns, 0)
-	}
-	addr := &f.WhereFns
-	*addr = append(*addr, fns...)
-	return f // 返回f 方便连续书写
-}
-
-// 给当前列增加value数据修改
-func (f *Field) AppendValueFn(fns ...ValueFn) *Field {
-	if f.ValueFns == nil {
-		f.ValueFns = make(ValueFns, 0)
-	}
-	addr := &f.ValueFns
-	*addr = append(*addr, fns...)
-	return f
-}
 func (f *Field) AppendValidateFn(fns ...ValidateFn) *Field {
 	if f.ValidateFns == nil {
 		f.ValidateFns = make(ValidateFns, 0)
@@ -335,8 +357,9 @@ func (f Field) GetWhereValue(in any) (value any, err error) {
 		return value, err
 	}
 
+	fieldName := FieldName2DBColumnName(f.Name)
 	for _, fn := range f.WhereFns {
-		value, err = fn(value)
+		value, err = fn(fieldName, value)
 		if err != nil {
 			return value, err
 		}
