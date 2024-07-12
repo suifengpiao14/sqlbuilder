@@ -93,11 +93,11 @@ func ShieldFormat(val any) (value any, err error) {
 }
 
 type FieldI[T any] interface {
-	AppendValueFn(fns ...ValueFn) *T
-	AppendWhereFn(fns ...ValueFn) *T
-	SetName(name string) *T
-	MergeSchema(schema Schema) *T
-	SetTitle(title string) *T
+	AppendValueFn(fns ...ValueFn) T
+	AppendWhereFn(fns ...ValueFn) T
+	SetName(name string) T
+	MergeSchema(schema Schema) T
+	SetTitle(title string) T
 }
 
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
