@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/spf13/cast"
 )
 
@@ -110,25 +112,34 @@ var TypeReflectsInt = TypeReflects[int]{
 }
 
 func (col *Column) DDL(driver Driver) (ddl string) {
+	switch driver {
+	case Driver_mysql:
+		return Column2DDLMysql(col)
+	}
+	err := errors.Errorf("unsport driver:%s", string(driver))
+	panic(err)
+}
+
+func Column2DDLMysql(col *Column) (ddl string) {
+	if col.Enums != nil {
+		col.Type = col.Enums.Type()
+		col.MaxLength, col.Maximum = col.Enums.MaxLengthMaximum()
+		col.Default = col.Enums.Default().Key
+	}
+
 	notNil := ""
-	defaul := col.Default
 	comment := ""
 	if col.Comment != "" {
 		comment = fmt.Sprintf(`COMMENT "%s"`, col.Comment)
 	}
-	if col.Enums != nil {
-		col.Type = col.Enums.Type()
-		col.MaxLength, col.Maximum = col.Enums.MaxLengthMaximum()
-	}
+	defaul := col.Default
 	typ := col.Type
 	switch col.Type {
 	case "string":
 		if col.MaxLength < 1 {
 			col.MaxLength = 255
 		}
-		if defaul == nil {
-			defaul = `""`
-		}
+		defaul = fmt.Sprintf(`"%s"`, cast.ToString(defaul)) // 增加引号
 		tr := TypeReflectsString.GetByUpperLimitWithDefault(col.MaxLength)
 		if tr != nil {
 			typ = fmt.Sprintf("%s(%d)", tr.DBType, col.MaxLength)

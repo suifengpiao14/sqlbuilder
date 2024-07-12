@@ -93,7 +93,7 @@ const (
 )
 
 func (o _MysqlAfter) Driver() Driver {
-	return Dialect_mysql
+	return Driver_mysql
 }
 func (o _MysqlAfter) Token() Token {
 	return Mysql_Token_after

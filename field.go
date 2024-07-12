@@ -159,7 +159,9 @@ func (f *Field) MergeSchema(schema Schema) *Field {
 	if schema.Title != "" {
 		f.Schema.Title = schema.Title
 	}
-	f.Schema.Required = schema.Required
+	if schema.Required {
+		f.Schema.Required = schema.Required
+	}
 
 	if schema.Comment != "" {
 		f.Schema.Comment = schema.Comment
@@ -253,7 +255,7 @@ func (f Field) DocRequestArg() (doc *DocRequestArg, err error) {
 		AllowEmpty:  dbSchema.AllowEmpty(),
 		Title:       dbSchema.Title,
 		Type:        "string",
-		Format:      dbSchema.Type,
+		Format:      dbSchema.Type.String(),
 		Default:     cast.ToString(dbSchema.Default),
 		Description: dbSchema.Comment,
 		Enums:       make(Enums, 0),
@@ -271,7 +273,7 @@ func (f Field) DBColumn() (doc *Column, err error) {
 
 	unsigned := schema.Minimum > -1 // 默认为无符号，需要符号，则最小值设置为最大负数即可
 	typeMap := map[string]string{}
-	typ := typeMap[schema.Type]
+	typ := typeMap[schema.Type.String()]
 	if typ == "" {
 		if schema.Minimum > 0 || schema.Maximum > 0 { // 如果规定了最小值,最大值，默认为整型
 			typ = "int"

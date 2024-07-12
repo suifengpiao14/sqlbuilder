@@ -30,14 +30,14 @@ func (exs Expressions) IsEmpty() bool {
 var ERROR_EMPTY_WHERE = errors.New("error  empty where")
 
 const (
-	Dialect_mysql   Driver = "mysql"
-	Dialect_sqlite3 Driver = "sqlite3"
+	Driver_mysql   Driver = "mysql"
+	Driver_sqlite3 Driver = "sqlite3"
 )
 
 // Dialect 设定驱动,方便直接使用
-var Dialect = goqu.Dialect(Dialect_sqlite3.String())
+var Dialect = goqu.Dialect(Driver_sqlite3.String())
 
-var Dialect_Mysql = goqu.Dialect(Dialect_mysql.String())
+var Dialect_Mysql = goqu.Dialect(Driver_mysql.String())
 
 type TableI interface {
 	Table() (table string)

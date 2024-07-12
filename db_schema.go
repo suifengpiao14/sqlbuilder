@@ -10,17 +10,17 @@ import (
 
 // 基于数据表填充对应数据，同时也可以基于此生成SQL DDL
 type Schema struct {
-	Title     string `json:"title"`
-	Required  bool   `json:"required,string"` // 对应数据库的not null
-	Comment   string `json:"comment"`
-	Type      string `json:"type"`
-	Default   any    `json:"default"`
-	Enums     Enums  `json:"enums"`
-	MaxLength int    `json:"maxLength"` // 字符串最大长度
-	MinLength int    `json:"minLength"` // 字符串最小长度
-	Maximum   uint   `json:"maximum"`   // 数字最大值
-	Minimum   int    `json:"minimum"`   // 数字最小值
-	RegExp    string `json:"regExp"`    //正则表达式
+	Title     string     `json:"title"`
+	Required  bool       `json:"required,string"` // 对应数据库的not null
+	Comment   string     `json:"comment"`
+	Type      SchemaType `json:"type"`
+	Default   any        `json:"default"`
+	Enums     Enums      `json:"enums"`
+	MaxLength int        `json:"maxLength"` // 字符串最大长度
+	MinLength int        `json:"minLength"` // 字符串最小长度
+	Maximum   uint       `json:"maximum"`   // 数字最大值
+	Minimum   int        `json:"minimum"`   // 数字最小值
+	RegExp    string     `json:"regExp"`    //正则表达式
 }
 
 func (schema Schema) FullComment() string {
@@ -38,9 +38,20 @@ func (schema Schema) AllowEmpty() bool {
 	return schema.MinLength < 1 && schema.Type == Schema_Type_string
 }
 
+// SchemaType 重新声明类型后，使用时IDE能自动识别到常量定义
+type SchemaType string
+
+func (st SchemaType) String() string {
+	return string(st)
+}
+
+func (st SchemaType) IsEqual(other SchemaType) bool {
+	return strings.EqualFold(string(st), string(other))
+}
+
 const (
-	Schema_Type_string = "string"
-	Schema_Type_int    = "int"
+	Schema_Type_string SchemaType = "string"
+	Schema_Type_int    SchemaType = "int"
 )
 
 type Enums []Enum
@@ -73,26 +84,36 @@ func (es Enums) ValuesStr() (valuesStr []string) {
 
 func (es Enums) Type() (typ string) {
 	if len(es) == 0 {
-		return Schema_Type_string
+		return Schema_Type_string.String()
 	}
 	e := es[0]
 	if _, ok := e.Key.(int); ok {
-		return Schema_Type_int
+		return Schema_Type_int.String()
 	}
-	return Schema_Type_string
+	return Schema_Type_string.String()
+}
+
+func (es Enums) Default() (enum Enum) {
+
+	for _, e := range es {
+		if e.IsDefault {
+			return e
+		}
+	}
+	return enum
 }
 
 func (es Enums) MaxLengthMaximum() (maxLength int, maximum uint) {
 	typ := es.Type()
 	switch typ {
-	case Schema_Type_int:
+	case Schema_Type_int.String():
 		for _, e := range es {
 			num := cast.ToUint(e.Key)
 			if num > maximum {
 				maximum = num
 			}
 		}
-	case Schema_Type_string:
+	case Schema_Type_string.String():
 		for _, e := range es {
 			length := len(cast.ToString(e.Key))
 			if length > maxLength {
@@ -113,8 +134,9 @@ func (es Enums) String() (str string) {
 }
 
 type Enum struct {
-	Title string `json:"title"`
-	Key   any    `json:"key"`
+	Title     string `json:"title"`
+	Key       any    `json:"key"`
+	IsDefault bool   `json:"isDefault"`
 }
 
 func (e Enum) IsEqual(val any) (ok bool) {
