@@ -21,6 +21,10 @@ type Schema struct {
 	Maximum   uint       `json:"maximum"`   // 数字最大值
 	Minimum   int        `json:"minimum"`   // 数字最小值
 	RegExp    string     `json:"regExp"`    //正则表达式
+
+	Primary      bool `json:"primary"`      //是否为主键
+	Unique       bool `json:"unique"`       // 是否为唯一键
+	ShieldUpdate bool `json:"shieldUpdate"` //屏蔽更新该字段,适合不可更新字段,如tenat,deleted_at
 }
 
 func (schema Schema) FullComment() string {
@@ -260,8 +264,25 @@ func ValueFnDBSchemaFormatType(field Field) (valueFn ValueFn) {
 	}
 }
 
-// ValueFnEmptyStr2Nil 空字符串改成nil,值改成nil后,sql语句中会忽略该字段,常常用在update,where 字句中
-func ValueFnEmptyStr2Nil(field Field, exceptFileds ...Field) (valueFn ValueFn) {
+func ValueFnForward(in any) (any, error) {
+	return nil, nil
+}
+func ValueFnShield(in any) (any, error) {
+	return nil, nil
+}
+
+func ValueFnEmpty2Nil(in any) (any, error) {
+	if cast.ToString(in) == "" {
+		return nil, nil
+	}
+	if cast.ToInt(in) == 0 {
+		return nil, nil
+	}
+	return in, nil
+}
+
+// GlobalValueFnEmptyStr2Nil 空字符串改成nil,值改成nil后,sql语句中会忽略该字段,常常用在update,where 字句中
+func GlobalValueFnEmptyStr2Nil(field Field, exceptFileds ...*Field) (valueFn ValueFn) {
 	return func(in any) (any, error) {
 		if Fields(exceptFileds).Contains(field) {
 			return in, nil

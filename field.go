@@ -76,100 +76,55 @@ func NewValueFns(fn func() (value any, err error)) ValueFns {
 	}
 }
 
-type WhereValueFn func(dbColumnName string, data any) (any, error) // whereFn 中会使用到数据库字段名 需要将dbColumnName传入
-
-type WhereValueFns []WhereValueFn
-
-// Insert 追加元素,不建议使用,建议用InsertAsFirst,InsertAsSecond
-func (fns *WhereValueFns) Insert(index int, subFns ...WhereValueFn) {
-	if *fns == nil {
-		*fns = make(WhereValueFns, 0)
+func ValueFnWhereLike(val any) (value any, err error) {
+	str := cast.ToString(val)
+	if str == "" {
+		return val, nil
 	}
-	l := len(*fns)
-	if l == 0 || index < 0 || l <= index { // 本身没有,直接添加,或者计划添加到结尾,或者指定位置比现有数组长,直接追加
-		*fns = append(*fns, subFns...)
-		return
-	}
-	if index == 0 { // index =0 插入第一个
-		tmp := make(WhereValueFns, 0)
-		tmp = append(tmp, subFns...)
-		tmp = append(tmp, *fns...)
-		*fns = tmp
-		return
-	}
-	pre, after := (*fns)[:index], (*fns)[index:]
-	tmp := make(WhereValueFns, 0)
-	tmp = append(tmp, pre...)
-	tmp = append(tmp, subFns...)
-	tmp = append(tmp, after...)
-	*fns = tmp
-}
-
-// InsertAsFirst 作为第一个元素插入,一般用于将数据导入到whereFn 中
-func (fns *WhereValueFns) InsertAsFirst(subFns ...WhereValueFn) {
-	fns.Insert(0, subFns...)
-}
-
-// InsertAsSecond 作为第二个元素插入,一般用于在获取数据后立即验证器插入
-func (fns *WhereValueFns) InsertAsSecond(subFns ...WhereValueFn) {
-	fns.Insert(1, subFns...)
-}
-
-// Append 常规添加
-func (fns *WhereValueFns) Append(subFns ...WhereValueFn) {
-	fns.Insert(-1, subFns...)
-}
-
-// AppendIfNotFirst 追加到最后,但是不能是第一个,一般用于生成SQL时格式化数据
-func (fns *WhereValueFns) AppendIfNotFirst(subFns ...WhereValueFn) {
-	if len(*fns) == 0 {
-		return
-	}
-	fns.Append(subFns...)
-}
-
-func NewWhereValueFns(fn func() (value any, err error)) WhereValueFns {
-	return WhereValueFns{
-		func(filedName string, data any) (value any, err error) {
-			return fn()
-		},
-	}
-}
-
-// ValueFnShield 屏蔽值，常用于取消某个字段作为查询条件
-func WhereValueFnShield(dbColumnName string, val any) (value any, err error) {
-	return nil, nil
+	value = Ilike{"%", str, "%"}
+	return value, nil
 }
 
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Name        string                                                 `json:"name"`
-	ValueFns    ValueFns                                               `json:"-"` // 增加error，方便封装字段验证规则
-	WhereFns    WhereValueFns                                          `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	Migrate     func(table string, options ...MigrateOptionI) Migrates `json:"-"`
-	ValidateFns ValidateFns                                            `json:"-"` // 设置验证参数验证器
-	Schema      *Schema                                                // 可以为空，为空建议设置默认值
-	Table       TableI                                                 // 关联表,方便收集Table全量信息
-	Api         interface{}                                            // 关联Api对象,方便收集Api全量信息
+	Name     string                                                 `json:"name"`
+	ValueFns ValueFns                                               `json:"-"` // 增加error，方便封装字段验证规则
+	WhereFns ValueFns                                               `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	Migrate  func(table string, options ...MigrateOptionI) Migrates `json:"-"`
+	Schema   *Schema                                                // 可以为空，为空建议设置默认值
+	Table    TableI                                                 // 关联表,方便收集Table全量信息
+	Api      interface{}                                            // 关联Api对象,方便收集Api全量信息
 }
 
-func (f *Field) AppendValidateFn(fns ...ValidateFn) *Field {
-	if f.ValidateFns == nil {
-		f.ValidateFns = make(ValidateFns, 0)
-	}
-	addr := &f.ValidateFns
-	*addr = append(*addr, fns...)
-	return f
+// DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
+func (f *Field) DBName() string {
+	return FieldName2DBColumnName(f.Name)
 }
 
 func (f *Field) SetName(name string) *Field {
-	f.Name = name
+	if name != "" {
+		f.Name = name
+	}
 	return f
 }
+
 func (f *Field) SetTitle(title string) *Field {
-	schema := Schema{}
-	schema.Title = title
-	f.MergeSchema(schema)
+	f.MergeSchema(Schema{Title: title})
+	return f
+}
+func (f *Field) SetRequired(required bool) *Field {
+	if f.Schema == nil {
+		f.Schema = &Schema{}
+	}
+	f.Schema.Required = required
+	return f
+}
+
+func (f *Field) ShieldUpdate(shieldUpdate bool) *Field {
+	if f.Schema == nil {
+		f.Schema = &Schema{}
+	}
+	f.Schema.ShieldUpdate = shieldUpdate
 	return f
 }
 
@@ -218,6 +173,15 @@ func (f *Field) MergeSchema(schema Schema) *Field {
 	if schema.RegExp != "" {
 		f.Schema.RegExp = schema.RegExp
 	}
+	if schema.Primary {
+		f.Schema.Primary = schema.Primary
+	}
+	if schema.Unique {
+		f.Schema.Unique = schema.Unique
+	}
+	if schema.ShieldUpdate {
+		f.Schema.ShieldUpdate = schema.ShieldUpdate
+	}
 
 	return f
 }
@@ -233,6 +197,22 @@ func (f *Field) LogString() string {
 	out := fmt.Sprintf("%s(%s)", title, str)
 	return out
 }
+
+func (f *Field) WithOptions(options ...OptionFn) *Field {
+	for _, optionFn := range options {
+		optionFn(f)
+	}
+	return f
+}
+
+func TrimNilField(field *Field, fn func(field *Field)) {
+	if field == nil {
+		return
+	}
+	fn(field)
+}
+
+type OptionFn func(field *Field)
 
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
 func NewField(valueFn ValueFn) (field *Field) {
@@ -252,8 +232,8 @@ var ValueFnArgEmptyStr2NilExceptFields = Fields{}
 
 var GlobalFnValueFns = func(f Field) ValueFns {
 	return ValueFns{
-		ValueFnEmptyStr2Nil(f, ValueFnArgEmptyStr2NilExceptFields...), // 将空置转换为nil,代替对数据判断 if v==""{//ignore}
-		ValueFnDBSchemaFormatType(f),                                  // 在转换为SQL前,将所有数据类型按照DB类型转换,主要是格式化int和string,提升SQL性能
+		GlobalValueFnEmptyStr2Nil(f, ValueFnArgEmptyStr2NilExceptFields...), // 将空置转换为nil,代替对数据判断 if v==""{//ignore}
+		ValueFnDBSchemaFormatType(f),                                        // 在转换为SQL前,将所有数据类型按照DB类型转换,主要是格式化int和string,提升SQL性能
 		//todo 统一实现数据库字段前缀处理
 		//todo 统一实现代码字段驼峰形转数据库字段蛇形
 		//todo 统一实现数据库字段替换,方便数据库字段更名
@@ -356,10 +336,8 @@ func (f Field) GetWhereValue(in any) (value any, err error) {
 	if err != nil {
 		return value, err
 	}
-
-	fieldName := FieldName2DBColumnName(f.Name)
 	for _, fn := range f.WhereFns {
-		value, err = fn(fieldName, value)
+		value, err = fn(value)
 		if err != nil {
 			return value, err
 		}
@@ -386,12 +364,6 @@ func (f Field) IsEqual(o Field) bool {
 
 // Validate  实现ValidateI 接口 可以再 valueFn ,whereValueFn 中手动调用
 func (c Field) Validate(val any) (err error) {
-	for _, vFn := range c.ValidateFns {
-		err = vFn.Validate(val)
-		if err != nil {
-			return err
-		}
-	}
 	if c.Schema == nil {
 		return nil
 	}
@@ -405,6 +377,9 @@ func (c Field) Validate(val any) (err error) {
 }
 
 func (c Field) FormatType(val any) (value any) {
+	if IsNil(nil) {
+		return val
+	}
 	value = val
 	if c.Schema == nil {
 		return value
@@ -427,6 +402,9 @@ func (f Field) Data() (data any, err error) {
 	if err != nil {
 		return nil, err
 	}
+	if f.Schema != nil && f.Schema.ShieldUpdate {
+		return nil, nil
+	}
 	data = map[string]any{
 		FieldName2DBColumnName(f.Name): val,
 	}
@@ -447,7 +425,7 @@ func (f Field) Where() (expressions Expressions, err error) {
 	return ConcatExpression(goqu.Ex{FieldName2DBColumnName(f.Name): val}), nil
 }
 
-type Fields []Field
+type Fields []*Field
 
 func (fs Fields) Contains(field Field) (exists bool) {
 	for _, f := range fs {
@@ -468,6 +446,11 @@ func (fs Fields) Where() (expressions Expressions, err error) {
 		expressions = append(expressions, subExprs...)
 	}
 	return expressions, nil
+}
+
+func (fs *Fields) Append(fields ...*Field) *Fields {
+	*fs = append(*fs, fields...)
+	return fs
 }
 
 func (fs Fields) Json() string {

@@ -117,60 +117,24 @@ func ConcatExpression(expressions ...exp.Expression) Expressions {
 
 // InsertParam 供子类复用,修改数据
 type InsertParam struct {
-	_TableI      TableI
-	_DataSet     DataSet
-	_ValidateSet ValidateSet
+	_TableI TableI
+	_Fields Fields
 }
 
 func NewInsertBuilder(table TableI) InsertParam {
 	return InsertParam{
-		_TableI:  table,
-		_DataSet: make(DataSet, 0),
+		_TableI: table,
+		_Fields: make(Fields, 0),
 	}
 }
 
-func (p InsertParam) _Copy() InsertParam {
-	return InsertParam{
-		_TableI:      p._TableI,
-		_DataSet:     p._DataSet,
-		_ValidateSet: p._ValidateSet,
-	}
-}
-func (p InsertParam) Merge(insertParams ...InsertParam) InsertParam {
-	newP := p._Copy()
-	for _, up := range insertParams {
-		newP._DataSet = append(newP._DataSet, up._DataSet...)
-		newP._ValidateSet = append(newP._ValidateSet, up._ValidateSet...)
-	}
-	return newP
-}
-func (p InsertParam) AppendValidate(validateSet ...ValidateI) InsertParam {
-	newP := p._Copy()
-	newP._ValidateSet = append(newP._ValidateSet, validateSet...)
-	return newP
-}
-
-func (p InsertParam) _Validate() (err error) {
-	for _, v := range p._ValidateSet {
-		err = v.Validate(nil)
-		if IsErrorValueNil(err) {
-			err = nil
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (p InsertParam) AppendData(dataSet ...DataI) InsertParam {
-	newP := p._Copy()
-	newP._DataSet = append(newP._DataSet, dataSet...)
-	return newP
+func (p InsertParam) AppendField(fields ...*Field) InsertParam {
+	p._Fields.Append(fields...)
+	return p
 }
 
 func (p InsertParam) Data() (data any, err error) {
-	return MergeData(p._DataSet...)
+	return p._Fields.Data()
 }
 
 func (p InsertParam) ToSQL() (sql string, err error) {
@@ -184,10 +148,6 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 	}
 	if p._TableI == nil {
 		err = errors.Errorf("InsertParam._Table required")
-		return "", err
-	}
-	err = p._Validate()
-	if err != nil {
 		return "", err
 	}
 	table := p._TableI.Table()
@@ -230,6 +190,7 @@ type UpdateParam struct {
 	_DataSet     DataSet  //中间件的Data 集合
 	_WhereSet    WhereSet //中间件的Where 集合
 	_ValidateSet ValidateSet
+	_Fields      Fields
 }
 
 func NewUpdateBuilder(table TableI) UpdateParam {
@@ -237,6 +198,7 @@ func NewUpdateBuilder(table TableI) UpdateParam {
 		_TableI:   table,
 		_DataSet:  make(DataSet, 0),
 		_WhereSet: make(WhereSet, 0),
+		_Fields:   make(Fields, 0),
 	}
 }
 
@@ -246,6 +208,7 @@ func (p UpdateParam) _Copy() UpdateParam {
 		_DataSet:     p._DataSet,
 		_WhereSet:    p._WhereSet,
 		_ValidateSet: p._ValidateSet,
+		_Fields:      p._Fields,
 	}
 }
 
@@ -255,7 +218,14 @@ func (p UpdateParam) Merge(updateParams ...UpdateParam) UpdateParam {
 		newP._DataSet = append(newP._DataSet, up._DataSet...)
 		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
 		newP._ValidateSet = append(newP._ValidateSet, up._ValidateSet...)
+		newP._Fields = append(newP._Fields, up._Fields...)
 	}
+	return newP
+}
+
+func (p UpdateParam) AppendField(fields ...*Field) UpdateParam {
+	newP := p._Copy()
+	newP._Fields = append(newP._Fields, fields...)
 	return newP
 }
 
@@ -404,22 +374,12 @@ type ListParam struct {
 	_ListParamI ListParamI
 	_WhereSet   WhereSet
 	_OrderSet   OrderSet
+	_Fields     Fields
 }
 
-func (p ListParam) _Copy() ListParam {
-	return ListParam{
-		_ListParamI: p._ListParamI,
-		_WhereSet:   p._WhereSet,
-		_OrderSet:   p._OrderSet,
-	}
-}
-func (p ListParam) Merge(listParams ...ListParam) ListParam {
-	newP := p._Copy()
-	for _, up := range listParams {
-		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
-		newP._OrderSet = append(newP._OrderSet, up._OrderSet...)
-	}
-	return newP
+func (p ListParam) AppendFields(fields ...*Field) ListParam {
+	p._Fields.Append(fields...)
+	return p
 }
 
 func NewListBuilder(listParamI ListParamI) ListParam {
@@ -428,16 +388,10 @@ func NewListBuilder(listParamI ListParamI) ListParam {
 		_WhereSet:   make(WhereSet, 0),
 	}
 }
-func (p ListParam) AppendWhere(whereSet ...WhereI) ListParam {
-	newP := p._Copy()
-	newP._WhereSet = append(newP._WhereSet, whereSet...)
-	return newP
-}
 
 func (p ListParam) AppendOrder(orderSet ...Order) ListParam {
-	newP := p._Copy()
-	newP._OrderSet = append(newP._OrderSet, orderSet...)
-	return newP
+	p._OrderSet = append(p._OrderSet, orderSet...)
+	return p
 }
 
 func (p ListParam) Where() (expressions Expressions, err error) {
@@ -450,7 +404,7 @@ func (p ListParam) _Order() (orderedExpression []exp.OrderedExpression) {
 // CustomSQL 自定义SQL，方便构造更复杂的查询语句，如 Group,Having 等
 func (p ListParam) CustomSQL(sqlFn func(p ListParam, ds *goqu.SelectDataset) (newDs *goqu.SelectDataset, err error)) (sql string, err error) {
 	ds := Dialect.Select()
-	ds, err = sqlFn(p._Copy(), ds)
+	ds, err = sqlFn(p, ds)
 	if err != nil {
 		return "", err
 	}
