@@ -48,18 +48,6 @@ func (fn TableFn) Table() (table string) {
 	return fn()
 }
 
-type WhereI interface {
-	Where() (expressions Expressions, err error) // 容许在构建where函数时验证必要参数返回报错
-}
-
-type WhereFn func() (expressions Expressions, err error)
-
-func (fn WhereFn) Where() (expressions Expressions, err error) {
-	return fn()
-}
-
-type WhereSet []WhereI
-
 type PaginationFn func() (index int, size int)
 
 type _Pagination interface {
@@ -81,31 +69,6 @@ type OrderSet []Order
 type _Select interface {
 	Select() (columns []any)
 }
-
-type ValidateI interface {
-	Validate(val any) (err error) // 流程上的验证,使用该签名接口,更符合语意
-}
-
-type ValidateFn func(val any) (err error)
-
-func (fn ValidateFn) Validate(val any) (err error) {
-	return fn(val)
-}
-
-type ValidateFns []ValidateFn
-type ValidateSet []ValidateI
-
-type DataI interface {
-	Data() (data any, err error) //容许验证参数返回错误
-}
-
-type DataFn func() (any, error)
-
-func (fn DataFn) Data() (data any, err error) {
-	return fn()
-}
-
-type DataSet []DataI
 
 func ConcatOrderedExpression(orderedExpressions ...exp.OrderedExpression) []exp.OrderedExpression {
 	return orderedExpressions
@@ -387,13 +350,13 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-func MergeData(dataIs ...DataI) (map[string]any, error) {
+func MergeData(dataFns ...func() (any, error)) (map[string]any, error) {
 	newData := map[string]any{}
-	for _, dataI := range dataIs {
-		if IsNil(dataI) {
+	for _, dataFn := range dataFns {
+		if IsNil(dataFn) {
 			continue
 		}
-		data, err := dataI.Data()
+		data, err := dataFn()
 		if IsErrorValueNil(err) {
 			err = nil // 消除error
 		}
@@ -436,22 +399,6 @@ func dataAny2Map(data any) (newData map[string]any, err error) {
 		return nil, errors.Errorf("unsupported update interface type %+v,got:%+v", rv.Type(), data)
 	}
 	return newData, nil
-}
-
-func MergeWhere(whereIs ...WhereI) (mergedWhere Expressions, err error) {
-	expressions := make(Expressions, 0)
-	for _, whereI := range whereIs {
-		if IsNil(whereI) {
-			continue
-		}
-		where, err := whereI.Where()
-		if err != nil {
-			return expressions, err
-		}
-		expressions = append(expressions, where...)
-	}
-
-	return expressions, nil
 }
 
 func MergeOrder(orders ...Order) (orderedExpressions []exp.OrderedExpression) {

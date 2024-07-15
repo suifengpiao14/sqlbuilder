@@ -436,18 +436,6 @@ func (fs Fields) Contains(field Field) (exists bool) {
 	return false
 }
 
-func (fs Fields) Where() (expressions Expressions, err error) {
-	expressions = make(Expressions, 0)
-	for _, field := range fs {
-		subExprs, err := field.Where()
-		if err != nil {
-			return nil, err
-		}
-		expressions = append(expressions, subExprs...)
-	}
-	return expressions, nil
-}
-
 func (fs *Fields) Append(fields ...*Field) *Fields {
 	*fs = append(*fs, fields...)
 	return fs
@@ -491,23 +479,35 @@ func (fs Fields) DBColumns() (columns Columns, err error) {
 	return columns, nil
 }
 
-func (fs Fields) Data() (data any, err error) {
-	dataSet := make(DataSet, 0)
-	for _, f := range fs {
-		dataSet = append(dataSet, DataFn(f.Data))
+func (fs Fields) Where() (expressions Expressions, err error) {
+	expressions = make(Expressions, 0)
+	for _, field := range fs {
+		subExprs, err := field.Where()
+		if err != nil {
+			return nil, err
+		}
+		expressions = append(expressions, subExprs...)
 	}
-	return MergeData(dataSet...)
+	return expressions, nil
 }
 
-type FieldFn func() []Field
-
-func (fn FieldFn) Data() (data any, err error) {
-	dataSet := make(DataSet, 0)
-	columns := fn()
-	for _, c := range columns {
-		dataSet = append(dataSet, DataFn(c.Data))
+func (fs Fields) Data() (data any, err error) {
+	dataMap := make(map[string]any, 0)
+	for _, f := range fs {
+		data, err := f.Data()
+		if err != nil {
+			return nil, err
+		}
+		if IsNil(data) {
+			continue
+		}
+		if m, ok := data.(map[string]any); ok { // 值接收map[string]any 格式
+			for k, v := range m {
+				dataMap[k] = v
+			}
+		}
 	}
-	return MergeData(dataSet...)
+	return dataMap, nil
 }
 
 func IsNil(v any) bool {

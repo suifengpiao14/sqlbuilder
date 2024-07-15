@@ -148,41 +148,6 @@ func (e Enum) IsEqual(val any) (ok bool) {
 	return ok
 }
 
-type ValidatorI interface {
-	Name() string
-	ValidateI
-}
-
-type ValidatorIs []ValidatorI
-
-func (vis ValidatorIs) GetByNames(names ...string) (validatorIs ValidatorIs) {
-	validatorIs = make(ValidatorIs, 0)
-	for _, vi := range vis {
-		for _, name := range names {
-			if strings.EqualFold(vi.Name(), name) {
-				validatorIs = append(validatorIs, vi)
-			}
-		}
-
-	}
-	return validatorIs
-}
-func (vis ValidatorIs) Validate(val any) (err error) {
-	for _, vi := range vis {
-		err = vi.Validate(val)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-var validatorIs = make(ValidatorIs, 0)
-
-func RegisterValidator(validators ...ValidatorI) {
-	validatorIs = append(validatorIs, validators...)
-}
-
 func (schema Schema) Validate(fieldName string, field reflect.Value) error {
 	// 验证 required
 	if schema.Required && isEmptyValue(field) {
