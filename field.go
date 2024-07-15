@@ -96,6 +96,24 @@ type Field struct {
 	Api      interface{}                                            // 关联Api对象,方便收集Api全量信息
 }
 
+// 不复制whereFns，ValueFns
+func (f *Field) Copy() (field *Field) {
+	field = &Field{}
+	field.Name = f.Name
+	if len(f.ValueFns) > 0 {
+		fn := f.ValueFns[0]
+		field.ValueFns.Append(fn) // 值拷贝第一个,原始值
+	}
+	var schema Schema
+	if field.Schema != nil {
+		schema = *field.Schema
+	}
+	field.Schema = &schema // 重新给地址
+	field.Table = f.Table
+	field.Api = f.Api
+	return field
+}
+
 // DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
 func (f *Field) DBName() string {
 	return FieldName2DBColumnName(f.Name)
@@ -192,16 +210,14 @@ func (f *Field) LogString() string {
 	if f.Schema != nil && f.Schema.Title == "" {
 		title = f.Schema.Title
 	}
-	val, _ := f.GetValue(nil)
+	val, _ := f.GetValue()
 	str := cast.ToString(val)
 	out := fmt.Sprintf("%s(%s)", title, str)
 	return out
 }
 
 func (f *Field) WithOptions(options ...OptionFn) *Field {
-	for _, optionFn := range options {
-		optionFn(f)
-	}
+	OptionFns(options).Apply(f)
 	return f
 }
 
@@ -214,10 +230,25 @@ func TrimNilField(field *Field, fn func(field *Field)) {
 
 type OptionFn func(field *Field)
 
+func (oFn OptionFn) Apply(field *Field) {
+	oFn(field)
+}
+
+type OptionFns []OptionFn
+
+func (oFns OptionFns) Apply(field *Field) {
+	for _, oFn := range oFns {
+		oFn(field)
+	}
+}
+
+type OptionsFn func(fields ...*Field)
+
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
-func NewField(valueFn ValueFn) (field *Field) {
+func NewField(valueFn ValueFn, options ...OptionFn) (field *Field) {
 	field = &Field{}
 	field.ValueFns.InsertAsFirst(valueFn)
+	OptionFns(options).Apply(field)
 	return field
 }
 
@@ -228,12 +259,12 @@ func IsErrorValueNil(err error) bool {
 }
 
 // ValueFnArgEmptyStr2NilExceptFields 将空字符串值转换为nil值时排除的字段,常见的有 deleted_at 字段,空置代表正常
-var ValueFnArgEmptyStr2NilExceptFields = Fields{}
+//var ValueFnArgEmptyStr2NilExceptFields = Fields{}
 
 var GlobalFnValueFns = func(f Field) ValueFns {
 	return ValueFns{
-		GlobalValueFnEmptyStr2Nil(f, ValueFnArgEmptyStr2NilExceptFields...), // 将空置转换为nil,代替对数据判断 if v==""{//ignore}
-		ValueFnDBSchemaFormatType(f),                                        // 在转换为SQL前,将所有数据类型按照DB类型转换,主要是格式化int和string,提升SQL性能
+		//GlobalValueFnEmptyStr2Nil(f, ValueFnArgEmptyStr2NilExceptFields...), // 将空置转换为nil,代替对数据判断 if v==""{//ignore}  这个函数在全局修改了函数值，出现问题，比较难跟踪，改到每个组件自己处理
+		ValueFnDBSchemaFormatType(f), // 在转换为SQL前,将所有数据类型按照DB类型转换,主要是格式化int和string,提升SQL性能，将数据格式改成DB格式，不影响当期调用链，可以作为全局配置
 		//todo 统一实现数据库字段前缀处理
 		//todo 统一实现代码字段驼峰形转数据库字段蛇形
 		//todo 统一实现数据库字段替换,方便数据库字段更名
@@ -299,8 +330,7 @@ func (f Field) DBColumn() (doc *Column, err error) {
 	return doc, nil
 }
 
-func (f Field) GetValue(in any) (value any, err error) {
-	value = in
+func (f Field) GetValue() (value any, err error) {
 	f.ValueFns.InsertAsSecond(func(in any) (any, error) { //插入数据验证
 		err = f.Validate(in)
 		if err != nil {
@@ -323,15 +353,13 @@ func (f Field) GetValue(in any) (value any, err error) {
 }
 
 // GetWhereValue 获取Where 值
-func (f Field) GetWhereValue(in any) (value any, err error) {
+func (f Field) GetWhereValue() (value any, err error) {
 	if len(f.WhereFns) == 0 {
 		return nil, nil
 	}
-	value = in
-	value, err = f.GetValue(in)
+	value, err = f.GetValue()
 	if IsErrorValueNil(err) {
-		err = nil
-		return nil, nil
+		err = nil // 这里不直接返回，仍然遍历 执行whereFns，方便理解流程（直接返回后，期望的whereFn没有执行，不知道流程在哪里中断了，也没有错误抛出，非常困惑，所以不能直接返回）
 	}
 	if err != nil {
 		return value, err
@@ -351,11 +379,11 @@ func (f Field) GetWhereValue(in any) (value any, err error) {
 
 // IsEqual 判断名称值是否相等
 func (f Field) IsEqual(o Field) bool {
-	fv, err := f.GetValue(nil)
+	fv, err := f.GetValue()
 	if err != nil || IsNil(fv) {
 		return false
 	}
-	ov, err := o.GetValue(nil)
+	ov, err := o.GetValue()
 	if err != nil || IsNil(ov) {
 		return false
 	}
@@ -395,7 +423,7 @@ func (c Field) FormatType(val any) (value any) {
 }
 
 func (f Field) Data() (data any, err error) {
-	val, err := f.GetValue(nil)
+	val, err := f.GetValue()
 	if IsErrorValueNil(err) {
 		return nil, nil // 忽略空值错误
 	}
@@ -412,7 +440,7 @@ func (f Field) Data() (data any, err error) {
 }
 
 func (f Field) Where() (expressions Expressions, err error) {
-	val, err := f.GetWhereValue(nil)
+	val, err := f.GetWhereValue()
 	if err != nil {
 		return nil, err
 	}
@@ -426,6 +454,18 @@ func (f Field) Where() (expressions Expressions, err error) {
 }
 
 type Fields []*Field
+
+func (fs Fields) Copy() (fields Fields) {
+	fields = make(Fields, 0)
+	for _, f := range fs {
+		fields = append(fields, f.Copy())
+	}
+	return fields
+}
+
+func NewFields(fields ...*Field) *Fields {
+	return new(Fields).Append(fields...)
+}
 
 func (fs Fields) Contains(field Field) (exists bool) {
 	for _, f := range fs {
@@ -441,6 +481,20 @@ func (fs *Fields) Append(fields ...*Field) *Fields {
 	return fs
 }
 
+func (fs *Fields) WithOptions(options ...OptionsFn) *Fields {
+	for _, optionFn := range options {
+		optionFn(*fs...)
+	}
+	return fs
+}
+
+func (fs *Fields) AppendWhereValueFn(whereValueFns ...ValueFn) *Fields {
+	for _, f := range *fs {
+		f.WhereFns.Append(whereValueFns...)
+	}
+	return fs
+}
+
 func (fs Fields) Json() string {
 	b, _ := json.Marshal(fs)
 	return string(b)
@@ -448,7 +502,7 @@ func (fs Fields) Json() string {
 func (fs Fields) String() string {
 	m := make(map[string]any)
 	for _, f := range fs {
-		val, _ := f.GetValue(nil)
+		val, _ := f.GetValue()
 		m[FieldName2DBColumnName(f.Name)] = val
 	}
 	b, _ := json.Marshal(m)

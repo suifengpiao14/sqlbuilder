@@ -230,32 +230,36 @@ func ValueFnDBSchemaFormatType(field Field) (valueFn ValueFn) {
 }
 
 func ValueFnForward(in any) (any, error) {
-	return nil, nil
+	return in, nil
 }
 func ValueFnShield(in any) (any, error) {
 	return nil, nil
 }
 
 func ValueFnEmpty2Nil(in any) (any, error) {
-	if cast.ToString(in) == "" {
-		return nil, nil
-	}
-	if cast.ToInt(in) == 0 {
-		return nil, nil
+	switch val := in.(type) {
+	case string:
+		if val == "" {
+			return nil, nil
+		}
+	case int:
+		if val == 0 {
+			return nil, nil
+		}
 	}
 	return in, nil
 }
 
 // GlobalValueFnEmptyStr2Nil 空字符串改成nil,值改成nil后,sql语句中会忽略该字段,常常用在update,where 字句中
-func GlobalValueFnEmptyStr2Nil(field Field, exceptFileds ...*Field) (valueFn ValueFn) {
-	return func(in any) (any, error) {
-		if Fields(exceptFileds).Contains(field) {
-			return in, nil
-		}
-		str := cast.ToString(in)
-		if str == "" {
-			return nil, nil
-		}
-		return in, nil
-	}
-}
+// func GlobalValueFnEmptyStr2Nil(field Field, exceptFileds ...*Field) (valueFn ValueFn) {
+// 	return func(in any) (any, error) {
+// 		if Fields(exceptFileds).Contains(field) {
+// 			return in, nil
+// 		}
+// 		str := cast.ToString(in)
+// 		if str == "" {
+// 			return nil, nil
+// 		}
+// 		return in, nil
+// 	}
+// }
