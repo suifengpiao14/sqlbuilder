@@ -60,6 +60,22 @@ const (
 
 type Enums []Enum
 
+func (es *Enums) Append(enums ...Enum) {
+	exists := false
+	for _, en := range enums {
+		for _, e := range *es {
+			if e.IsEqual(en) {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			*es = append(*es, en)
+		}
+	}
+
+}
+
 func (es Enums) Values() (values []any) {
 	values = make([]any, 0)
 	for _, e := range es {
@@ -138,10 +154,16 @@ func (es Enums) String() (str string) {
 }
 
 type Enum struct {
+	Tag       string `json:"tag"`
 	Title     string `json:"title"`
 	Key       any    `json:"key"`
 	IsDefault bool   `json:"isDefault"`
 }
+
+const (
+	Enum_tag_true  = "true"
+	Enum_tag_false = "false"
+)
 
 func (e Enum) IsEqual(val any) (ok bool) {
 	ok = strings.EqualFold(cast.ToString(e.Key), cast.ToString(val))

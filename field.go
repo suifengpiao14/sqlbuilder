@@ -130,6 +130,13 @@ func (f *Field) SetTitle(title string) *Field {
 	f.MergeSchema(Schema{Title: title})
 	return f
 }
+
+func (f *Field) AppendEnum(enums ...Enum) *Field {
+	f.MergeSchema(Schema{
+		Enums: enums,
+	})
+	return f
+}
 func (f *Field) SetRequired(required bool) *Field {
 	if f.Schema == nil {
 		f.Schema = &Schema{}
@@ -169,7 +176,7 @@ func (f *Field) MergeSchema(schema Schema) *Field {
 	}
 
 	if len(schema.Enums) > 0 {
-		f.Schema.Enums = schema.Enums
+		f.Schema.Enums.Append(schema.Enums...)
 	}
 
 	if schema.MaxLength > 0 {
