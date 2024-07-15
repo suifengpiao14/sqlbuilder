@@ -186,89 +186,28 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 }
 
 type UpdateParam struct {
-	_TableI      TableI
-	_DataSet     DataSet  //中间件的Data 集合
-	_WhereSet    WhereSet //中间件的Where 集合
-	_ValidateSet ValidateSet
-	_Fields      Fields
+	_TableI TableI
+	_Fields Fields
 }
 
 func NewUpdateBuilder(table TableI) UpdateParam {
 	return UpdateParam{
-		_TableI:   table,
-		_DataSet:  make(DataSet, 0),
-		_WhereSet: make(WhereSet, 0),
-		_Fields:   make(Fields, 0),
+		_TableI: table,
+		_Fields: make(Fields, 0),
 	}
-}
-
-func (p UpdateParam) _Copy() UpdateParam {
-	return UpdateParam{
-		_TableI:      p._TableI,
-		_DataSet:     p._DataSet,
-		_WhereSet:    p._WhereSet,
-		_ValidateSet: p._ValidateSet,
-		_Fields:      p._Fields,
-	}
-}
-
-func (p UpdateParam) Merge(updateParams ...UpdateParam) UpdateParam {
-	newP := p._Copy()
-	for _, up := range updateParams {
-		newP._DataSet = append(newP._DataSet, up._DataSet...)
-		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
-		newP._ValidateSet = append(newP._ValidateSet, up._ValidateSet...)
-		newP._Fields = append(newP._Fields, up._Fields...)
-	}
-	return newP
 }
 
 func (p UpdateParam) AppendField(fields ...*Field) UpdateParam {
-	newP := p._Copy()
-	newP._Fields = append(newP._Fields, fields...)
-	return newP
+	p._Fields.Append(fields...)
+	return p
 }
 
-func (p UpdateParam) AppendValidate(validateSet ...ValidateI) UpdateParam {
-	newP := p._Copy()
-	newP._ValidateSet = append(newP._ValidateSet, validateSet...)
-	return newP
-}
-
-func (p UpdateParam) _Validate() (err error) {
-	for _, v := range p._ValidateSet {
-		err = v.Validate(nil)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (p UpdateParam) AppendData(dataSet ...DataI) UpdateParam {
-	newP := p._Copy()
-	newP._DataSet = append(newP._DataSet, dataSet...)
-	return newP
-}
-
-func (p UpdateParam) AppendWhere(whereSet ...WhereI) UpdateParam {
-	newP := p._Copy()
-	newP._WhereSet = append(newP._WhereSet, whereSet...)
-	return newP
-}
 func (p UpdateParam) Data() (data any, err error) {
-	return MergeData(p._DataSet...)
+	return p._Fields.Data()
 }
 
 func (p UpdateParam) Where() (expressions Expressions, err error) {
-	expressions, err = MergeWhere(p._WhereSet...)
-	if err != nil {
-		return nil, err
-	}
-	if expressions.IsEmpty() {
-		return nil, ERROR_EMPTY_WHERE // 更新条件下，内置不容许条件为空，明确需要，可以增加1=1 条件
-	}
-	return expressions, nil
+	return p._Fields.Where()
 }
 
 func (p UpdateParam) ToSQL() (sql string, err error) {
@@ -276,10 +215,7 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
-	err = p._Validate()
-	if err != nil {
-		return "", err
-	}
+
 	where, err := p.Where()
 	if err != nil {
 		return "", err
@@ -295,52 +231,32 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 type FirstParamI interface {
 	TableI
 	_Select
-	//Where
-	//Order
 }
 
 type FirstParam struct {
 	_FirstParamI FirstParamI
-	_WhereSet    WhereSet //中间件的Where 集合
 	_OrderSet    OrderSet
+	_Fields      Fields
 }
 
-func (p FirstParam) _Copy() FirstParam {
-	return FirstParam{
-		_FirstParamI: p._FirstParamI,
-		_WhereSet:    p._WhereSet,
-		_OrderSet:    p._OrderSet,
-	}
+func (p FirstParam) AppendField(fields ...*Field) FirstParam {
+	p._Fields.Append(fields...)
+	return p
 }
-func (p FirstParam) Merge(firstParams ...FirstParam) FirstParam {
-	newP := p._Copy()
-	for _, up := range firstParams {
-		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
-		newP._OrderSet = append(newP._OrderSet, up._OrderSet...)
-	}
-	return newP
-}
-
 func NewFirstBuilder(firstParamI FirstParamI) FirstParam {
 	return FirstParam{
 		_FirstParamI: firstParamI,
-		_WhereSet:    make(WhereSet, 0),
+		_Fields:      make(Fields, 0),
 	}
 }
 
-func (p FirstParam) AppendWhere(whereSet ...WhereI) FirstParam {
-	newP := p._Copy()
-	newP._WhereSet = append(newP._WhereSet, whereSet...)
-	return newP
-}
 func (p FirstParam) Where() (expressions Expressions, err error) {
-	return MergeWhere(p._WhereSet...)
+	return p._Fields.Where()
 }
 
 func (p FirstParam) AppendOrder(orderSet ...Order) FirstParam {
-	newP := p._Copy()
-	newP._OrderSet = append(newP._OrderSet, orderSet...)
-	return newP
+	p._OrderSet = append(p._OrderSet, orderSet...)
+	return p
 }
 
 func (p FirstParam) _Order() (orderedExpression []exp.OrderedExpression) {
@@ -372,7 +288,6 @@ type ListParamI interface {
 
 type ListParam struct {
 	_ListParamI ListParamI
-	_WhereSet   WhereSet
 	_OrderSet   OrderSet
 	_Fields     Fields
 }
@@ -385,7 +300,6 @@ func (p ListParam) AppendFields(fields ...*Field) ListParam {
 func NewListBuilder(listParamI ListParamI) ListParam {
 	return ListParam{
 		_ListParamI: listParamI,
-		_WhereSet:   make(WhereSet, 0),
 	}
 }
 
@@ -395,7 +309,7 @@ func (p ListParam) AppendOrder(orderSet ...Order) ListParam {
 }
 
 func (p ListParam) Where() (expressions Expressions, err error) {
-	return MergeWhere(p._WhereSet...)
+	return p._Fields.Where()
 }
 func (p ListParam) _Order() (orderedExpression []exp.OrderedExpression) {
 	return MergeOrder(p._OrderSet...)
@@ -441,39 +355,23 @@ func (p ListParam) ToSQL() (sql string, err error) {
 }
 
 type TotalParam struct {
-	_Table    TableI
-	_WhereSet WhereSet
+	_Table  TableI
+	_Fields Fields
 }
 
 func NewTotalBuilder(table TableI) TotalParam {
 	return TotalParam{
-		_Table:    table,
-		_WhereSet: make(WhereSet, 0),
+		_Table: table,
 	}
 }
 
-func (p TotalParam) _Copy() TotalParam {
-	return TotalParam{
-		_Table:    p._Table,
-		_WhereSet: p._WhereSet,
-	}
-}
-func (p TotalParam) Merge(totalParams ...TotalParam) TotalParam {
-	newP := p._Copy()
-	for _, up := range totalParams {
-		newP._WhereSet = append(newP._WhereSet, up._WhereSet...)
-	}
-	return newP
-}
-
-func (p TotalParam) AppendWhere(whereSet ...WhereI) TotalParam {
-	newP := p._Copy()
-	newP._WhereSet = append(newP._WhereSet, whereSet...)
-	return newP
+func (p TotalParam) AppendFields(fields ...*Field) TotalParam {
+	p._Fields.Append(fields...)
+	return p
 }
 
 func (p TotalParam) Where() (expressions Expressions, err error) {
-	return MergeWhere(p._WhereSet...)
+	return p._Fields.Where()
 }
 
 func (p TotalParam) ToSQL() (sql string, err error) {
