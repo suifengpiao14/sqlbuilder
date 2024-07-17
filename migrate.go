@@ -18,9 +18,13 @@ const (
 const (
 	SCENE_SQL_INSERT Scene = "insert"
 	SCENE_SQL_UPDATE Scene = "update"
-	SCENE_SQL_FIRST  Scene = "first"
-	SCENE_SQL_LIST   Scene = "list"
-	SCENE_SQL_TOTAL  Scene = "total"
+	SCENE_SQL_SELECT Scene = "select"
+)
+
+const (
+	SCENE_API_INSERT Scene = "insert"
+	SCENE_API_UPDATE Scene = "update"
+	SCENE_API_SELECT Scene = "select"
 )
 
 func (s Scene) IsSame(target Scene) bool {

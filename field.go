@@ -94,6 +94,7 @@ type Field struct {
 	Schema   *Schema                                                // 可以为空，为空建议设置默认值
 	Table    TableI                                                 // 关联表,方便收集Table全量信息
 	Api      interface{}                                            // 关联Api对象,方便收集Api全量信息
+	scene    Scene                                                  // 场景
 }
 
 // 不复制whereFns，ValueFns
@@ -250,6 +251,28 @@ func (oFns OptionFns) Apply(field *Field) {
 }
 
 type OptionsFn func(fields ...*Field)
+
+// SetScene Scene 场景，增加 insert,update,select 场景，方便针对场景设置，如enums, 下拉选择有全选，新增、修改没有
+func (f *Field) SetScene(scene Scene) *Field {
+	f.scene = scene
+	return f
+}
+
+// Scene  获取场景
+func (f *Field) Scene() Scene {
+	return f.scene
+}
+func (f *Field) SceneIsSelect() bool {
+	return f.scene.IsSame(SCENE_API_SELECT)
+}
+
+func (f *Field) SceneIsInsert() bool {
+	return f.scene.IsSame(SCENE_API_SELECT)
+}
+
+func (f *Field) SceneIsUpdate() bool {
+	return f.scene.IsSame(SCENE_API_SELECT)
+}
 
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
 func NewField(valueFn ValueFn, options ...OptionFn) (field *Field) {

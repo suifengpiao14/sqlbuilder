@@ -60,7 +60,8 @@ const (
 
 type Enums []Enum
 
-func (es *Enums) Append(enums ...Enum) {
+// append 排重后面再融入优化
+func (es *Enums) append(enums ...Enum) {
 	exists := false
 	for _, en := range enums {
 		for _, e := range *es {
@@ -74,6 +75,41 @@ func (es *Enums) Append(enums ...Enum) {
 		}
 	}
 
+}
+
+// Insert 追加元素,不建议使用,建议用InsertAsFirst,InsertAsSecond
+func (es *Enums) Insert(index int, enums ...Enum) {
+	if *es == nil {
+		*es = make(Enums, 0)
+	}
+	l := len(*es)
+	if l == 0 || index < 0 || l <= index { // 本身没有,直接添加,或者计划添加到结尾,或者指定位置比现有数组长,直接追加
+		*es = append(*es, enums...)
+		return
+	}
+	if index == 0 { // index =0 插入第一个
+		tmp := make(Enums, 0)
+		tmp = append(tmp, enums...)
+		tmp = append(tmp, *es...)
+		*es = tmp
+		return
+	}
+	pre, after := (*es)[:index], (*es)[index:]
+	tmp := make(Enums, 0)
+	tmp = append(tmp, pre...)
+	tmp = append(tmp, enums...)
+	tmp = append(tmp, after...)
+	*es = tmp
+}
+
+// InsertAsFirst 作为第一个元素插入,一般用于将数据导入到whereFn 中
+func (es *Enums) InsertAsFirst(enums ...Enum) {
+	es.Insert(0, enums...)
+}
+
+// Append 常规添加
+func (es *Enums) Append(enums ...Enum) {
+	es.Insert(-1, enums...)
 }
 
 func (es Enums) Values() (values []any) {
@@ -100,6 +136,18 @@ func (es Enums) ValuesStr() (valuesStr []string) {
 		valuesStr = append(valuesStr, cast.ToString(v))
 	}
 	return valuesStr
+}
+func (es Enums) Title(key any) string {
+	return es.Get(key).Title
+}
+
+func (es Enums) Get(key any) (enum Enum) {
+	for _, e := range es {
+		if e.IsEqual(key) {
+			return e
+		}
+	}
+	return
 }
 
 func (es Enums) Type() (typ string) {
@@ -153,10 +201,21 @@ func (es Enums) String() (str string) {
 	return fmt.Sprintf("(%s)", strings.Join(values, ","))
 }
 
+// NewEnumTitleField 根据enum field 生成title列
+func NewEnumTitleField(key any, enumField *Field) *Field {
+	valueFn := func(in any) (any, error) {
+		return enumField.Schema.Enums.Title(key), nil
+	}
+	name := fmt.Sprintf("%sTitle", enumField.Name)
+	title := fmt.Sprintf("%s标题", enumField.Schema.Title)
+	f := NewField(valueFn).SetName(name).SetTitle(title)
+	return f
+}
+
 type Enum struct {
-	Tag       string `json:"tag"`
-	Title     string `json:"title"`
 	Key       any    `json:"key"`
+	Title     string `json:"title"`
+	Tag       string `json:"tag"`
 	IsDefault bool   `json:"isDefault"`
 }
 
