@@ -51,24 +51,20 @@ type DocRequestArgs []DocRequestArg
 
 func (args DocRequestArgs) Makedown() string {
 	var w bytes.Buffer
-	w.WriteString(`|名称|标题|必填|类型|格式|可空|默认值|案例|描述|`)
+	w.WriteString(`|名称|类型|必填|标题|描述|`)
 	w.WriteString("\n")
-	w.WriteString(`|:--|:--|:--|:--|:--|:--|:--|:--|:--|`)
+	w.WriteString(`|:--|:--|:--|:--|:--|:--|`)
 	w.WriteString("\n")
 	for _, arg := range args {
 		description := arg.Description
 		if len(arg.Enums) > 0 {
 			description = fmt.Sprintf("%s(%s)", description, arg.Enums.String())
 		}
-		row := fmt.Sprintf(`|%s|%s|%s|%s|%s|%s|%s|%s|%s|`,
+		row := fmt.Sprintf(`|%s|%s|%s|%s|%s|`,
 			arg.Name,
-			arg.Title,
-			cast.ToString(arg.Required),
 			arg.Type,
-			arg.Format,
-			cast.ToString(arg.AllowEmpty),
-			cast.ToString(arg.Default),
-			cast.ToString(arg.Example),
+			cast.ToString(arg.Required),
+			arg.Title,
 			description,
 		)
 		w.WriteString(row)

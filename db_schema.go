@@ -196,9 +196,9 @@ func (es Enums) MaxLengthMaximum() (maxLength int, maximum uint) {
 func (es Enums) String() (str string) {
 	values := make([]string, 0)
 	for _, e := range es {
-		values = append(values, fmt.Sprintf("%s-%s", e.Key, e.Title))
+		values = append(values, fmt.Sprintf("%s-%s", cast.ToString(e.Key), e.Title))
 	}
-	return fmt.Sprintf("(%s)", strings.Join(values, ","))
+	return strings.Join(values, ",")
 }
 
 // NewEnumTitleField 根据enum field 生成title列
@@ -313,6 +313,20 @@ func ValueFnDBSchemaFormatType(field Field) (valueFn ValueFn) {
 func ValueFnForward(in any) (any, error) {
 	return in, nil
 }
+
+// ValueFnDecodeComma 参数中,拼接的字符串解码成数组
+func ValueFnDecodeComma(in any) (any, error) {
+	if IsNil(in) {
+		return in, nil
+	}
+	s := cast.ToString(in)
+	if !strings.Contains(s, ",") {
+		return in, nil
+	}
+	arr := strings.Split(s, ",")
+	return arr, nil
+}
+
 func ValueFnShield(in any) (any, error) {
 	return nil, nil
 }

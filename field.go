@@ -68,12 +68,15 @@ func (fns *ValueFns) AppendIfNotFirst(subFns ...ValueFn) {
 	fns.Append(subFns...)
 }
 
-func NewValueFns(fn func() (value any, err error)) ValueFns {
-	return ValueFns{
-		func(in any) (value any, err error) {
-			return fn()
-		},
+func (fns *ValueFns) Value(val any) (value any, err error) {
+	value = val
+	for _, fn := range *fns {
+		value, err = fn(value) //格式化值
+		if err != nil {
+			return value, err
+		}
 	}
+	return value, nil
 }
 
 func ValueFnWhereLike(val any) (value any, err error) {
@@ -85,16 +88,35 @@ func ValueFnWhereLike(val any) (value any, err error) {
 	return value, nil
 }
 
+type DocNameFn func(name string) string
+
+type DocNameFns []DocNameFn
+
+func (docFns *DocNameFns) Append(fns ...DocNameFn) {
+	if *docFns == nil {
+		*docFns = make(DocNameFns, 0)
+	}
+	*docFns = append(*docFns, fns...)
+}
+
+func (docFns DocNameFns) Value(name string) string {
+	for _, fn := range docFns {
+		name = fn(name)
+	}
+	return name
+}
+
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Name     string                                                 `json:"name"`
-	ValueFns ValueFns                                               `json:"-"` // 增加error，方便封装字段验证规则
-	WhereFns ValueFns                                               `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	Migrate  func(table string, options ...MigrateOptionI) Migrates `json:"-"`
-	Schema   *Schema                                                // 可以为空，为空建议设置默认值
-	Table    TableI                                                 // 关联表,方便收集Table全量信息
-	Api      interface{}                                            // 关联Api对象,方便收集Api全量信息
-	scene    Scene                                                  // 场景
+	Name       string                                                 `json:"name"`
+	ValueFns   ValueFns                                               `json:"-"` // 增加error，方便封装字段验证规则
+	WhereFns   ValueFns                                               `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	Migrate    func(table string, options ...MigrateOptionI) Migrates `json:"-"`
+	Schema     *Schema                                                // 可以为空，为空建议设置默认值
+	Table      TableI                                                 // 关联表,方便收集Table全量信息
+	Api        interface{}                                            // 关联Api对象,方便收集Api全量信息
+	scene      Scene                                                  // 场景
+	docNameFns DocNameFns                                             // 修改文档字段名称
 }
 
 // 不复制whereFns，ValueFns
@@ -306,14 +328,22 @@ var GlobalFnValueFns = func(f Field) ValueFns {
 	}
 }
 
-func (f Field) DocRequestArg() (doc *DocRequestArg, err error) {
+func (f *Field) AppendDocNameFn(subFns ...DocNameFn) {
+	f.docNameFns.Append(subFns...)
+}
+
+func (f Field) DocName() string {
+	name := f.docNameFns.Value(f.Name)
+	return name
+}
+
+func (f Field) DocRequestArg() (doc DocRequestArg) {
 	dbSchema := f.Schema
 	if dbSchema == nil {
-		err = errors.Errorf("dbSchema required ,filed.Name:%s", f.Name)
-		return nil, err
+		return doc
 	}
-	doc = &DocRequestArg{
-		Name:        f.Name,
+	doc = DocRequestArg{
+		Name:        f.DocName(),
 		Required:    f.Schema.Required,
 		AllowEmpty:  dbSchema.AllowEmpty(),
 		Title:       dbSchema.Title,
@@ -321,10 +351,10 @@ func (f Field) DocRequestArg() (doc *DocRequestArg, err error) {
 		Format:      dbSchema.Type.String(),
 		Default:     cast.ToString(dbSchema.Default),
 		Description: dbSchema.Comment,
-		Enums:       make(Enums, 0),
+		Enums:       dbSchema.Enums,
 		RegExp:      dbSchema.RegExp,
 	}
-	return doc, nil
+	return doc
 }
 
 func (f Field) DBColumn() (doc *Column, err error) {
@@ -369,12 +399,7 @@ func (f Field) GetValue() (value any, err error) {
 		return in, nil
 	})
 	f.ValueFns.AppendIfNotFirst(GlobalFnValueFns(f)...) // 在最后生成SQL数据时追加格式化数据
-	for _, fn := range f.ValueFns {
-		value, err = fn(value) //格式化值
-		if err != nil {
-			return value, err
-		}
-	}
+	value, err = f.ValueFns.Value(value)
 	if IsNil(value) {
 		err = ERROR_VALUE_NIL //相比返回 nil,nil; 此处抛出错误，其它地方更容易感知中断处理，如需要继续执行，执行忽略这个类型Error 即可
 		return nil, err
@@ -511,18 +536,41 @@ func (fs *Fields) Append(fields ...*Field) *Fields {
 	return fs
 }
 
-func (fs *Fields) WithOptions(options ...OptionsFn) *Fields {
+func (fs Fields) WithOptions(options ...OptionsFn) Fields {
 	for _, optionFn := range options {
-		optionFn(*fs...)
+		optionFn(fs...)
 	}
 	return fs
 }
 
-func (fs *Fields) AppendWhereValueFn(whereValueFns ...ValueFn) *Fields {
-	for _, f := range *fs {
-		f.WhereFns.Append(whereValueFns...)
+func (fs Fields) Apply(fns ...func(f *Field)) Fields {
+	for i := 0; i < len(fs); i++ {
+		for _, fn := range fns {
+			fn(fs[i])
+		}
+	}
+
+	return fs
+}
+
+func (fs Fields) AppendWhereValueFn(whereValueFns ...ValueFn) Fields {
+
+	for i := 0; i < len(fs); i++ {
+		fs[i].WhereFns.Append(whereValueFns...)
+	}
+
+	return fs
+}
+func (fs Fields) AppendDocNameFn(docNameFns ...DocNameFn) Fields {
+	for i := 0; i < len(fs); i++ {
+		fs[i].docNameFns.Append(docNameFns...)
 	}
 	return fs
+}
+
+// DocNameWrapArrFn 将文档列名称前增加数组符号
+func DocNameWrapArrFn(name string) string {
+	return fmt.Sprintf("[].%s", name)
 }
 
 func (fs Fields) Json() string {
@@ -540,16 +588,12 @@ func (fs Fields) String() string {
 }
 
 // DocRequestArgs 生成文档请求参数部分
-func (fs Fields) DocRequestArgs() (args DocRequestArgs, err error) {
+func (fs Fields) DocRequestArgs() (args DocRequestArgs) {
 	args = make(DocRequestArgs, 0)
 	for _, f := range fs {
-		arg, err := f.DocRequestArg()
-		if err != nil {
-			return nil, err
-		}
-		args = append(args, *arg)
+		args = append(args, f.DocRequestArg())
 	}
-	return args, nil
+	return args
 }
 func (fs Fields) DBColumns() (columns Columns, err error) {
 	columns = make(Columns, 0)
