@@ -116,6 +116,9 @@ type Field struct {
 	Api        interface{} // 关联Api对象,方便收集Api全量信息
 	scene      Scene       // 场景
 	docNameFns DocNameFns  // 修改文档字段名称
+	initInsert func(f *Field)
+	initUpdate func(f *Field)
+	initSelect func(f *Field)
 }
 
 // 不复制whereFns，ValueFns
@@ -283,16 +286,19 @@ func (f *Field) SetScene(scene Scene) *Field {
 func (f *Field) Scene() Scene {
 	return f.scene
 }
-func (f *Field) SceneIsSelect() bool {
-	return f.scene.IsSame(SCENE_API_SELECT)
+
+func (f *Field) SceneInsert(initFn func(f *Field)) *Field {
+	f.initInsert = initFn
+	return f
+}
+func (f *Field) SceneUpdate(initFn func(f *Field)) *Field {
+	f.initUpdate = initFn
+	return f
 }
 
-func (f *Field) SceneIsInsert() bool {
-	return f.scene.IsSame(SCENE_API_SELECT)
-}
-
-func (f *Field) SceneIsUpdate() bool {
-	return f.scene.IsSame(SCENE_API_SELECT)
+func (f *Field) SceneSelect(initFn func(f *Field)) *Field {
+	f.initSelect = initFn
+	return f
 }
 
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
@@ -390,6 +396,23 @@ func (f Field) DBColumn() (doc *Column, err error) {
 }
 
 func (f Field) GetValue() (value any, err error) {
+	f = *f.Copy() // 复制一份,不影响其它场景
+	switch f.scene {
+	case SCENE_API_INSERT:
+		if f.initInsert != nil {
+			f.initInsert(&f)
+		}
+
+	case SCENE_API_UPDATE:
+		if f.initUpdate != nil {
+			f.initUpdate(&f)
+		}
+
+	case SCENE_API_SELECT:
+		if f.initSelect != nil {
+			f.initSelect(&f)
+		}
+	}
 	f.ValueFns.InsertAsSecond(func(in any) (any, error) { //插入数据验证
 		err = f.Validate(in)
 		if err != nil {
