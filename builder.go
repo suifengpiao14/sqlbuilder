@@ -101,6 +101,7 @@ func (p InsertParam) Data() (data any, err error) {
 }
 
 func (p InsertParam) ToSQL() (sql string, err error) {
+	p._Fields.SetScene(SCENE_API_INSERT)
 	rowData, err := p.Data()
 	if err != nil {
 		return "", err
@@ -174,6 +175,7 @@ func (p UpdateParam) Where() (expressions Expressions, err error) {
 }
 
 func (p UpdateParam) ToSQL() (sql string, err error) {
+	p._Fields.SetScene(SCENE_API_UPDATE)
 	data, err := p.Data()
 	if err != nil {
 		return "", err
@@ -227,6 +229,7 @@ func (p FirstParam) _Order() (orderedExpression []exp.OrderedExpression) {
 }
 
 func (p FirstParam) ToSQL() (sql string, err error) {
+	p._Fields.SetScene(SCENE_API_SELECT)
 	where, err := p.Where()
 	if err != nil {
 		return "", err
@@ -280,6 +283,7 @@ func (p ListParam) _Order() (orderedExpression []exp.OrderedExpression) {
 
 // CustomSQL 自定义SQL，方便构造更复杂的查询语句，如 Group,Having 等
 func (p ListParam) CustomSQL(sqlFn func(p ListParam, ds *goqu.SelectDataset) (newDs *goqu.SelectDataset, err error)) (sql string, err error) {
+	p._Fields.SetScene(SCENE_API_SELECT)
 	ds := Dialect.Select()
 	ds, err = sqlFn(p, ds)
 	if err != nil {
@@ -293,6 +297,7 @@ func (p ListParam) CustomSQL(sqlFn func(p ListParam, ds *goqu.SelectDataset) (ne
 }
 
 func (p ListParam) ToSQL() (sql string, err error) {
+	p._Fields.SetScene(SCENE_API_SELECT)
 	where, err := p.Where()
 	if err != nil {
 		return "", err
@@ -338,6 +343,7 @@ func (p TotalParam) Where() (expressions Expressions, err error) {
 }
 
 func (p TotalParam) ToSQL() (sql string, err error) {
+	p._Fields.SetScene(SCENE_API_SELECT)
 	where, err := p.Where()
 	if err != nil {
 		return "", err

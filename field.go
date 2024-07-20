@@ -136,6 +136,10 @@ func (f *Field) Copy() (field *Field) {
 	field.Schema = &schema // 重新给地址
 	field.Table = f.Table
 	field.Api = f.Api
+	field.scene = f.scene
+	field.initInsert = f.initInsert
+	field.initUpdate = f.initUpdate
+	field.initSelect = f.initSelect
 	return field
 }
 
@@ -395,24 +399,26 @@ func (f Field) DBColumn() (doc *Column, err error) {
 	return doc, nil
 }
 
-func (f Field) GetValue() (value any, err error) {
-	f = *f.Copy() // 复制一份,不影响其它场景
+func (f *Field) init() {
 	switch f.scene {
 	case SCENE_API_INSERT:
 		if f.initInsert != nil {
-			f.initInsert(&f)
+			f.initInsert(f)
 		}
 
 	case SCENE_API_UPDATE:
 		if f.initUpdate != nil {
-			f.initUpdate(&f)
+			f.initUpdate(f)
 		}
 
 	case SCENE_API_SELECT:
 		if f.initSelect != nil {
-			f.initSelect(&f)
+			f.initSelect(f)
 		}
 	}
+}
+
+func (f Field) GetValue() (value any, err error) {
 	f.ValueFns.InsertAsSecond(func(in any) (any, error) { //插入数据验证
 		err = f.Validate(in)
 		if err != nil {
@@ -429,8 +435,10 @@ func (f Field) GetValue() (value any, err error) {
 	return value, nil
 }
 
-// GetWhereValue 获取Where 值
-func (f Field) GetWhereValue() (value any, err error) {
+// WhereData 获取Where 值
+func (f Field) WhereData() (value any, err error) {
+	f = *f.Copy()
+	f.init()
 	if len(f.WhereFns) == 0 {
 		return nil, nil
 	}
@@ -500,6 +508,8 @@ func (c Field) FormatType(val any) (value any) {
 }
 
 func (f Field) Data() (data any, err error) {
+	f = *f.Copy() // 复制一份,不影响其它场景
+	f.init()
 	val, err := f.GetValue()
 	if IsErrorValueNil(err) {
 		return nil, nil // 忽略空值错误
@@ -517,7 +527,7 @@ func (f Field) Data() (data any, err error) {
 }
 
 func (f Field) Where() (expressions Expressions, err error) {
-	val, err := f.GetWhereValue()
+	val, err := f.WhereData()
 	if err != nil {
 		return nil, err
 	}
@@ -538,6 +548,13 @@ func (fs Fields) Copy() (fields Fields) {
 		fields = append(fields, f.Copy())
 	}
 	return fields
+}
+
+func (fs Fields) SetScene(scene Scene) Fields {
+	for i := 0; i < len(fs); i++ {
+		fs[i].SetScene(scene)
+	}
+	return fs
 }
 
 func NewFields(fields ...*Field) *Fields {
