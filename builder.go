@@ -169,7 +169,7 @@ func (p DeleteParam) AppendField(fields ...*Field) DeleteParam {
 }
 
 func (p DeleteParam) Data() (data any, err error) {
-	return p.deletedField.Data()
+	return p.deletedField.Data(p._Fields...)
 }
 
 func (p DeleteParam) Where() (expressions Expressions, err error) {

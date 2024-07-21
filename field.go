@@ -119,9 +119,10 @@ type Field struct {
 	Api        interface{} // 关联Api对象,方便收集Api全量信息
 	scene      Scene       // 场景
 	docNameFns DocNameFns  // 修改文档字段名称
-	initInsert func(f *Field)
-	initUpdate func(f *Field)
-	initSelect func(f *Field)
+	initInsert func(f *Field, fs ...*Field)
+	initUpdate func(f *Field, fs ...*Field)
+	initSelect func(f *Field, fs ...*Field)
+	tags       []string // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
 }
 
 // 不复制whereFns，ValueFns
@@ -141,6 +142,7 @@ func (f *Field) Copy() (field *Field) {
 	field.initInsert = f.initInsert
 	field.initUpdate = f.initUpdate
 	field.initSelect = f.initSelect
+	field.tags = f.tags
 	return field
 }
 
@@ -159,6 +161,22 @@ func (f *Field) SetName(name string) *Field {
 func (f *Field) SetTitle(title string) *Field {
 	f.MergeSchema(Schema{Title: title})
 	return f
+}
+func (f *Field) SetTag(tag string) *Field {
+	if len(f.tags) == 0 {
+		f.tags = append(f.tags, tag)
+	}
+	return f
+}
+
+func (f *Field) HastTag(tag string) bool {
+	for _, t := range f.tags {
+		if strings.EqualFold(t, tag) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (f *Field) AppendEnum(enums ...Enum) *Field {
@@ -292,16 +310,16 @@ func (f *Field) Scene() Scene {
 	return f.scene
 }
 
-func (f *Field) SceneInsert(initFn func(f *Field)) *Field {
+func (f *Field) SceneInsert(initFn func(f *Field, fs ...*Field)) *Field {
 	f.initInsert = initFn
 	return f
 }
-func (f *Field) SceneUpdate(initFn func(f *Field)) *Field {
+func (f *Field) SceneUpdate(initFn func(f *Field, fs ...*Field)) *Field {
 	f.initUpdate = initFn
 	return f
 }
 
-func (f *Field) SceneSelect(initFn func(f *Field)) *Field {
+func (f *Field) SceneSelect(initFn func(f *Field, fs ...*Field)) *Field {
 	f.initSelect = initFn
 	return f
 }
@@ -400,21 +418,21 @@ func (f Field) DBColumn() (doc *Column, err error) {
 	return doc, nil
 }
 
-func (f *Field) init() {
+func (f *Field) init(fs ...*Field) {
 	switch f.scene {
 	case SCENE_API_INSERT:
 		if f.initInsert != nil {
-			f.initInsert(f)
+			f.initInsert(f, fs...)
 		}
 
 	case SCENE_API_UPDATE:
 		if f.initUpdate != nil {
-			f.initUpdate(f)
+			f.initUpdate(f, fs...)
 		}
 
 	case SCENE_API_SELECT:
 		if f.initSelect != nil {
-			f.initSelect(f)
+			f.initSelect(f, fs...)
 		}
 	}
 }
@@ -437,9 +455,9 @@ func (f Field) GetValue() (value any, err error) {
 }
 
 // WhereData 获取Where 值
-func (f Field) WhereData() (value any, err error) {
+func (f Field) WhereData(fs ...*Field) (value any, err error) {
 	f = *f.Copy()
-	f.init()
+	f.init(fs...)
 	if len(f.WhereFns) == 0 {
 		return nil, nil
 	}
@@ -508,9 +526,9 @@ func (c Field) FormatType(val any) (value any) {
 	return value
 }
 
-func (f Field) Data() (data any, err error) {
+func (f Field) Data(fs ...*Field) (data any, err error) {
 	f = *f.Copy() // 复制一份,不影响其它场景
-	f.init()
+	f.init(fs...)
 	val, err := f.GetValue()
 	if IsErrorValueNil(err) {
 		return nil, nil // 忽略空值错误
@@ -527,8 +545,8 @@ func (f Field) Data() (data any, err error) {
 	return data, nil
 }
 
-func (f Field) Where() (expressions Expressions, err error) {
-	val, err := f.WhereData()
+func (f Field) Where(fs ...*Field) (expressions Expressions, err error) {
+	val, err := f.WhereData(fs...)
 	if err != nil {
 		return nil, err
 	}
@@ -557,23 +575,23 @@ func (fs Fields) SetScene(scene Scene) Fields {
 	}
 	return fs
 }
-func (fs Fields) SceneInsert(fn func(f *Field)) Fields {
+func (fs Fields) SceneInsert(fn func(f *Field, fs ...*Field)) Fields {
 	if len(fs) > 0 {
 		fs[0].SceneInsert(fn) // 第一个列增加即可
 	}
 	return fs
 }
 
-func (fs Fields) SceneUpdate(fn func(f *Field)) Fields {
+func (fs Fields) SceneUpdate(fn func(f *Field, fs ...*Field)) Fields {
 	if len(fs) > 0 {
 		fs[0].SceneUpdate(fn) // 第一个列增加即可
 	}
 	return fs
 }
 
-func (fs Fields) SceneSelect(fn func(f *Field)) Fields {
-	if len(fs) > 0 {
-		fs[0].SceneSelect(fn) // 第一个列增加即可
+func (fs Fields) SceneSelect(fn func(f *Field, fs ...*Field)) Fields {
+	for i := 0; i < len(fs); i++ {
+		fs[i].SceneSelect(fn) // 第一个列增加即可
 	}
 	return fs
 }
@@ -647,6 +665,15 @@ func (fs Fields) String() string {
 	return string(b)
 }
 
+func (fs Fields) GetByTag(tag string) (f *Field, ok bool) {
+	for i := 0; i < len(fs); i++ {
+		if fs[i].HastTag(tag) {
+			return fs[i], true
+		}
+	}
+	return nil, false
+}
+
 // DocRequestArgs 生成文档请求参数部分
 func (fs Fields) DocRequestArgs() (args DocRequestArgs) {
 	args = make(DocRequestArgs, 0)
@@ -670,7 +697,7 @@ func (fs Fields) DBColumns() (columns Columns, err error) {
 func (fs Fields) Where() (expressions Expressions, err error) {
 	expressions = make(Expressions, 0)
 	for _, field := range fs {
-		subExprs, err := field.Where()
+		subExprs, err := field.Where(fs...)
 		if err != nil {
 			return nil, err
 		}
@@ -682,7 +709,7 @@ func (fs Fields) Where() (expressions Expressions, err error) {
 func (fs Fields) Data() (data any, err error) {
 	dataMap := make(map[string]any, 0)
 	for _, f := range fs {
-		data, err := f.Data()
+		data, err := f.Data(fs...)
 		if err != nil {
 			return nil, err
 		}
@@ -748,13 +775,19 @@ var GlobalFnFormatTableName = func(tableName string) string {
 	return tableName
 }
 
-// Between 介于2者之间(包含上下边界，对于不包含边界情况，可以修改值范围或者直接用表达式)
-type Between [2]any
+// Between 介于2者之间(包含上下边界，对于不包含边界情况，可以修改值范围或者直接用表达式),3个元素时为: col1<12<col2 格式
+type Between [3]any
 
 func TryConvert2Betwwen(field string, value any) (expressions Expressions, ok bool) {
 	if between, ok := value.(Between); ok {
 		identifier := goqu.C(field)
-		min, max := between[0], between[1]
+		min, val, max := between[0], between[1], between[2]
+
+		if max != nil {
+			expressions = ConcatExpression(goqu.L("?", val).Between(exp.NewRangeVal(goqu.C(cast.ToString(min)), goqu.C(cast.ToString(max)))))
+			return expressions, true
+		}
+		max = val // 当作2个值处理
 		if !IsNil(min) && !IsNil(max) {
 			expressions = append(expressions, identifier.Between(exp.NewRangeVal(min, max)))
 			return expressions, true
