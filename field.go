@@ -109,6 +109,15 @@ func (docFns DocNameFns) Value(name string) string {
 	return name
 }
 
+type InitFieldFn func(f *Field, fs ...*Field)
+type InitFieldFns []InitFieldFn
+
+func (fns InitFieldFns) Apply(f *Field, fs ...*Field) {
+	for _, fn := range fns {
+		fn(f, fs...)
+	}
+}
+
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
 	Name       string      `json:"name"`
@@ -119,9 +128,9 @@ type Field struct {
 	Api        interface{} // 关联Api对象,方便收集Api全量信息
 	scene      Scene       // 场景
 	docNameFns DocNameFns  // 修改文档字段名称
-	initInsert func(f *Field, fs ...*Field)
-	initUpdate func(f *Field, fs ...*Field)
-	initSelect func(f *Field, fs ...*Field)
+	initInsert InitFieldFn
+	initUpdate InitFieldFn
+	initSelect InitFieldFn
 	tags       []string // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
 }
 
@@ -310,16 +319,16 @@ func (f *Field) Scene() Scene {
 	return f.scene
 }
 
-func (f *Field) SceneInsert(initFn func(f *Field, fs ...*Field)) *Field {
+func (f *Field) SceneInsert(initFn InitFieldFn) *Field {
 	f.initInsert = initFn
 	return f
 }
-func (f *Field) SceneUpdate(initFn func(f *Field, fs ...*Field)) *Field {
+func (f *Field) SceneUpdate(initFn InitFieldFn) *Field {
 	f.initUpdate = initFn
 	return f
 }
 
-func (f *Field) SceneSelect(initFn func(f *Field, fs ...*Field)) *Field {
+func (f *Field) SceneSelect(initFn InitFieldFn) *Field {
 	f.initSelect = initFn
 	return f
 }
@@ -575,23 +584,23 @@ func (fs Fields) SetScene(scene Scene) Fields {
 	}
 	return fs
 }
-func (fs Fields) SceneInsert(fn func(f *Field, fs ...*Field)) Fields {
-	if len(fs) > 0 {
-		fs[0].SceneInsert(fn) // 第一个列增加即可
-	}
-	return fs
-}
-
-func (fs Fields) SceneUpdate(fn func(f *Field, fs ...*Field)) Fields {
-	if len(fs) > 0 {
-		fs[0].SceneUpdate(fn) // 第一个列增加即可
-	}
-	return fs
-}
-
-func (fs Fields) SceneSelect(fn func(f *Field, fs ...*Field)) Fields {
+func (fs Fields) SceneInsert(fn InitFieldFn) Fields {
 	for i := 0; i < len(fs); i++ {
-		fs[i].SceneSelect(fn) // 第一个列增加即可
+		fs[i].SceneInsert(fn)
+	}
+	return fs
+}
+
+func (fs Fields) SceneUpdate(fn InitFieldFn) Fields {
+	for i := 0; i < len(fs); i++ {
+		fs[i].SceneUpdate(fn)
+	}
+	return fs
+}
+
+func (fs Fields) SceneSelect(fn InitFieldFn) Fields {
+	for i := 0; i < len(fs); i++ {
+		fs[i].SceneSelect(fn)
 	}
 	return fs
 }
