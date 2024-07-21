@@ -149,6 +149,52 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
+type DeleteParam struct {
+	_TableI      TableI
+	deletedField *Field
+	_Fields      Fields
+}
+
+func NewDeleteBuilder(table TableI, deletedField Field) DeleteParam {
+	return DeleteParam{
+		_TableI:      table,
+		deletedField: &deletedField,
+		_Fields:      make(Fields, 0),
+	}
+}
+
+func (p DeleteParam) AppendField(fields ...*Field) DeleteParam {
+	p._Fields.Append(fields...)
+	return p
+}
+
+func (p DeleteParam) Data() (data any, err error) {
+	return p.deletedField.Data()
+}
+
+func (p DeleteParam) Where() (expressions Expressions, err error) {
+	return p._Fields.Where()
+}
+
+func (p DeleteParam) ToSQL() (sql string, err error) {
+	p._Fields.SetScene(SCENE_API_DELETE)
+	data, err := p.Data()
+	if err != nil {
+		return "", err
+	}
+
+	where, err := p.Where()
+	if err != nil {
+		return "", err
+	}
+	ds := Dialect.Update(p._TableI.Table()).Set(data).Where(where...)
+	sql, _, err = ds.ToSQL()
+	if err != nil {
+		return "", err
+	}
+	return sql, nil
+}
+
 type UpdateParam struct {
 	_TableI TableI
 	_Fields Fields

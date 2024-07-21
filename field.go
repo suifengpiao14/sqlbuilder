@@ -71,6 +71,9 @@ func (fns *ValueFns) AppendIfNotFirst(subFns ...ValueFn) {
 func (fns *ValueFns) Value(val any) (value any, err error) {
 	value = val
 	for _, fn := range *fns {
+		if fn == nil {
+			continue
+		}
 		value, err = fn(value) //格式化值
 		if err != nil {
 			return value, err
@@ -125,10 +128,8 @@ type Field struct {
 func (f *Field) Copy() (field *Field) {
 	field = &Field{}
 	field.Name = f.Name
-	if len(f.ValueFns) > 0 {
-		fn := f.ValueFns[0]
-		field.ValueFns.Append(fn) // 值拷贝第一个,原始值
-	}
+	field.ValueFns.Append(f.ValueFns...)
+	field.WhereFns.Append(f.WhereFns...)
 	var schema Schema
 	if field.Schema != nil {
 		schema = *field.Schema
@@ -556,6 +557,26 @@ func (fs Fields) SetScene(scene Scene) Fields {
 	}
 	return fs
 }
+func (fs Fields) SceneInsert(fn func(f *Field)) Fields {
+	if len(fs) > 0 {
+		fs[0].SceneInsert(fn) // 第一个列增加即可
+	}
+	return fs
+}
+
+func (fs Fields) SceneUpdate(fn func(f *Field)) Fields {
+	if len(fs) > 0 {
+		fs[0].SceneUpdate(fn) // 第一个列增加即可
+	}
+	return fs
+}
+
+func (fs Fields) SceneSelect(fn func(f *Field)) Fields {
+	if len(fs) > 0 {
+		fs[0].SceneSelect(fn) // 第一个列增加即可
+	}
+	return fs
+}
 
 func NewFields(fields ...*Field) *Fields {
 	return new(Fields).Append(fields...)
@@ -689,6 +710,16 @@ func IsNil(v any) bool {
 	default:
 		return v == nil
 	}
+}
+
+type Neq any
+
+func TryNeq(field string, value any) (expressions Expressions, ok bool) {
+	if val, ok := value.(Neq); ok {
+		identifier := goqu.C(field)
+		return ConcatExpression(identifier.Neq(val)), true
+	}
+	return nil, false
 }
 
 // Ilike 不区分大小写like语句

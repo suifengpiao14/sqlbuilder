@@ -24,6 +24,7 @@ const (
 const (
 	SCENE_API_INSERT Scene = "insert"
 	SCENE_API_UPDATE Scene = "update"
+	SCENE_API_DELETE Scene = "delete"
 	SCENE_API_SELECT Scene = "select"
 	SCENE_API_VIEW   Scene = "view"
 )
