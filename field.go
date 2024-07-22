@@ -118,17 +118,19 @@ func (fns InitFieldFns) Apply(f *Field, fs ...*Field) {
 	}
 }
 
+type OrderFn func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression)
+
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Name       string                                               `json:"name"`
-	ValueFns   ValueFns                                             `json:"-"` // 增加error，方便封装字段验证规则
-	WhereFns   ValueFns                                             `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	OrderFn    func(f *Field, fs ...*Field) []exp.OrderedExpression `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	Schema     *Schema                                              // 可以为空，为空建议设置默认值
-	Table      TableI                                               // 关联表,方便收集Table全量信息
-	Api        interface{}                                          // 关联Api对象,方便收集Api全量信息
-	scene      Scene                                                // 场景
-	docNameFns DocNameFns                                           // 修改文档字段名称
+	Name       string      `json:"name"`
+	ValueFns   ValueFns    `json:"-"` // 增加error，方便封装字段验证规则
+	WhereFns   ValueFns    `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	OrderFn    OrderFn     `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	Schema     *Schema     // 可以为空，为空建议设置默认值
+	Table      TableI      // 关联表,方便收集Table全量信息
+	Api        interface{} // 关联Api对象,方便收集Api全量信息
+	scene      Scene       // 场景
+	docNameFns DocNameFns  // 修改文档字段名称
 	initInsert InitFieldFn
 	initUpdate InitFieldFn
 	initSelect InitFieldFn

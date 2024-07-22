@@ -48,18 +48,6 @@ func (fn TableFn) Table() (table string) {
 	return fn()
 }
 
-type Order interface {
-	Order() (orderedExpressions []exp.OrderedExpression)
-}
-
-type OrderFn func() (orderedExpressions []exp.OrderedExpression)
-
-func (fn OrderFn) Order() (orderedExpressions []exp.OrderedExpression) {
-	return fn()
-}
-
-type OrderSet []Order
-
 type _Select interface {
 	Select() (columns []any)
 }
@@ -432,12 +420,4 @@ func dataAny2Map(data any) (newData map[string]any, err error) {
 		return nil, errors.Errorf("unsupported update interface type %+v,got:%+v", rv.Type(), data)
 	}
 	return newData, nil
-}
-
-func MergeOrder(orders ...Order) (orderedExpressions []exp.OrderedExpression) {
-	orderedExpressions = make([]exp.OrderedExpression, 0)
-	for _, o := range orders {
-		orderedExpressions = append(orderedExpressions, o.Order()...)
-	}
-	return orderedExpressions
 }
