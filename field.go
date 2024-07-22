@@ -319,7 +319,10 @@ func (f *Field) SetScene(scene Scene) *Field {
 func (f *Field) Scene() Scene {
 	return f.scene
 }
-
+func (f *Field) Apply(initFns ...InitFieldFn) *Field {
+	InitFieldFns(initFns).Apply(f)
+	return f
+}
 func (f *Field) SceneInsert(initFn InitFieldFn) *Field {
 	f.initInsert = initFn
 	return f
@@ -640,10 +643,10 @@ func (fs Fields) WithOptions(options ...OptionsFn) Fields {
 	return fs
 }
 
-func (fs Fields) Apply(fns ...func(f *Field)) Fields {
+func (fs Fields) Apply(fns ...InitFieldFn) Fields {
 	for i := 0; i < len(fs); i++ {
 		for _, fn := range fns {
-			fn(fs[i])
+			fn(fs[i], fs...)
 		}
 	}
 
