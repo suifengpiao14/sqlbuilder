@@ -48,12 +48,6 @@ func (fn TableFn) Table() (table string) {
 	return fn()
 }
 
-type PaginationFn func() (index int, size int)
-
-type _Pagination interface {
-	Pagination() (index int, size int)
-}
-
 type Order interface {
 	Order() (orderedExpressions []exp.OrderedExpression)
 }
@@ -289,7 +283,6 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 type ListParamI interface {
 	TableI
 	_Select
-	_Pagination
 }
 
 type ListParam struct {
@@ -336,7 +329,7 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
-	pageIndex, pageSize := p._ListParamI.Pagination()
+	pageIndex, pageSize := p._Fields.Pagination()
 	ofsset := pageIndex * pageSize
 	if ofsset < 0 {
 		ofsset = 0

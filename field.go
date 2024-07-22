@@ -120,45 +120,62 @@ func (fns InitFieldFns) Apply(f *Field, fs ...*Field) {
 
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Name       string                         `json:"name"`
-	ValueFns   ValueFns                       `json:"-"` // 增加error，方便封装字段验证规则
-	WhereFns   ValueFns                       `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	OrderFn    func() []exp.OrderedExpression `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	Schema     *Schema                        // 可以为空，为空建议设置默认值
-	Table      TableI                         // 关联表,方便收集Table全量信息
-	Api        interface{}                    // 关联Api对象,方便收集Api全量信息
-	scene      Scene                          // 场景
-	docNameFns DocNameFns                     // 修改文档字段名称
+	Name       string                                               `json:"name"`
+	ValueFns   ValueFns                                             `json:"-"` // 增加error，方便封装字段验证规则
+	WhereFns   ValueFns                                             `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	OrderFn    func(f *Field, fs ...*Field) []exp.OrderedExpression `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	Schema     *Schema                                              // 可以为空，为空建议设置默认值
+	Table      TableI                                               // 关联表,方便收集Table全量信息
+	Api        interface{}                                          // 关联Api对象,方便收集Api全量信息
+	scene      Scene                                                // 场景
+	docNameFns DocNameFns                                           // 修改文档字段名称
 	initInsert InitFieldFn
 	initUpdate InitFieldFn
 	initSelect InitFieldFn
 	tags       []string // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
+	dbName     string
 }
 
+const (
+	Field_tag_pageIndex = "pageIndex" // 标记为pageIndex列
+	Field_tag_pageSize  = "pageSize"  //标记为pageSize列
+)
+
 // 不复制whereFns，ValueFns
-func (f *Field) Copy() (field *Field) {
-	field = &Field{}
-	field.Name = f.Name
-	field.ValueFns.Append(f.ValueFns...)
-	field.WhereFns.Append(f.WhereFns...)
+func (f *Field) Copy() (copyF *Field) {
+	copyF = &Field{}
+	copyF.Name = f.Name
+	copyF.ValueFns.Append(f.ValueFns...)
+	copyF.WhereFns.Append(f.WhereFns...)
 	var schema Schema
-	if field.Schema != nil {
-		schema = *field.Schema
+	if f.Schema != nil {
+		schema = *f.Schema
 	}
-	field.Schema = &schema // 重新给地址
-	field.Table = f.Table
-	field.Api = f.Api
-	field.scene = f.scene
-	field.initInsert = f.initInsert
-	field.initUpdate = f.initUpdate
-	field.initSelect = f.initSelect
-	field.tags = f.tags
-	return field
+	copyF.Schema = &schema // 重新给地址
+	copyF.Table = f.Table
+	copyF.Api = f.Api
+	copyF.scene = f.scene
+	copyF.initInsert = f.initInsert
+	copyF.initUpdate = f.initUpdate
+	copyF.initSelect = f.initSelect
+	copyF.dbName = f.dbName
+	copyF.tags = f.tags
+	return copyF
 }
 
 // DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
 func (f *Field) DBName() string {
-	return FieldName2DBColumnName(f.Name)
+	dbName := f.dbName
+	if dbName == "" {
+		dbName = f.Name
+	}
+	return FieldName2DBColumnName(dbName)
+}
+
+// DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
+func (f *Field) SetDBName(dbName string) *Field {
+	f.dbName = dbName
+	return f
 }
 
 func (f *Field) SetName(name string) *Field {
@@ -459,7 +476,7 @@ func (f Field) GetValue() (value any, err error) {
 		return in, nil
 	})
 	f.ValueFns.AppendIfNotFirst(GlobalFnValueFns(f)...) // 在最后生成SQL数据时追加格式化数据
-	value, err = f.ValueFns.Value(value)
+	value, err = f.ValueFns.Value(nil)
 	if IsNil(value) {
 		err = ERROR_VALUE_NIL //相比返回 nil,nil; 此处抛出错误，其它地方更容易感知中断处理，如需要继续执行，执行忽略这个类型Error 即可
 		return nil, err
@@ -482,7 +499,7 @@ func (f Field) WhereData(fs ...*Field) (value any, err error) {
 		return value, err
 	}
 	for _, fn := range f.WhereFns {
-		value, err = fn(value)
+		value, err = fn(value) // value 为nil 继续循环，主要考虑调试方便，若中途中断，可能导致调试困难(代码未按照预期运行，不知道哪里中断了)，另外一般调试时，都没有写参数值，方便能快速查看效果
 		if err != nil {
 			return value, err
 		}
@@ -492,6 +509,13 @@ func (f Field) WhereData(fs ...*Field) (value any, err error) {
 	}
 
 	return value, nil
+}
+
+func FilterNil(in any, valueFn ValueFn) (any, error) {
+	if IsNil(in) {
+		return nil, nil
+	}
+	return valueFn(in)
 }
 
 // IsEqual 判断名称值是否相等
@@ -522,7 +546,7 @@ func (c Field) Validate(val any) (err error) {
 }
 
 func (c Field) FormatType(val any) (value any) {
-	if IsNil(nil) {
+	if IsNil(val) {
 		return val
 	}
 	value = val
@@ -575,7 +599,7 @@ func (f Field) Where(fs ...*Field) (expressions Expressions, err error) {
 func (f Field) Order(fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
 	orderedExpressions = make([]exp.OrderedExpression, 0)
 	if f.OrderFn != nil {
-		ex := f.OrderFn()
+		ex := f.OrderFn(&f, fs...)
 		orderedExpressions = append(orderedExpressions, ex...)
 	}
 	return orderedExpressions
@@ -616,6 +640,20 @@ func (fs Fields) SceneSelect(fn InitFieldFn) Fields {
 		fs[i].SceneSelect(fn)
 	}
 	return fs
+}
+
+func (fs Fields) Pagination() (index int, size int) {
+	if pageIndex, ok := fs.GetByTag(Field_tag_pageIndex); ok {
+		val, _ := pageIndex.GetValue()
+		index = cast.ToInt(val)
+
+	}
+	if pageSize, ok := fs.GetByTag(Field_tag_pageSize); ok {
+		val, _ := pageSize.GetValue()
+		size = cast.ToInt(val)
+	}
+
+	return index, size
 }
 
 func NewFields(fields ...*Field) *Fields {
