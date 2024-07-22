@@ -150,6 +150,15 @@ func (es Enums) Get(key any) (enum Enum) {
 	return
 }
 
+func (es Enums) GetByTag(tag string) (enum Enum) {
+	for _, e := range es {
+		if strings.EqualFold(e.Tag, tag) {
+			return e
+		}
+	}
+	return
+}
+
 func (es Enums) Type() (typ string) {
 	if len(es) == 0 {
 		return Schema_Type_string.String()
