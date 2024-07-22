@@ -246,7 +246,6 @@ type FirstParamI interface {
 
 type FirstParam struct {
 	_FirstParamI FirstParamI
-	_OrderSet    OrderSet
 	_Fields      Fields
 }
 
@@ -265,13 +264,8 @@ func (p FirstParam) Where() (expressions Expressions, err error) {
 	return p._Fields.Where()
 }
 
-func (p FirstParam) AppendOrder(orderSet ...Order) FirstParam {
-	p._OrderSet = append(p._OrderSet, orderSet...)
-	return p
-}
-
 func (p FirstParam) _Order() (orderedExpression []exp.OrderedExpression) {
-	return MergeOrder(p._OrderSet...)
+	return p._Fields.Order()
 }
 
 func (p FirstParam) ToSQL() (sql string, err error) {
@@ -300,7 +294,6 @@ type ListParamI interface {
 
 type ListParam struct {
 	_ListParamI ListParamI
-	_OrderSet   OrderSet
 	_Fields     Fields
 }
 
@@ -315,16 +308,11 @@ func NewListBuilder(listParamI ListParamI) ListParam {
 	}
 }
 
-func (p ListParam) AppendOrder(orderSet ...Order) ListParam {
-	p._OrderSet = append(p._OrderSet, orderSet...)
-	return p
-}
-
 func (p ListParam) Where() (expressions Expressions, err error) {
 	return p._Fields.Where()
 }
 func (p ListParam) _Order() (orderedExpression []exp.OrderedExpression) {
-	return MergeOrder(p._OrderSet...)
+	return p._Fields.Order()
 }
 
 // CustomSQL 自定义SQL，方便构造更复杂的查询语句，如 Group,Having 等
