@@ -269,6 +269,9 @@ func (schema Schema) Validate(fieldName string, field reflect.Value) error {
 }
 
 func isEmptyValue(v reflect.Value) bool {
+	if !v.IsValid() {
+		return true
+	}
 	return cast.ToString(v.Interface()) == ""
 	/*
 		switch v.Kind() {

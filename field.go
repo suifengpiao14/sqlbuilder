@@ -479,6 +479,9 @@ func (f Field) GetValue() (value any, err error) {
 	})
 	f.ValueFns.AppendIfNotFirst(GlobalFnValueFns(f)...) // 在最后生成SQL数据时追加格式化数据
 	value, err = f.ValueFns.Value(nil)
+	if err != nil {
+		return value, err
+	}
 	if IsNil(value) {
 		err = ERROR_VALUE_NIL //相比返回 nil,nil; 此处抛出错误，其它地方更容易感知中断处理，如需要继续执行，执行忽略这个类型Error 即可
 		return nil, err

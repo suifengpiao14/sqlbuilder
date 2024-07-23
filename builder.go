@@ -73,7 +73,7 @@ func NewInsertBuilder(table TableI) InsertParam {
 	}
 }
 
-func (p InsertParam) AppendField(fields ...*Field) InsertParam {
+func (p InsertParam) AppendFields(fields ...*Field) InsertParam {
 	p._Fields.Append(fields...)
 	return p
 }
@@ -145,7 +145,7 @@ func NewDeleteBuilder(table TableI, deletedField Field) DeleteParam {
 	}
 }
 
-func (p DeleteParam) AppendField(fields ...*Field) DeleteParam {
+func (p DeleteParam) AppendFields(fields ...*Field) DeleteParam {
 	p._Fields.Append(fields...)
 	return p
 }
@@ -189,7 +189,7 @@ func NewUpdateBuilder(table TableI) UpdateParam {
 	}
 }
 
-func (p UpdateParam) AppendField(fields ...*Field) UpdateParam {
+func (p UpdateParam) AppendFields(fields ...*Field) UpdateParam {
 	p._Fields.Append(fields...)
 	return p
 }
@@ -231,10 +231,11 @@ type FirstParam struct {
 	_Fields      Fields
 }
 
-func (p FirstParam) AppendField(fields ...*Field) FirstParam {
+func (p FirstParam) AppendFields(fields ...*Field) FirstParam {
 	p._Fields.Append(fields...)
 	return p
 }
+
 func NewFirstBuilder(firstParamI FirstParamI) FirstParam {
 	return FirstParam{
 		_FirstParamI: firstParamI,
