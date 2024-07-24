@@ -48,9 +48,9 @@ func (fn TableFn) Table() (table string) {
 	return fn()
 }
 
-type _Select interface {
-	Select() (columns []any)
-}
+// type _Select interface {
+// 	Select() (columns []any)
+// }
 
 func ConcatOrderedExpression(orderedExpressions ...exp.OrderedExpression) []exp.OrderedExpression {
 	return orderedExpressions
@@ -83,7 +83,7 @@ func (p InsertParam) Data() (data any, err error) {
 }
 
 func (p InsertParam) ToSQL() (sql string, err error) {
-	p._Fields.SetScene(SCENE_API_INSERT)
+	p._Fields.SetScene(SCENE_SQL_INSERT)
 	rowData, err := p.Data()
 	if err != nil {
 		return "", err
@@ -159,7 +159,7 @@ func (p DeleteParam) Where() (expressions Expressions, err error) {
 }
 
 func (p DeleteParam) ToSQL() (sql string, err error) {
-	p._Fields.SetScene(SCENE_API_DELETE)
+	p._Fields.SetScene(SCENE_SQL_DELETE)
 	data, err := p.Data()
 	if err != nil {
 		return "", err
@@ -203,7 +203,7 @@ func (p UpdateParam) Where() (expressions Expressions, err error) {
 }
 
 func (p UpdateParam) ToSQL() (sql string, err error) {
-	p._Fields.SetScene(SCENE_API_UPDATE)
+	p._Fields.SetScene(SCENE_SQL_UPDATE)
 	data, err := p.Data()
 	if err != nil {
 		return "", err
@@ -221,14 +221,15 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-type FirstParamI interface {
-	TableI
-	_Select
-}
+// type FirstParamI interface {
+// 	TableI
+// 	_Select
+// }
 
 type FirstParam struct {
-	_FirstParamI FirstParamI
-	_Fields      Fields
+	_Table   TableI
+	_columns []any
+	_Fields  Fields
 }
 
 func (p FirstParam) AppendFields(fields ...*Field) FirstParam {
@@ -236,10 +237,11 @@ func (p FirstParam) AppendFields(fields ...*Field) FirstParam {
 	return p
 }
 
-func NewFirstBuilder(firstParamI FirstParamI) FirstParam {
+func NewFirstBuilder(table TableI, columns ...any) FirstParam {
 	return FirstParam{
-		_FirstParamI: firstParamI,
-		_Fields:      make(Fields, 0),
+		_Table:   table,
+		_columns: columns,
+		_Fields:  make(Fields, 0),
 	}
 }
 
@@ -252,13 +254,13 @@ func (p FirstParam) _Order() (orderedExpression []exp.OrderedExpression) {
 }
 
 func (p FirstParam) ToSQL() (sql string, err error) {
-	p._Fields.SetScene(SCENE_API_SELECT)
+	p._Fields.SetScene(SCENE_SQL_SELECT)
 	where, err := p.Where()
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.Select(p._FirstParamI.Select()...).
-		From(p._FirstParamI.Table()).
+	ds := Dialect.Select(p._columns...).
+		From(p._Table.Table()).
 		Where(where...).
 		Order(p._Order()...).
 		Limit(1)
@@ -269,14 +271,10 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-type ListParamI interface {
-	TableI
-	_Select
-}
-
 type ListParam struct {
-	_ListParamI ListParamI
-	_Fields     Fields
+	_Table   TableI
+	_columns []any
+	_Fields  Fields
 }
 
 func (p ListParam) AppendFields(fields ...*Field) ListParam {
@@ -284,9 +282,10 @@ func (p ListParam) AppendFields(fields ...*Field) ListParam {
 	return p
 }
 
-func NewListBuilder(listParamI ListParamI) ListParam {
+func NewListBuilder(listParamI TableI, columns ...any) ListParam {
 	return ListParam{
-		_ListParamI: listParamI,
+		_columns: columns,
+		_Table:   listParamI,
 	}
 }
 
@@ -299,8 +298,8 @@ func (p ListParam) _Order() (orderedExpression []exp.OrderedExpression) {
 
 // CustomSQL 自定义SQL，方便构造更复杂的查询语句，如 Group,Having 等
 func (p ListParam) CustomSQL(sqlFn func(p ListParam, ds *goqu.SelectDataset) (newDs *goqu.SelectDataset, err error)) (sql string, err error) {
-	p._Fields.SetScene(SCENE_API_SELECT)
-	ds := Dialect.Select()
+	p._Fields.SetScene(SCENE_SQL_SELECT)
+	ds := Dialect.Select(p._columns...)
 	ds, err = sqlFn(p, ds)
 	if err != nil {
 		return "", err
@@ -313,7 +312,7 @@ func (p ListParam) CustomSQL(sqlFn func(p ListParam, ds *goqu.SelectDataset) (ne
 }
 
 func (p ListParam) ToSQL() (sql string, err error) {
-	p._Fields.SetScene(SCENE_API_SELECT)
+	p._Fields.SetScene(SCENE_SQL_SELECT)
 	where, err := p.Where()
 	if err != nil {
 		return "", err
@@ -324,8 +323,8 @@ func (p ListParam) ToSQL() (sql string, err error) {
 		ofsset = 0
 	}
 
-	ds := Dialect.Select(p._ListParamI.Select()...).
-		From(p._ListParamI.Table()).
+	ds := Dialect.Select(p._columns...).
+		From(p._Table.Table()).
 		Where(where...).
 		Order(p._Order()...)
 	if pageSize > 0 {
@@ -359,7 +358,7 @@ func (p TotalParam) Where() (expressions Expressions, err error) {
 }
 
 func (p TotalParam) ToSQL() (sql string, err error) {
-	p._Fields.SetScene(SCENE_API_SELECT)
+	p._Fields.SetScene(SCENE_SQL_SELECT)
 	where, err := p.Where()
 	if err != nil {
 		return "", err

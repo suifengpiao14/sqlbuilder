@@ -60,6 +60,11 @@ func (fns *ValueFns) Append(subFns ...ValueFn) {
 	fns.Insert(-1, subFns...)
 }
 
+func (fns *ValueFns) Reset(subFns ...ValueFn) {
+	*fns = make(ValueFns, 0)
+	*fns = append(*fns, subFns...)
+}
+
 // AppendIfNotFirst 追加到最后,但是不能是第一个,一般用于生成SQL时格式化数据
 func (fns *ValueFns) AppendIfNotFirst(subFns ...ValueFn) {
 	if len(*fns) == 0 {
@@ -118,24 +123,50 @@ func (fns InitFieldFns) Apply(f *Field, fs ...*Field) {
 	}
 }
 
+type SceneInit struct {
+	Scene        Scene
+	InitFieldFns InitFieldFns
+}
+
+type SceneInits []SceneInit
+
+func (sceneInits SceneInits) GetByScene(scene Scene) SceneInit {
+	for _, s := range sceneInits {
+		if scene.IsSame(s.Scene) {
+			return s
+		}
+	}
+	return SceneInit{
+		Scene: scene,
+	}
+}
+
+// Append 常规添加
+func (sis *SceneInits) Append(sceneInits ...SceneInit) {
+	if *sis == nil {
+		*sis = make(SceneInits, 0)
+	}
+	*sis = append(*sis, sceneInits...)
+
+}
+
 type OrderFn func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression)
 
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Name       string      `json:"name"`
-	ValueFns   ValueFns    `json:"-"` // 增加error，方便封装字段验证规则
-	WhereFns   ValueFns    `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	OrderFn    OrderFn     `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	Schema     *Schema     // 可以为空，为空建议设置默认值
-	Table      TableI      // 关联表,方便收集Table全量信息
-	Api        interface{} // 关联Api对象,方便收集Api全量信息
-	scene      Scene       // 场景
-	docNameFns DocNameFns  // 修改文档字段名称
-	initInsert InitFieldFn
-	initUpdate InitFieldFn
-	initSelect InitFieldFn
-	tags       []string // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
-	dbName     string
+	Name          string      `json:"name"`
+	ValueFns      ValueFns    `json:"-"` // 增加error，方便封装字段验证规则
+	WhereFns      ValueFns    `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	OrderFn       OrderFn     `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	Schema        *Schema     // 可以为空，为空建议设置默认值
+	Table         TableI      // 关联表,方便收集Table全量信息
+	Api           interface{} // 关联Api对象,方便收集Api全量信息
+	scene         Scene       // 场景
+	docNameFns    DocNameFns  // 修改文档字段名称
+	sceneInitFns  SceneInits  // 场景初始化配置
+	tags          []string    // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
+	dbName        string
+	selectColumns []any // 查询时列
 }
 
 const (
@@ -157,9 +188,8 @@ func (f *Field) Copy() (copyF *Field) {
 	copyF.Table = f.Table
 	copyF.Api = f.Api
 	copyF.scene = f.scene
-	copyF.initInsert = f.initInsert
-	copyF.initUpdate = f.initUpdate
-	copyF.initSelect = f.initSelect
+	copyF.sceneInitFns = f.sceneInitFns
+	copyF.selectColumns = f.selectColumns
 	copyF.dbName = f.dbName
 	copyF.tags = f.tags
 	return copyF
@@ -178,6 +208,19 @@ func (f *Field) DBName() string {
 func (f *Field) SetDBName(dbName string) *Field {
 	f.dbName = dbName
 	return f
+}
+func (f *Field) SetSelectColumns(columns ...any) *Field {
+	f.selectColumns = columns
+	return f
+}
+
+func (f *Field) Select() (columns []any) {
+	if len(f.selectColumns) == 0 { // 默认增加本列名称
+		f.selectColumns = []any{
+			f.DBName(),
+		}
+	}
+	return f.selectColumns
 }
 
 func (f *Field) SetName(name string) *Field {
@@ -328,31 +371,45 @@ func (oFns OptionFns) Apply(field *Field) {
 
 type OptionsFn func(fields ...*Field)
 
-// SetScene Scene 场景，增加 insert,update,select 场景，方便针对场景设置，如enums, 下拉选择有全选，新增、修改没有
+// SetScene 设置 Scene 场景，已第一次设置为准，建议在具体使用时设置，增加 insert,update,select 场景，方便针对场景设置，如enums, 下拉选择有全选，新增、修改没有
 func (f *Field) SetScene(scene Scene) *Field {
-	f.scene = scene
+	if f.scene == "" {
+		f.scene = scene
+	}
 	return f
 }
 
 // Scene  获取场景
-func (f *Field) Scene() Scene {
-	return f.scene
+func (f *Field) SceneFn(scene Scene, initFns ...InitFieldFn) *Field {
+	f.sceneInitFns = SceneInits{
+		{Scene: scene, InitFieldFns: initFns},
+	}
+	return f
 }
 func (f *Field) Apply(initFns ...InitFieldFn) *Field {
 	InitFieldFns(initFns).Apply(f)
 	return f
 }
 func (f *Field) SceneInsert(initFn InitFieldFn) *Field {
-	f.initInsert = initFn
+	f.sceneInitFns.Append(SceneInit{
+		Scene:        SCENE_SQL_INSERT,
+		InitFieldFns: InitFieldFns{initFn},
+	})
 	return f
 }
 func (f *Field) SceneUpdate(initFn InitFieldFn) *Field {
-	f.initUpdate = initFn
+	f.sceneInitFns.Append(SceneInit{
+		Scene:        SCENE_SQL_UPDATE,
+		InitFieldFns: InitFieldFns{initFn},
+	})
 	return f
 }
 
 func (f *Field) SceneSelect(initFn InitFieldFn) *Field {
-	f.initSelect = initFn
+	f.sceneInitFns.Append(SceneInit{
+		Scene:        SCENE_SQL_SELECT,
+		InitFieldFns: InitFieldFns{initFn},
+	})
 	return f
 }
 
@@ -436,7 +493,7 @@ func (f Field) DBColumn() (doc *Column, err error) {
 	}
 
 	doc = &Column{
-		Name:      FieldName2DBColumnName(f.Name),
+		Name:      f.DBName(),
 		Comment:   f.Schema.FullComment(),
 		Unsigned:  unsigned,
 		Type:      typ,
@@ -451,21 +508,12 @@ func (f Field) DBColumn() (doc *Column, err error) {
 }
 
 func (f *Field) init(fs ...*Field) {
-	switch f.scene {
-	case SCENE_API_INSERT:
-		if f.initInsert != nil {
-			f.initInsert(f, fs...)
+	if f.sceneInitFns != nil {
+		sceneInit := f.sceneInitFns.GetByScene(f.scene)
+		if sceneInit.InitFieldFns != nil {
+			sceneInit.InitFieldFns.Apply(f, fs...)
 		}
 
-	case SCENE_API_UPDATE:
-		if f.initUpdate != nil {
-			f.initUpdate(f, fs...)
-		}
-
-	case SCENE_API_SELECT:
-		if f.initSelect != nil {
-			f.initSelect(f, fs...)
-		}
 	}
 }
 
@@ -554,6 +602,11 @@ func (c Field) FormatType(val any) (value any) {
 	if IsNil(val) {
 		return val
 	}
+	switch val.(type) {
+	case exp.LiteralExpression:
+		return val
+	}
+
 	value = val
 	if c.Schema == nil {
 		return value
@@ -582,7 +635,7 @@ func (f Field) Data(fs ...*Field) (data any, err error) {
 		return nil, nil
 	}
 	data = map[string]any{
-		FieldName2DBColumnName(f.Name): val,
+		f.DBName(): val,
 	}
 	return data, nil
 }
@@ -595,10 +648,10 @@ func (f Field) Where(fs ...*Field) (expressions Expressions, err error) {
 	if val == nil {
 		return nil, nil
 	}
-	if ex, ok := TryParseExpressions(FieldName2DBColumnName(f.Name), val); ok {
+	if ex, ok := TryParseExpressions(f.DBName(), val); ok {
 		return ex, nil
 	}
-	return ConcatExpression(goqu.Ex{FieldName2DBColumnName(f.Name): val}), nil
+	return ConcatExpression(goqu.Ex{f.DBName(): val}), nil
 }
 
 func (f Field) Order(fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
@@ -645,6 +698,14 @@ func (fs Fields) SceneSelect(fn InitFieldFn) Fields {
 		fs[i].SceneSelect(fn)
 	}
 	return fs
+}
+
+func (fs Fields) Select() (columns []any) {
+	columns = make([]any, 0)
+	for _, f := range fs {
+		columns = append(columns, f.Select()...)
+	}
+	return columns
 }
 
 func (fs Fields) Pagination() (index int, size int) {
@@ -747,6 +808,15 @@ func (fs Fields) DocRequestArgs() (args DocRequestArgs) {
 	}
 	return args
 }
+
+func (fs Fields) DBNames() (dbNames []string, err error) {
+	dbNames = make([]string, 0)
+	for _, f := range fs {
+		dbNames = append(dbNames, f.DBName())
+	}
+	return dbNames, nil
+}
+
 func (fs Fields) DBColumns() (columns Columns, err error) {
 	columns = make(Columns, 0)
 	for _, f := range fs {
@@ -871,7 +941,7 @@ func TryConvert2Betwwen(field string, value any) (expressions Expressions, ok bo
 		}
 
 		if !IsNil(max) {
-			return ConcatExpression(identifier.Lte(min)), true
+			return ConcatExpression(identifier.Lte(max)), true
 		}
 	}
 	return nil, false

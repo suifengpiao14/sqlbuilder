@@ -16,17 +16,19 @@ const (
 )
 
 const (
-	SCENE_SQL_INSERT Scene = "insert"
-	SCENE_SQL_UPDATE Scene = "update"
-	SCENE_SQL_SELECT Scene = "select"
+// SCENE_SQL_INSERT Scene = "insert"
+// SCENE_SQL_UPDATE Scene = "update"
+// Scene = "select"
 )
 
 const (
-	SCENE_API_INSERT Scene = "insert"
-	SCENE_API_UPDATE Scene = "update"
-	SCENE_API_DELETE Scene = "delete"
-	SCENE_API_SELECT Scene = "select"
-	SCENE_API_VIEW   Scene = "view"
+	SCENE_SQL_INSERT   Scene = "insert"
+	SCENE_SQL_UPDATE   Scene = "update"
+	SCENE_SQL_DELETE   Scene = "delete"
+	SCENE_SQL_SELECT   Scene = "select"
+	SCENE_SQL_VIEW     Scene = "view"
+	SCENE_SQL_INCREASE Scene = "increse" // 字段递增
+	SCENE_SQL_DECREASE Scene = "decrese" // 字段递减
 )
 
 func (s Scene) IsSame(target Scene) bool {
