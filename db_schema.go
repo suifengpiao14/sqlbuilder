@@ -55,6 +55,7 @@ func (st SchemaType) IsEqual(other SchemaType) bool {
 
 const (
 	Schema_Type_string SchemaType = "string"
+	Schema_Type_json   SchemaType = "json"
 	Schema_Type_int    SchemaType = "int"
 )
 
@@ -240,29 +241,44 @@ func (e Enum) IsEqual(val any) (ok bool) {
 
 func (schema Schema) Validate(fieldName string, field reflect.Value) error {
 	// 验证 required
+	isNotValid := !field.IsValid() // 空值 由nil 过来的值
+	if isNotValid {
+		return nil // 空值不判断，因为nil代表忽略这个字段
+	}
 	if schema.Required && isEmptyValue(field) {
 		return fmt.Errorf("%s is required", fieldName)
 	}
+
+	var valStr string
+	var varInt int64
+	kind := field.Kind()
+	switch kind {
+	case reflect.String:
+		valStr = field.String()
+	case reflect.Int:
+		varInt = field.Int()
+	}
 	// 验证 maxLength
-	if schema.MaxLength > 0 && field.Kind() == reflect.String && len(field.String()) > schema.MaxLength {
+	if schema.MaxLength > 0 && kind == reflect.String && len(valStr) > schema.MaxLength {
 		return fmt.Errorf("%s exceeds maximum length of %d", fieldName, schema.MaxLength)
 	}
 	// 验证 minLength
-	if schema.MinLength > 0 && field.Kind() == reflect.String && len(field.String()) < schema.MinLength {
+	if schema.MinLength > 0 && kind == reflect.String && len(valStr) < schema.MinLength {
 		return fmt.Errorf("%s is less than minimum length of %d", fieldName, schema.MinLength)
 	}
 	// 验证 maximum
-	if schema.Maximum > 0 && field.Kind() == reflect.Int && field.Int() > int64(schema.Maximum) {
+	if schema.Maximum > 0 && kind == reflect.Int && varInt > 0 && uint(varInt) > schema.Maximum {
 		return fmt.Errorf("%s exceeds maximum value of %d", fieldName, schema.Maximum)
 	}
 	// 验证 minimum
-	if schema.Minimum > 0 && field.Kind() == reflect.Int && field.Int() < int64(schema.Minimum) {
+	if schema.Minimum > 0 && kind == reflect.Int && varInt < int64(schema.Minimum) {
 		return fmt.Errorf("%s is less than minimum value of %d", fieldName, schema.Minimum)
 	}
 	// 验证 enums
 	if len(schema.Enums) > 0 {
-		if !contains(schema.Enums.ValuesStr(), cast.ToString(field.Interface())) {
-			return fmt.Errorf("%s must be one of %v", fieldName, schema.Enums.Values())
+		val := field.Interface()
+		if !contains(schema.Enums.ValuesStr(), cast.ToString(val)) {
+			return fmt.Errorf("%s must be one of %v,got:%v", fieldName, schema.Enums.Values(), val)
 		}
 	}
 	return nil
@@ -303,23 +319,31 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-// ValueFnDBSchemaValidator 将DBSchema validator 封装成 ValueFn 中间件函数
-func ValueFnDBSchemaValidator(field Field) (valueFn ValueFn) {
-	return func(in any) (any, error) {
-		err := field.Validate(in)
-		if err != nil {
-			return nil, err
-		}
-		return in, nil
-	}
-}
-
 // ValueFnDBSchemaFormat 根据DB类型要求,转换数据类型
 func ValueFnDBSchemaFormatType(field Field) (valueFn ValueFn) {
 	return func(in any) (any, error) {
 		value := field.FormatType(in)
 		return value, nil
 	}
+}
+
+// ValueFnUniqueueArray 数组元素去重
+func ValueFnUniqueueArray[T int | int64 | string](in any) (any, error) {
+	arr, ok := in.([]T)
+	if !ok {
+		return in, nil
+	}
+	newArr := make([]T, 0)
+	m := map[T]struct{}{}
+	for _, elem := range arr {
+		if _, ok := m[elem]; ok {
+			continue
+		}
+		m[elem] = struct{}{}
+		newArr = append(newArr, elem)
+	}
+	return newArr, nil
+
 }
 
 func ValueFnForward(in any) (any, error) {
@@ -336,7 +360,14 @@ func ValueFnDecodeComma(in any) (any, error) {
 		return in, nil
 	}
 	arr := strings.Split(s, ",")
-	return arr, nil
+	uniqArr, _ := ValueFnUniqueueArray[string](arr) // 去重
+	strArr := uniqArr.([]string)
+	if len(strArr) == 1 {
+		in = strArr[0] // 去重后只有一个，则转成字符串
+	} else {
+		in = strArr
+	}
+	return in, nil
 }
 
 func ValueFnShield(in any) (any, error) {

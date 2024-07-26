@@ -13,7 +13,7 @@ import (
 	"github.com/suifengpiao14/funcs"
 )
 
-var Time_format = "2024-01-02 15:04:05"
+var Time_format = "2006-01-02 15:04:05"
 
 // type ValueFnfunc(in any) (value any,err error) //函数签名返回参数命名后,容易误导写成 func(in any) (value any,err error){return value,nil};  正确代码:func(in any) (value any,err error){return in,nil};
 type ValueFn func(in any) (any, error) // 函数之所有接收in 入参，有时模型内部加工生成的数据需要存储，需要定制格式化，比如多边形产生的边界框4个点坐标
@@ -584,9 +584,11 @@ func (f Field) IsEqual(o Field) bool {
 	return strings.EqualFold(cast.ToString(fv), cast.ToString(ov)) && strings.EqualFold(f.Name, o.Name)
 }
 
-// Validate  实现ValidateI 接口 可以再 valueFn ,whereValueFn 中手动调用
 func (c Field) Validate(val any) (err error) {
 	if c.Schema == nil {
+		return nil
+	}
+	if IsNil(val) {
 		return nil
 	}
 	rv := reflect.Indirect(reflect.ValueOf(val))
@@ -614,6 +616,9 @@ func (c Field) FormatType(val any) (value any) {
 	switch c.Schema.Type {
 	case Schema_Type_string:
 		value = cast.ToString(value)
+	case Schema_Type_json:
+		b, _ := json.Marshal(value)
+		value = string(b)
 	case Schema_Type_int:
 		value = cast.ToInt(value)
 	}
