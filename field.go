@@ -234,6 +234,11 @@ func (f *Field) SetTitle(title string) *Field {
 	f.MergeSchema(Schema{Title: title})
 	return f
 }
+
+func (f *Field) Comment(comment string) *Field {
+	f.MergeSchema(Schema{Comment: comment})
+	return f
+}
 func (f *Field) SetTag(tag string) *Field {
 	if len(f.tags) == 0 {
 		f.tags = append(f.tags, tag)
@@ -262,6 +267,25 @@ func (f *Field) SetRequired(required bool) *Field {
 		f.Schema = &Schema{}
 	}
 	f.Schema.Required = required
+	return f
+}
+
+// RequiredWhenInsert 经常在新增时要求必填,所以单独一个函数,提供方便
+func (f *Field) RequiredWhenInsert(required bool) *Field {
+	f.SceneInsert(func(f *Field, fs ...*Field) {
+		f.SetRequired(true)
+	})
+	return f
+}
+
+// MinBoundaryLengthWhereInsert 数字最小值,字符串最小长度设置,提供方便
+func (f *Field) MinBoundaryWhereInsert(minimum int, minLength int) *Field {
+	f.SceneInsert(func(f *Field, fs ...*Field) {
+		f.MergeSchema(Schema{
+			Minimum:   minimum,
+			MinLength: minLength,
+		})
+	})
 	return f
 }
 
@@ -591,6 +615,7 @@ func (c Field) Validate(val any) (err error) {
 	if IsNil(val) {
 		return nil
 	}
+
 	rv := reflect.Indirect(reflect.ValueOf(val))
 	err = c.Schema.Validate(c.Name, rv)
 	if err != nil {

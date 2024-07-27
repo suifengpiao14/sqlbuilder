@@ -3,8 +3,10 @@ package sqlbuilder
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 )
 
@@ -242,15 +244,16 @@ func (e Enum) IsEqual(val any) (ok bool) {
 func (schema Schema) Validate(fieldName string, field reflect.Value) error {
 	// 验证 required
 	isNotValid := !field.IsValid() // 空值 由nil 过来的值
+	if schema.Required && (isNotValid || isEmptyValue(field)) {
+		return fmt.Errorf("%s is required", fieldName)
+	}
 	if isNotValid {
 		return nil // 空值不判断，因为nil代表忽略这个字段
-	}
-	if schema.Required && isEmptyValue(field) {
-		return fmt.Errorf("%s is required", fieldName)
 	}
 
 	var valStr string
 	var varInt int64
+
 	kind := field.Kind()
 	switch kind {
 	case reflect.String:
@@ -258,6 +261,7 @@ func (schema Schema) Validate(fieldName string, field reflect.Value) error {
 	case reflect.Int:
 		varInt = field.Int()
 	}
+
 	// 验证 maxLength
 	if schema.MaxLength > 0 && kind == reflect.String && len(valStr) > schema.MaxLength {
 		return fmt.Errorf("%s exceeds maximum length of %d", fieldName, schema.MaxLength)
@@ -271,14 +275,36 @@ func (schema Schema) Validate(fieldName string, field reflect.Value) error {
 		return fmt.Errorf("%s exceeds maximum value of %d", fieldName, schema.Maximum)
 	}
 	// 验证 minimum
-	if schema.Minimum > 0 && kind == reflect.Int && varInt < int64(schema.Minimum) {
-		return fmt.Errorf("%s is less than minimum value of %d", fieldName, schema.Minimum)
+
+	if schema.Minimum > 0 {
+		if kind == reflect.Int && varInt < int64(schema.Minimum) {
+			return fmt.Errorf("%s is less than minimum value of %d", fieldName, schema.Minimum)
+		}
+		if schema.Type == Schema_Type_int {
+			varInt = cast.ToInt64(field.Interface())
+			if varInt < int64(schema.Minimum) {
+				return fmt.Errorf("%s as number is less than minimum value of %d", fieldName, schema.Minimum)
+			}
+		}
+
 	}
 	// 验证 enums
 	if len(schema.Enums) > 0 {
 		val := field.Interface()
 		if !contains(schema.Enums.ValuesStr(), cast.ToString(val)) {
 			return fmt.Errorf("%s must be one of %v,got:%v", fieldName, schema.Enums.Values(), val)
+		}
+	}
+	if schema.RegExp != "" {
+		ex, err := regexp.Compile(schema.RegExp)
+		if err != nil {
+			err = errors.WithMessagef(err, "Schema.Validate,field name:%s,regExp:%s", fieldName, schema.RegExp)
+			return err
+		}
+		str := cast.ToString(field.Interface())
+		if !ex.MatchString(str) {
+			err = errors.Errorf("%s RegExp is %s,got:%s", fieldName, schema.RegExp, str)
+			return err
 		}
 	}
 	return nil
@@ -288,7 +314,8 @@ func isEmptyValue(v reflect.Value) bool {
 	if !v.IsValid() {
 		return true
 	}
-	return cast.ToString(v.Interface()) == ""
+	vStr := cast.ToString(v.Interface())
+	return vStr == ""
 	/*
 		switch v.Kind() {
 		   	case reflect.String:

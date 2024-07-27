@@ -66,9 +66,9 @@ type InsertParam struct {
 	_Fields Fields
 }
 
-func NewInsertBuilder(table TableI) InsertParam {
+func NewInsertBuilder(tableName string) InsertParam {
 	return InsertParam{
-		_TableI: table,
+		_TableI: TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),
 	}
 }
@@ -137,9 +137,9 @@ type DeleteParam struct {
 	_Fields      Fields
 }
 
-func NewDeleteBuilder(table TableI, deletedField Field) DeleteParam {
+func NewDeleteBuilder(tableName string, deletedField Field) DeleteParam {
 	return DeleteParam{
-		_TableI:      table,
+		_TableI:      TableFn(func() string { return tableName }),
 		deletedField: &deletedField,
 		_Fields:      make(Fields, 0),
 	}
@@ -182,9 +182,9 @@ type UpdateParam struct {
 	_Fields Fields
 }
 
-func NewUpdateBuilder(table TableI) UpdateParam {
+func NewUpdateBuilder(tableName string) UpdateParam {
 	return UpdateParam{
-		_TableI: table,
+		_TableI: TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),
 	}
 }
@@ -237,9 +237,9 @@ func (p FirstParam) AppendFields(fields ...*Field) FirstParam {
 	return p
 }
 
-func NewFirstBuilder(table TableI, columns ...any) FirstParam {
+func NewFirstBuilder(tableName string, columns ...any) FirstParam {
 	return FirstParam{
-		_Table:   table,
+		_Table:   TableFn(func() string { return tableName }),
 		_columns: columns,
 		_Fields:  make(Fields, 0),
 	}
@@ -282,10 +282,10 @@ func (p ListParam) AppendFields(fields ...*Field) ListParam {
 	return p
 }
 
-func NewListBuilder(listParamI TableI, columns ...any) ListParam {
+func NewListBuilder(tableName string, columns ...any) ListParam {
 	return ListParam{
 		_columns: columns,
-		_Table:   listParamI,
+		_Table:   TableFn(func() string { return tableName }),
 	}
 }
 
@@ -342,9 +342,9 @@ type TotalParam struct {
 	_Fields Fields
 }
 
-func NewTotalBuilder(table TableI) TotalParam {
+func NewTotalBuilder(tableName string) TotalParam {
 	return TotalParam{
-		_Table: table,
+		_Table: TableFn(func() string { return tableName }),
 	}
 }
 
