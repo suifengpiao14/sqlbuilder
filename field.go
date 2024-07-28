@@ -166,7 +166,8 @@ type Field struct {
 	sceneInitFns  SceneInits  // 场景初始化配置
 	tags          []string    // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
 	dbName        string
-	selectColumns []any // 查询时列
+	selectColumns []any  // 查询时列
+	fieldName     string //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
 }
 
 const (
@@ -192,6 +193,7 @@ func (f *Field) Copy() (copyF *Field) {
 	copyF.selectColumns = f.selectColumns
 	copyF.dbName = f.dbName
 	copyF.tags = f.tags
+	copyF.fieldName = f.fieldName
 	return copyF
 }
 
@@ -228,6 +230,17 @@ func (f *Field) SetName(name string) *Field {
 		f.Name = name
 	}
 	return f
+}
+
+func (f *Field) SetFieldName(fieldName string) *Field {
+	if fieldName != "" {
+		f.fieldName = fieldName
+	}
+	return f
+}
+
+func (f *Field) GetFieldName(fieldName string) string {
+	return f.fieldName
 }
 
 func (f *Field) SetTitle(title string) *Field {
@@ -825,6 +838,14 @@ func (fs Fields) GetByTag(tag string) (f *Field, ok bool) {
 	for i := 0; i < len(fs); i++ {
 		if fs[i].HastTag(tag) {
 			return fs[i], true
+		}
+	}
+	return nil, false
+}
+func (fs Fields) GetByFieldName(fieldName string) (f *Field, ok bool) {
+	for i := 0; i < len(fs); i++ {
+		if strings.EqualFold(fieldName, f.fieldName) {
+			return f, true
 		}
 	}
 	return nil, false
