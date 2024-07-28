@@ -25,7 +25,11 @@ type Column struct {
 	Minimum       int    `json:"minimum"`   // 数字最小值
 	Primary       bool   `json:"primary"`
 	AutoIncrement bool   `json:"autoIncrement"`
+	OnUpdate      string `json:"onUpdate"`
+	Tags          Tags   `json:"tags"`
 }
+
+type DBFunc string
 
 type TypeReflect[T int | uint] struct {
 	UpperLimit     T      `json:"upperLimit"`     //上限
@@ -148,11 +152,6 @@ func Column2DDLMysql(col *Column) (ddl string) {
 		comment = fmt.Sprintf(`COMMENT "%s"`, col.Comment)
 	}
 	defaul := col.Default
-	defaulStr := ""
-	if defaul != nil {
-		defaulStr = fmt.Sprintf("default %s", cast.ToString(defaul))
-		notNil = " not null "
-	}
 
 	typ := col.Type
 	switch col.Type {
@@ -168,7 +167,7 @@ func Column2DDLMysql(col *Column) (ddl string) {
 				typ = fmt.Sprintf("%s(%d)", typ, col.MaxLength)
 			}
 			if tr.NoDefaultValue {
-				defaulStr = ""
+				defaul = nil // 不容许设置默认值
 			}
 		}
 	case "int":
@@ -193,14 +192,28 @@ func Column2DDLMysql(col *Column) (ddl string) {
 	default:
 		typ = col.Type
 	}
+	defaulStr := ""
+	if defaul != nil {
+		defaulStr = fmt.Sprintf("default %s", cast.ToString(defaul))
+
+	}
 
 	autoIncrement := ""
 	if col.AutoIncrement {
 		autoIncrement = "AUTO_INCREMENT"
 		defaulStr = "" // 自增不需要默认值
-
 	}
 
+	if col.Tags.HastTag(Tag_createdAt) {
+		typ = "datetime"
+		defaulStr = "default CURRENT_TIMESTAMP"
+	} else if col.Tags.HastTag(Tag_updatedAt) {
+		typ = "datetime"
+		defaulStr = "default  CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+	}
+	if defaul != nil {
+		notNil = " not null "
+	}
 	ddl = fmt.Sprintf("%s %s %s %s %s %s", col.Name, typ, notNil, autoIncrement, defaulStr, comment)
 	return ddl
 }

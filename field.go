@@ -164,10 +164,21 @@ type Field struct {
 	scene         Scene       // 场景
 	docNameFns    DocNameFns  // 修改文档字段名称
 	sceneInitFns  SceneInits  // 场景初始化配置
-	tags          []string    // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
+	tags          Tags        // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
 	dbName        string
 	selectColumns []any  // 查询时列
 	fieldName     string //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
+}
+
+type Tags []string
+
+func (tags Tags) HastTag(tag string) bool {
+	for _, t := range tags {
+		if strings.EqualFold(t, tag) {
+			return true
+		}
+	}
+	return false
 }
 
 const (
@@ -196,6 +207,11 @@ func (f *Field) Copy() (copyF *Field) {
 	copyF.fieldName = f.fieldName
 	return copyF
 }
+
+const (
+	Tag_createdAt = "createdAt"
+	Tag_updatedAt = "updatedAt"
+)
 
 // DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
 func (f *Field) DBName() string {
@@ -260,13 +276,10 @@ func (f *Field) SetTag(tag string) *Field {
 }
 
 func (f *Field) HastTag(tag string) bool {
-	for _, t := range f.tags {
-		if strings.EqualFold(t, tag) {
-			return true
-		}
+	if len(f.tags) == 0 {
+		return false
 	}
-
-	return false
+	return f.tags.HastTag(tag)
 }
 
 func (f *Field) AppendEnum(enums ...Enum) *Field {
@@ -549,6 +562,7 @@ func (f Field) DBColumn() (doc *Column, err error) {
 		Minimum:       schema.Minimum,
 		Primary:       schema.Primary,
 		AutoIncrement: schema.AutoIncrement,
+		Tags:          f.tags,
 	}
 	return doc, nil
 }
