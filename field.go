@@ -239,7 +239,7 @@ func (f *Field) SetFieldName(fieldName string) *Field {
 	return f
 }
 
-func (f *Field) GetFieldName(fieldName string) string {
+func (f *Field) GetFieldName() string {
 	return f.fieldName
 }
 
