@@ -358,6 +358,10 @@ func (f *Field) MergeSchema(schema Schema) *Field {
 	if schema.Primary {
 		f.Schema.Primary = schema.Primary
 	}
+
+	if schema.AutoIncrement {
+		f.Schema.AutoIncrement = schema.AutoIncrement
+	}
 	if schema.Unique {
 		f.Schema.Unique = schema.Unique
 	}
@@ -519,7 +523,10 @@ func (f Field) DBColumn() (doc *Column, err error) {
 	}
 
 	unsigned := schema.Minimum > -1 // 默认为无符号，需要符号，则最小值设置为最大负数即可
-	typeMap := map[string]string{}
+	typeMap := map[string]string{
+		"int":    "int",
+		"string": "string",
+	}
 	typ := typeMap[schema.Type.String()]
 	if typ == "" {
 		if schema.Minimum > 0 || schema.Maximum > 0 { // 如果规定了最小值,最大值，默认为整型
@@ -530,16 +537,18 @@ func (f Field) DBColumn() (doc *Column, err error) {
 	}
 
 	doc = &Column{
-		Name:      f.DBName(),
-		Comment:   f.Schema.FullComment(),
-		Unsigned:  unsigned,
-		Type:      typ,
-		Default:   schema.Default,
-		Enums:     schema.Enums,
-		MaxLength: schema.MaxLength,
-		MinLength: schema.MinLength,
-		Maximum:   schema.Maximum,
-		Minimum:   schema.Minimum,
+		Name:          f.DBName(),
+		Comment:       f.Schema.FullComment(),
+		Unsigned:      unsigned,
+		Type:          typ,
+		Default:       schema.Default,
+		Enums:         schema.Enums,
+		MaxLength:     schema.MaxLength,
+		MinLength:     schema.MinLength,
+		Maximum:       schema.Maximum,
+		Minimum:       schema.Minimum,
+		Primary:       schema.Primary,
+		AutoIncrement: schema.AutoIncrement,
 	}
 	return doc, nil
 }

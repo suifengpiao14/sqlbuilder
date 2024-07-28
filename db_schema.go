@@ -24,9 +24,10 @@ type Schema struct {
 	Minimum   int        `json:"minimum"`   // 数字最小值
 	RegExp    string     `json:"regExp"`    //正则表达式
 
-	Primary      bool `json:"primary"`      //是否为主键
-	Unique       bool `json:"unique"`       // 是否为唯一键
-	ShieldUpdate bool `json:"shieldUpdate"` //屏蔽更新该字段,适合不可更新字段,如tenat,deleted_at
+	Primary       bool `json:"primary"` //是否为主键
+	Unique        bool `json:"unique"`  // 是否为唯一键
+	AutoIncrement bool `json:"autoIncrement"`
+	ShieldUpdate  bool `json:"shieldUpdate"` //屏蔽更新该字段,适合不可更新字段,如tenat,deleted_at
 }
 
 func (schema Schema) FullComment() string {
