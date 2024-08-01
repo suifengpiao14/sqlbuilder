@@ -865,8 +865,9 @@ func (fs Fields) GetByTag(tag string) (f *Field, ok bool) {
 	}
 	return nil, false
 }
-func (fs Fields) GetByFieldName(fieldName string) (f *Field, ok bool) {
+func (fs Fields) GetByFieldName(fieldName string) (*Field, bool) {
 	for i := 0; i < len(fs); i++ {
+		f := fs[i]
 		if strings.EqualFold(fieldName, f.fieldName) {
 			return f, true
 		}
