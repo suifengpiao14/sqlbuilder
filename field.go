@@ -500,7 +500,7 @@ func (f *Field) SceneSelect(initFn InitFieldFn) *Field {
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
 func NewField(value any, options ...OptionFn) (field *Field) {
 	field = &Field{}
-	valueFn, ok := value.(ValueFn)
+	valueFn, ok := value.(func(inputValue any) (any, error))
 	if !ok {
 		valueFn = func(inputValue any) (any, error) {
 			return value, nil
