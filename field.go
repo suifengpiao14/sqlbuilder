@@ -264,6 +264,16 @@ func (f *Field) SetTitle(title string) *Field {
 	return f
 }
 
+func (f *Field) SetType(typ SchemaType) *Field {
+	f.MergeSchema(Schema{Type: typ})
+	return f
+}
+func (f *Field) SetBaseInfo(name string, typ SchemaType, title string) *Field {
+	f.SetName(name).SetType(typ).SetTitle(title)
+
+	return f
+}
+
 func (f *Field) Comment(comment string) *Field {
 	f.MergeSchema(Schema{Comment: comment})
 	return f
@@ -293,6 +303,26 @@ func (f *Field) SetRequired(required bool) *Field {
 		f.Schema = &Schema{}
 	}
 	f.Schema.Required = required
+	return f
+}
+
+func (f *Field) AppendValueFn(valueFns ...ValueFn) *Field {
+	f.ValueFns.Append(valueFns...)
+	return f
+}
+
+func (f *Field) AppendWhereFn(whereFns ...ValueFn) *Field {
+	f.WhereFns.Append(whereFns...)
+	return f
+}
+
+func (f *Field) ResetValueFn(valueFns ...ValueFn) *Field {
+	f.ValueFns.Reset(valueFns...)
+	return f
+}
+
+func (f *Field) ResetWhereFn(whereFns ...ValueFn) *Field {
+	f.WhereFns.Reset(whereFns...)
 	return f
 }
 
@@ -468,8 +498,15 @@ func (f *Field) SceneSelect(initFn InitFieldFn) *Field {
 }
 
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
-func NewField(valueFn ValueFn, options ...OptionFn) (field *Field) {
+func NewField(value any, options ...OptionFn) (field *Field) {
 	field = &Field{}
+	valueFn, ok := value.(ValueFn)
+	if !ok {
+		valueFn = func(inputValue any) (any, error) {
+			return value, nil
+		}
+	}
+
 	field.ValueFns.InsertAsFirst(valueFn)
 	OptionFns(options).Apply(field)
 	return field
