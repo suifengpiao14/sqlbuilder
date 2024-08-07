@@ -502,8 +502,11 @@ func NewField(value any, options ...OptionFn) (field *Field) {
 	field = &Field{}
 	valueFn, ok := value.(func(inputValue any) (any, error))
 	if !ok {
-		valueFn = func(inputValue any) (any, error) {
-			return value, nil
+		valueFn, ok = value.(ValueFn)
+		if !ok {
+			valueFn = func(inputValue any) (any, error) {
+				return value, nil
+			}
 		}
 	}
 
