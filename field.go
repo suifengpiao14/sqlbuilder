@@ -233,11 +233,6 @@ func (f *Field) SetSelectColumns(columns ...any) *Field {
 }
 
 func (f *Field) Select() (columns []any) {
-	if len(f.selectColumns) == 0 { // 默认增加本列名称
-		f.selectColumns = []any{
-			f.DBName(),
-		}
-	}
 	return f.selectColumns
 }
 
@@ -842,6 +837,9 @@ func (fs Fields) Contains(field Field) (exists bool) {
 }
 
 func (fs *Fields) Append(fields ...*Field) *Fields {
+	if *fs == nil {
+		*fs = make(Fields, 0)
+	}
 	*fs = append(*fs, fields...)
 	return fs
 }

@@ -272,9 +272,8 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 }
 
 type ListParam struct {
-	_Table   TableI
-	_columns []any
-	_Fields  Fields
+	_Table  TableI
+	_Fields Fields
 }
 
 func (p ListParam) AppendFields(fields ...*Field) ListParam {
@@ -282,10 +281,9 @@ func (p ListParam) AppendFields(fields ...*Field) ListParam {
 	return p
 }
 
-func NewListBuilder(tableName string, columns ...any) ListParam {
+func NewListBuilder(tableName string) ListParam {
 	return ListParam{
-		_columns: columns,
-		_Table:   TableFn(func() string { return tableName }),
+		_Table: TableFn(func() string { return tableName }),
 	}
 }
 
@@ -299,7 +297,7 @@ func (p ListParam) _Order() (orderedExpression []exp.OrderedExpression) {
 // CustomSQL 自定义SQL，方便构造更复杂的查询语句，如 Group,Having 等
 func (p ListParam) CustomSQL(sqlFn func(p ListParam, ds *goqu.SelectDataset) (newDs *goqu.SelectDataset, err error)) (sql string, err error) {
 	p._Fields.SetScene(SCENE_SQL_SELECT)
-	ds := Dialect.Select(p._columns...)
+	ds := Dialect.Select(p._Fields.Select()...)
 	ds, err = sqlFn(p, ds)
 	if err != nil {
 		return "", err
@@ -323,7 +321,7 @@ func (p ListParam) ToSQL() (sql string, err error) {
 		ofsset = 0
 	}
 
-	ds := Dialect.Select(p._columns...).
+	ds := Dialect.Select(p._Fields.Select()...).
 		From(p._Table.Table()).
 		Where(where...).
 		Order(p._Order()...)
