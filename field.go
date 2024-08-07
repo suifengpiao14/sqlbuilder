@@ -182,6 +182,10 @@ func (tags Tags) HastTag(tag string) bool {
 }
 
 const (
+	Field_name_id = "id" // 列取名为id
+)
+
+const (
 	Field_tag_pageIndex = "pageIndex" // 标记为pageIndex列
 	Field_tag_pageSize  = "pageSize"  //标记为pageSize列
 )
