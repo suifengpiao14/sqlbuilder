@@ -151,6 +151,21 @@ func (es Enums) Contains(val any) (ok bool) {
 	return false
 }
 
+// SubEnums 用于提取部分枚举值(比如状态机提取能转到B状态的源，方便输出提示)
+func (es Enums) SubEnums(keys ...any) (subEnums Enums) {
+	subEnums = make(Enums, 0)
+	for _, e := range es {
+		for _, key := range keys {
+			if ok := e.IsEqual(key); ok {
+				subEnums = append(subEnums, e)
+				break
+			}
+		}
+
+	}
+	return subEnums
+}
+
 func (es Enums) ValuesStr() (valuesStr []string) {
 	values := es.Values()
 	valuesStr = make([]string, 0)
