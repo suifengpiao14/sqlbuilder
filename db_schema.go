@@ -111,6 +111,24 @@ func (es *Enums) InsertAsFirst(enums ...Enum) {
 	es.Insert(0, enums...)
 }
 
+// RemoveByTag 通过tag 移除部分枚举值，尽量少用(到目前没使用)
+func (es *Enums) RemoveByTag(tags ...string) {
+	tmp := Enums{}
+	for _, e := range *es {
+		exists := false
+		for _, t := range tags {
+			if strings.EqualFold(e.Tag, t) {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			tmp = append(tmp, e)
+		}
+	}
+	*es = tmp
+}
+
 // Append 常规添加
 func (es *Enums) Append(enums ...Enum) {
 	es.Insert(-1, enums...)
@@ -235,6 +253,8 @@ type Enum struct {
 const (
 	Enum_tag_true  = "true"
 	Enum_tag_false = "false"
+
+	Enum_tag_allowEmpty = "allowEmpty" // 枚举值可以为空，通常用于选择条件
 )
 
 func (e Enum) IsEqual(val any) (ok bool) {
