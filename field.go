@@ -713,6 +713,28 @@ func (c Field) FormatType(val any) (value any) {
 	if c.Schema == nil {
 		return value
 	}
+
+	valValue := reflect.Indirect(reflect.ValueOf(val))
+	valType := valValue.Type()
+	switch valType.Kind() {
+	case reflect.Slice, reflect.Array:
+		var dstTyp any = ""
+		switch c.Schema.Type {
+		case Schema_Type_int:
+			dstTyp = 0
+		}
+
+		formattedSlice := reflect.MakeSlice(reflect.SliceOf(reflect.TypeOf(dstTyp)), valValue.Len(), valValue.Len())
+		for i := 0; i < valValue.Len(); i++ {
+			formattedSlice.Index(i).Set(reflect.ValueOf(c.formatSingleType(valValue.Index(i).Interface())))
+		}
+		return formattedSlice.Interface()
+	}
+	return c.formatSingleType(val)
+}
+
+func (c Field) formatSingleType(val any) any {
+	var value = val
 	switch c.Schema.Type {
 	case Schema_Type_string:
 		value = cast.ToString(value)
@@ -722,7 +744,6 @@ func (c Field) FormatType(val any) (value any) {
 	case Schema_Type_int:
 		value = cast.ToInt(value)
 	}
-
 	return value
 }
 
@@ -766,6 +787,10 @@ func (f Field) Order(fs ...*Field) (orderedExpressions []exp.OrderedExpression) 
 		orderedExpressions = append(orderedExpressions, ex...)
 	}
 	return orderedExpressions
+}
+
+type FieldsI interface {
+	Fields() Fields
 }
 
 type Fields []*Field

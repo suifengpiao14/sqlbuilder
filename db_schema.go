@@ -413,6 +413,19 @@ func ValueFnForward(in any) (any, error) {
 	return in, nil
 }
 
+// ValueFnFormatArray 格式化数组,只有一个元素时,直接返回当前元素，常用户where in 条件
+func ValueFnFormatArray(in any) (any, error) {
+	valValue := reflect.Indirect(reflect.ValueOf(in))
+	valType := valValue.Type()
+	switch valType.Kind() {
+	case reflect.Slice, reflect.Array:
+		if valValue.Len() == 1 {
+			in = valValue.Index(0).Interface()
+		}
+	}
+	return in, nil
+}
+
 // ValueFnDecodeComma 参数中,拼接的字符串解码成数组
 func ValueFnDecodeComma(in any) (any, error) {
 	if IsNil(in) {
