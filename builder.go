@@ -78,13 +78,13 @@ func (p InsertParam) AppendFields(fields ...*Field) InsertParam {
 	return p
 }
 
-func (p InsertParam) Data() (data any, err error) {
+func (p InsertParam) _Data() (data any, err error) {
 	return p._Fields.Data()
 }
 
 func (p InsertParam) ToSQL() (sql string, err error) {
 	p._Fields.SetScene(SCENE_SQL_INSERT)
-	rowData, err := p.Data()
+	rowData, err := p._Data()
 	if err != nil {
 		return "", err
 	}
@@ -114,7 +114,7 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 		if i == 0 {
 			table = r._TableI.Table()
 		}
-		rowData, err := r.Data()
+		rowData, err := r._Data()
 		if err != nil {
 			return "", err
 		}
@@ -132,16 +132,14 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 }
 
 type DeleteParam struct {
-	_TableI      TableI
-	deletedField *Field
-	_Fields      Fields
+	_TableI TableI
+	_Fields Fields
 }
 
-func NewDeleteBuilder(tableName string, deletedField Field) DeleteParam {
+func NewDeleteBuilder(tableName string) DeleteParam {
 	return DeleteParam{
-		_TableI:      TableFn(func() string { return tableName }),
-		deletedField: &deletedField,
-		_Fields:      make(Fields, 0),
+		_TableI: TableFn(func() string { return tableName }),
+		_Fields: make(Fields, 0),
 	}
 }
 
@@ -150,22 +148,27 @@ func (p DeleteParam) AppendFields(fields ...*Field) DeleteParam {
 	return p
 }
 
-func (p DeleteParam) Data() (data any, err error) {
-	return p.deletedField.Data(p._Fields...)
+func (p DeleteParam) _Data() (data any, err error) {
+	return p._Fields.Data()
 }
 
-func (p DeleteParam) Where() (expressions Expressions, err error) {
+func (p DeleteParam) _Where() (expressions Expressions, err error) {
 	return p._Fields.Where()
 }
 
 func (p DeleteParam) ToSQL() (sql string, err error) {
 	p._Fields.SetScene(SCENE_SQL_DELETE)
-	data, err := p.Data()
+	_, ok := p._Fields.GetByFieldName(Field_name_deletedAt)
+	if !ok {
+		err = errors.Errorf("not found deleted column by fieldName:%s", Field_name_deletedAt)
+		return "", err
+	}
+	data, err := p._Data()
 	if err != nil {
 		return "", err
 	}
 
-	where, err := p.Where()
+	where, err := p._Where()
 	if err != nil {
 		return "", err
 	}
@@ -194,22 +197,22 @@ func (p UpdateParam) AppendFields(fields ...*Field) UpdateParam {
 	return p
 }
 
-func (p UpdateParam) Data() (data any, err error) {
+func (p UpdateParam) _Data() (data any, err error) {
 	return p._Fields.Data()
 }
 
-func (p UpdateParam) Where() (expressions Expressions, err error) {
+func (p UpdateParam) _Where() (expressions Expressions, err error) {
 	return p._Fields.Where()
 }
 
 func (p UpdateParam) ToSQL() (sql string, err error) {
 	p._Fields.SetScene(SCENE_SQL_UPDATE)
-	data, err := p.Data()
+	data, err := p._Data()
 	if err != nil {
 		return "", err
 	}
 
-	where, err := p.Where()
+	where, err := p._Where()
 	if err != nil {
 		return "", err
 	}
@@ -245,7 +248,7 @@ func NewFirstBuilder(tableName string, columns ...any) FirstParam {
 	}
 }
 
-func (p FirstParam) Where() (expressions Expressions, err error) {
+func (p FirstParam) _Where() (expressions Expressions, err error) {
 	return p._Fields.Where()
 }
 
@@ -255,7 +258,7 @@ func (p FirstParam) _Order() (orderedExpression []exp.OrderedExpression) {
 
 func (p FirstParam) ToSQL() (sql string, err error) {
 	p._Fields.SetScene(SCENE_SQL_SELECT)
-	where, err := p.Where()
+	where, err := p._Where()
 	if err != nil {
 		return "", err
 	}
@@ -287,31 +290,16 @@ func NewListBuilder(tableName string) ListParam {
 	}
 }
 
-func (p ListParam) Where() (expressions Expressions, err error) {
+func (p ListParam) _Where() (expressions Expressions, err error) {
 	return p._Fields.Where()
 }
 func (p ListParam) _Order() (orderedExpression []exp.OrderedExpression) {
 	return p._Fields.Order()
 }
 
-// CustomSQL 自定义SQL，方便构造更复杂的查询语句，如 Group,Having 等
-func (p ListParam) CustomSQL(sqlFn func(p ListParam, ds *goqu.SelectDataset) (newDs *goqu.SelectDataset, err error)) (sql string, err error) {
-	p._Fields.SetScene(SCENE_SQL_SELECT)
-	ds := Dialect.Select(p._Fields.Select()...)
-	ds, err = sqlFn(p, ds)
-	if err != nil {
-		return "", err
-	}
-	sql, _, err = ds.ToSQL()
-	if err != nil {
-		return "", err
-	}
-	return sql, nil
-}
-
 func (p ListParam) ToSQL() (sql string, err error) {
 	p._Fields.SetScene(SCENE_SQL_SELECT)
-	where, err := p.Where()
+	where, err := p._Where()
 	if err != nil {
 		return "", err
 	}

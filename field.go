@@ -157,7 +157,7 @@ type Field struct {
 	Name          string      `json:"name"`
 	ValueFns      ValueFns    `json:"-"` // 增加error，方便封装字段验证规则
 	WhereFns      ValueFns    `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	OrderFn       OrderFn     `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	_OrderFn      OrderFn     `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
 	Schema        *Schema     // 可以为空，为空建议设置默认值
 	Table         TableI      // 关联表,方便收集Table全量信息
 	Api           interface{} // 关联Api对象,方便收集Api全量信息
@@ -182,7 +182,8 @@ func (tags Tags) HastTag(tag string) bool {
 }
 
 const (
-	Field_name_id = "id" // 列取名为id
+	Field_name_id        = "id"        // 列取名为id
+	Field_name_deletedAt = "deletedAt" // 列取名为deletedAt 为删除列
 )
 
 const (
@@ -216,6 +217,11 @@ const (
 	Tag_createdAt = "createdAt"
 	Tag_updatedAt = "updatedAt"
 )
+
+func (f *Field) SetOrderFn(orderFn OrderFn) *Field {
+	f._OrderFn = orderFn
+	return f
+}
 
 // DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
 func (f *Field) DBName() string {
@@ -782,8 +788,8 @@ func (f Field) Where(fs ...*Field) (expressions Expressions, err error) {
 
 func (f Field) Order(fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
 	orderedExpressions = make([]exp.OrderedExpression, 0)
-	if f.OrderFn != nil {
-		ex := f.OrderFn(&f, fs...)
+	if f._OrderFn != nil {
+		ex := f._OrderFn(&f, fs...)
 		orderedExpressions = append(orderedExpressions, ex...)
 	}
 	return orderedExpressions
