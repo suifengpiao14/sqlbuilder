@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/doug-martin/goqu/v9"
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 )
@@ -382,6 +383,13 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
+var ApplyValueFormatBySchemaType InitFieldFn = func(f *Field, fs ...*Field) {
+	f.ValueFns.AppendIfNotFirst(func(inputValue any) (any, error) {
+		value := f.FormatType(inputValue)
+		return value, nil
+	})
+}
+
 // ValueFnDBSchemaFormat 根据DB类型要求,转换数据类型
 func ValueFnDBSchemaFormatType(field Field) (valueFn ValueFn) {
 	return func(in any) (any, error) {
@@ -462,6 +470,42 @@ func ValueFnEmpty2Nil(in any) (any, error) {
 		}
 	}
 	return in, nil
+}
+func ValueFnIlike(in any) (value any, err error) {
+	if IsNil(in) {
+		return nil, nil
+	}
+	return Ilike{"%", cast.ToString(in), "%"}, nil
+}
+
+var ApplyWhereGte InitFieldFn = func(f *Field, fs ...*Field) {
+	f.WhereFns.Append(func(inputValue any) (any, error) {
+		if IsNil(inputValue) {
+			return nil, nil
+		}
+		ex := goqu.C(f.DBName()).Gte(inputValue)
+		return ex, nil
+	})
+}
+
+var ApplyWhereLte InitFieldFn = func(f *Field, fs ...*Field) {
+	f.WhereFns.Append(func(inputValue any) (any, error) {
+		if IsNil(inputValue) {
+			return nil, nil
+		}
+		ex := goqu.C(f.DBName()).Lte(inputValue)
+		return ex, nil
+	})
+}
+
+var ApplyWhereFindInSet InitFieldFn = func(f *Field, fs ...*Field) {
+	f.WhereFns.Append(func(inputValue any) (any, error) {
+		if IsNil(inputValue) {
+			return nil, nil
+		}
+		expression := goqu.L("FIND_IN_SET(?,?)", cast.ToString(inputValue), goqu.C(f.DBName()))
+		return expression, nil
+	})
 }
 
 // GlobalValueFnEmptyStr2Nil 空字符串改成nil,值改成nil后,sql语句中会忽略该字段,常常用在update,where 字句中

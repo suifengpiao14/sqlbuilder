@@ -87,6 +87,10 @@ func (fns *ValueFns) Value(val any) (value any, err error) {
 	return value, nil
 }
 
+var ApplyWhereIlike InitFieldFn = func(f *Field, fs ...*Field) {
+	f.WhereFns.Append(ValueFnWhereLike)
+}
+
 func ValueFnWhereLike(val any) (value any, err error) {
 	str := cast.ToString(val)
 	if str == "" {
@@ -115,11 +119,16 @@ func (docFns DocNameFns) Value(name string) string {
 }
 
 type InitFieldFn func(f *Field, fs ...*Field)
+
+func (fn InitFieldFn) Apply(f *Field, fs ...*Field) {
+	fn(f, fs...)
+}
+
 type InitFieldFns []InitFieldFn
 
 func (fns InitFieldFns) Apply(f *Field, fs ...*Field) {
 	for _, fn := range fns {
-		fn(f, fs...)
+		fn.Apply(f, fs...)
 	}
 }
 
@@ -148,6 +157,37 @@ func (sis *SceneInits) Append(sceneInits ...SceneInit) {
 	}
 	*sis = append(*sis, sceneInits...)
 
+}
+
+var ApplyOrderDesc InitFieldFn = func(f *Field, fs ...*Field) {
+	f._OrderFn = OrderFnDesc
+}
+var ApplyOrderAsc InitFieldFn = func(f *Field, fs ...*Field) {
+	f._OrderFn = OrderFnAsc
+}
+
+func ApplyOrderField(valueOrder ...any) InitFieldFn {
+	return func(f *Field, fs ...*Field) {
+		f._OrderFn = OrderFieldFn(valueOrder...)
+	}
+}
+
+var OrderFnDesc OrderFn = func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
+	return ConcatOrderedExpression(goqu.C(f.DBName()).Desc())
+}
+var OrderFnAsc OrderFn = func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
+	return ConcatOrderedExpression(goqu.C(f.DBName()).Asc())
+}
+
+// OrderFieldFn 给定列按指定值顺序排序
+func OrderFieldFn(valueOrder ...any) OrderFn {
+	return func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
+		segment := fmt.Sprintf("FIELD(`%s`, %s)", f.DBName(), strings.Repeat(",?", len(valueOrder)))
+		expression := goqu.L(segment, valueOrder...)
+		orderedExpression := exp.NewOrderedExpression(expression, exp.AscDir, exp.NoNullsSortType)
+		orderedExpressions = ConcatOrderedExpression(orderedExpression)
+		return orderedExpressions
+	}
 }
 
 type OrderFn func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression)
@@ -432,8 +472,13 @@ func (f *Field) LogString() string {
 	return out
 }
 
-func (f *Field) WithOptions(options ...OptionFn) *Field {
-	OptionFns(options).Apply(f)
+func (f *Field) WithMiddlewares(middlewareFns MiddlewareFns, fs ...*Field) *Field {
+	middlewareFns.Apply(f, fs...)
+	return f
+}
+
+func (f *Field) WithMiddleware(middlewareFn MiddlewareFn, fs ...*Field) *Field {
+	middlewareFn.Apply(f, fs...)
 	return f
 }
 
@@ -444,21 +489,19 @@ func TrimNilField(field *Field, fn func(field *Field)) {
 	fn(field)
 }
 
-type OptionFn func(field *Field)
+type MiddlewareFn func(f *Field, fs ...*Field)
 
-func (oFn OptionFn) Apply(field *Field) {
-	oFn(field)
+func (oFn MiddlewareFn) Apply(f *Field, fs ...*Field) {
+	oFn(f, fs...)
 }
 
-type OptionFns []OptionFn
+type MiddlewareFns []MiddlewareFn
 
-func (oFns OptionFns) Apply(field *Field) {
+func (oFns MiddlewareFns) Apply(f *Field, fs ...*Field) {
 	for _, oFn := range oFns {
-		oFn(field)
+		oFn(f, fs...)
 	}
 }
-
-type OptionsFn func(fields ...*Field)
 
 // SetScene 设置 Scene 场景，已第一次设置为准，建议在具体使用时设置，增加 insert,update,select 场景，方便针对场景设置，如enums, 下拉选择有全选，新增、修改没有
 func (f *Field) SetScene(scene Scene) *Field {
@@ -475,10 +518,16 @@ func (f *Field) SceneFn(scene Scene, initFns ...InitFieldFn) *Field {
 	}
 	return f
 }
-func (f *Field) Apply(initFns ...InitFieldFn) *Field {
-	InitFieldFns(initFns).Apply(f)
+func (f *Field) Apply(initFn InitFieldFn, fs ...*Field) *Field {
+	initFn.Apply(f)
 	return f
 }
+
+func (f *Field) Applys(initFns InitFieldFns, fs ...*Field) *Field {
+	initFns.Apply(f)
+	return f
+}
+
 func (f *Field) SceneInsert(initFn InitFieldFn) *Field {
 	f.sceneInitFns.Append(SceneInit{
 		Scene:        SCENE_SQL_INSERT,
@@ -503,7 +552,7 @@ func (f *Field) SceneSelect(initFn InitFieldFn) *Field {
 }
 
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
-func NewField(value any, options ...OptionFn) (field *Field) {
+func NewField(value any, middlewareFns ...MiddlewareFn) (field *Field) {
 	field = &Field{}
 	valueFn, ok := value.(func(inputValue any) (any, error))
 	if !ok {
@@ -516,7 +565,7 @@ func NewField(value any, options ...OptionFn) (field *Field) {
 	}
 
 	field.ValueFns.InsertAsFirst(valueFn)
-	OptionFns(options).Apply(field)
+	MiddlewareFns(middlewareFns).Apply(field)
 	return field
 }
 
@@ -879,9 +928,9 @@ func (fs *Fields) Append(fields ...*Field) *Fields {
 	return fs
 }
 
-func (fs Fields) WithOptions(options ...OptionsFn) Fields {
-	for _, optionFn := range options {
-		optionFn(fs...)
+func (fs Fields) WithMiddlewares(middlewares ...MiddlewareFn) Fields {
+	for _, f := range fs {
+		MiddlewareFns(middlewares).Apply(f, fs...)
 	}
 	return fs
 }
