@@ -31,7 +31,7 @@ const (
 	SCENE_SQL_DECREASE Scene = "decrese" // 字段递减
 )
 
-func (s Scene) IsSame(target Scene) bool {
+func (s Scene) Is(target Scene) bool {
 	return strings.EqualFold(string(s), string(target))
 }
 
@@ -53,7 +53,7 @@ type Migrates []Migrate
 func (ms Migrates) GetByScene(driver Driver, scene Scene) (subMs Migrates) {
 	subMs = make(Migrates, 0)
 	for _, m := range ms {
-		if driver.IsSame(m.Dialect) && scene.IsSame(m.Scene) {
+		if driver.IsSame(m.Dialect) && scene.Is(m.Scene) {
 			subMs = append(subMs, m)
 		}
 	}

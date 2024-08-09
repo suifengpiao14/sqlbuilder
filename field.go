@@ -141,7 +141,7 @@ type SceneInits []SceneInit
 
 func (sceneInits SceneInits) GetByScene(scene Scene) SceneInit {
 	for _, s := range sceneInits {
-		if scene.IsSame(s.Scene) {
+		if scene.Is(s.Scene) {
 			return s
 		}
 	}
@@ -260,6 +260,16 @@ const (
 
 func (f *Field) SetOrderFn(orderFn OrderFn) *Field {
 	f._OrderFn = orderFn
+	return f
+}
+
+func (f *Field) GetScene() (scena Scene) {
+	return f.scene
+}
+
+// ReadOnly 很多字段只能写入一次，即新增写入后不可更改，如记录的所有者，指纹等，此处方便理解 重写f.ShieldUpdate(true)
+func (f *Field) ReadOnly() *Field {
+	f.ShieldUpdate(true)
 	return f
 }
 
