@@ -153,7 +153,23 @@ func (sis *SceneInits) Append(sceneInits ...SceneInit) {
 	if *sis == nil {
 		*sis = make(SceneInits, 0)
 	}
-	*sis = append(*sis, sceneInits...)
+	for _, sceneInit := range sceneInits {
+		exists := false
+		for i := 0; i < len(*sis); i++ {
+			if (*sis)[i].Scene.Is(sceneInit.Scene) {
+				if (*sis)[i].InitFieldFns == nil {
+					(*sis)[i].InitFieldFns = make(InitFieldFns, 0)
+				}
+				(*sis)[i].InitFieldFns = append((*sis)[i].InitFieldFns, sceneInit.InitFieldFns...)
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			*sis = append(*sis, sceneInit)
+		}
+
+	}
 
 }
 
@@ -511,19 +527,24 @@ func (oFns MiddlewareFns) Apply(f *Field, fs ...*Field) {
 	}
 }
 
-// SetScene 设置 Scene 场景，已第一次设置为准，建议在具体使用时设置，增加 insert,update,select 场景，方便针对场景设置，如enums, 下拉选择有全选，新增、修改没有
-func (f *Field) SetScene(scene Scene) *Field {
+// SetSceneIfEmpty 设置 Scene 场景，已第一次设置为准，建议在具体使用时设置，增加 insert,update,select 场景，方便针对场景设置，如enums, 下拉选择有全选，新增、修改没有
+func (f *Field) SetSceneIfEmpty(scene Scene) *Field {
 	if f.scene == "" {
 		f.scene = scene
 	}
 	return f
 }
+func (f *Field) SetScene(scene Scene) *Field {
+	f.scene = scene
+	return f
+}
 
 // Scene  获取场景
 func (f *Field) SceneFn(scene Scene, initFns ...InitFieldFn) *Field {
-	f.sceneInitFns = SceneInits{
-		{Scene: scene, InitFieldFns: initFns},
-	}
+	f.sceneInitFns.Append(SceneInit{
+		Scene:        scene,
+		InitFieldFns: initFns,
+	})
 	return f
 }
 func (f *Field) Apply(initFn InitFieldFn, fs ...*Field) *Field {
@@ -820,7 +841,7 @@ func (f Field) Data(fs ...*Field) (data any, err error) {
 	if err != nil {
 		return nil, err
 	}
-	if f.Schema != nil && f.Schema.ShieldUpdate {
+	if f.scene.Is(SCENE_SQL_UPDATE) && f.Schema != nil && f.Schema.ShieldUpdate { // 当前为更新场景，并且设置屏蔽更新，则返回nil
 		return nil, nil
 	}
 	data = map[string]any{
@@ -864,6 +885,13 @@ func (fs Fields) Copy() (fields Fields) {
 		fields = append(fields, f.Copy())
 	}
 	return fields
+}
+
+func (fs Fields) SetSceneIfEmpty(scene Scene) Fields {
+	for i := 0; i < len(fs); i++ {
+		fs[i].SetSceneIfEmpty(scene)
+	}
+	return fs
 }
 
 func (fs Fields) SetScene(scene Scene) Fields {

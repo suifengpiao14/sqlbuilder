@@ -83,7 +83,7 @@ func (p InsertParam) _Data() (data any, err error) {
 }
 
 func (p InsertParam) ToSQL() (sql string, err error) {
-	p._Fields.SetScene(SCENE_SQL_INSERT)
+	p._Fields.SetSceneIfEmpty(SCENE_SQL_INSERT)
 	rowData, err := p._Data()
 	if err != nil {
 		return "", err
@@ -157,7 +157,7 @@ func (p DeleteParam) _Where() (expressions Expressions, err error) {
 }
 
 func (p DeleteParam) ToSQL() (sql string, err error) {
-	p._Fields.SetScene(SCENE_SQL_DELETE)
+	p._Fields.SetSceneIfEmpty(SCENE_SQL_DELETE)
 	_, ok := p._Fields.GetByFieldName(Field_name_deletedAt)
 	if !ok {
 		err = errors.Errorf("not found deleted column by fieldName:%s", Field_name_deletedAt)
@@ -206,7 +206,7 @@ func (p UpdateParam) _Where() (expressions Expressions, err error) {
 }
 
 func (p UpdateParam) ToSQL() (sql string, err error) {
-	p._Fields.SetScene(SCENE_SQL_UPDATE)
+	p._Fields.SetSceneIfEmpty(SCENE_SQL_UPDATE)
 	data, err := p._Data()
 	if err != nil {
 		return "", err
@@ -257,7 +257,7 @@ func (p FirstParam) _Order() (orderedExpression []exp.OrderedExpression) {
 }
 
 func (p FirstParam) ToSQL() (sql string, err error) {
-	p._Fields.SetScene(SCENE_SQL_SELECT)
+	p._Fields.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := p._Where()
 	if err != nil {
 		return "", err
@@ -298,7 +298,7 @@ func (p ListParam) _Order() (orderedExpression []exp.OrderedExpression) {
 }
 
 func (p ListParam) ToSQL() (sql string, err error) {
-	p._Fields.SetScene(SCENE_SQL_SELECT)
+	p._Fields.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := p._Where()
 	if err != nil {
 		return "", err
@@ -344,7 +344,7 @@ func (p TotalParam) Where() (expressions Expressions, err error) {
 }
 
 func (p TotalParam) ToSQL() (sql string, err error) {
-	p._Fields.SetScene(SCENE_SQL_SELECT)
+	p._Fields.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := p.Where()
 	if err != nil {
 		return "", err
