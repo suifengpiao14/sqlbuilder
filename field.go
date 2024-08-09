@@ -13,8 +13,6 @@ import (
 	"github.com/suifengpiao14/funcs"
 )
 
-var Time_format = "2006-01-02 15:04:05"
-
 // type ValueFnfunc(in any) (value any,err error) //函数签名返回参数命名后,容易误导写成 func(in any) (value any,err error){return value,nil};  正确代码:func(in any) (value any,err error){return in,nil};
 type ValueFn func(inputValue any) (any, error) // 函数之所有接收in 入参，有时模型内部加工生成的数据需要存储，需要定制格式化，比如多边形产生的边界框4个点坐标
 
