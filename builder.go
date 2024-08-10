@@ -436,3 +436,43 @@ func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 	}
 	return totalSql, listSql, nil
 }
+
+type SetParam struct {
+	_Table  TableI
+	_Fields Fields
+}
+
+func (p SetParam) AppendFields(fields ...*Field) SetParam {
+	p._Fields.Append(fields...)
+	return p
+}
+
+func NewSetBuilder(tableName string) SetParam {
+	return SetParam{
+		_Table: TableFn(func() string { return tableName }),
+	}
+}
+
+type SetParamSQL struct {
+	Get    string
+	Insert string
+	Update string
+}
+
+func (p SetParam) ToSQL() (sql *SetParamSQL, err error) {
+	table := p._Table.Table()
+	sql = &SetParamSQL{}
+	sql.Get, err = NewFirstBuilder(table).AppendFields(p._Fields...).ToSQL()
+	if err != nil {
+		return nil, err
+	}
+	sql.Insert, err = NewInsertBuilder(table).AppendFields(p._Fields...).ToSQL()
+	if err != nil {
+		return nil, err
+	}
+	sql.Update, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ToSQL()
+	if err != nil {
+		return nil, err
+	}
+	return sql, nil
+}
