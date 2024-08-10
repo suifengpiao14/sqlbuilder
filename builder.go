@@ -407,3 +407,32 @@ func dataAny2Map(data any) (newData map[string]any, err error) {
 	}
 	return newData, nil
 }
+
+type PaginationParam struct {
+	_Table  TableI
+	_Fields Fields
+}
+
+func (p PaginationParam) AppendFields(fields ...*Field) PaginationParam {
+	p._Fields.Append(fields...)
+	return p
+}
+
+func NewPaginationBuilder(tableName string) PaginationParam {
+	return PaginationParam{
+		_Table: TableFn(func() string { return tableName }),
+	}
+}
+
+func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
+	table := p._Table.Table()
+	totalSql, err = NewTotalBuilder(table).AppendFields(p._Fields...).ToSQL()
+	if err != nil {
+		return "", "", err
+	}
+	listSql, err = NewTotalBuilder(table).AppendFields(p._Fields...).ToSQL()
+	if err != nil {
+		return "", "", err
+	}
+	return totalSql, listSql, nil
+}
