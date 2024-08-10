@@ -230,9 +230,8 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 // }
 
 type FirstParam struct {
-	_Table   TableI
-	_columns []any
-	_Fields  Fields
+	_Table  TableI
+	_Fields Fields
 }
 
 func (p FirstParam) AppendFields(fields ...*Field) FirstParam {
@@ -242,9 +241,8 @@ func (p FirstParam) AppendFields(fields ...*Field) FirstParam {
 
 func NewFirstBuilder(tableName string, columns ...any) FirstParam {
 	return FirstParam{
-		_Table:   TableFn(func() string { return tableName }),
-		_columns: columns,
-		_Fields:  make(Fields, 0),
+		_Table:  TableFn(func() string { return tableName }),
+		_Fields: make(Fields, 0),
 	}
 }
 
@@ -262,7 +260,7 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.Select(p._columns...).
+	ds := Dialect.Select(p._Fields.Select()...).
 		From(p._Table.Table()).
 		Where(where...).
 		Order(p._Order()...).
@@ -357,57 +355,6 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-func MergeData(dataFns ...func() (any, error)) (map[string]any, error) {
-	newData := map[string]any{}
-	for _, dataFn := range dataFns {
-		if IsNil(dataFn) {
-			continue
-		}
-		data, err := dataFn()
-		if IsErrorValueNil(err) {
-			err = nil // 消除error
-		}
-		if err != nil {
-			return newData, err
-		}
-		subMap, err := dataAny2Map(data)
-		if err != nil {
-			return nil, err
-		}
-		for k, v := range subMap {
-			newData[k] = v
-		}
-	}
-	return newData, nil
-}
-
-// dataAny2Map data 从any 格式转为map格式
-func dataAny2Map(data any) (newData map[string]any, err error) {
-	newData = map[string]any{}
-	if IsNil(data) {
-		return nil, nil
-	}
-	rv := reflect.Indirect(reflect.ValueOf(data))
-	switch rv.Kind() {
-	case reflect.Map:
-		keys := rv.MapKeys()
-		for _, key := range keys {
-			newData[key.String()] = rv.MapIndex(key).Interface()
-		}
-	case reflect.Struct:
-		r, err := exp.NewRecordFromStruct(rv.Interface(), false, true)
-		if err != nil {
-			return nil, err
-		}
-		for k, v := range r {
-			newData[k] = v
-		}
-	default:
-		return nil, errors.Errorf("unsupported update interface type %+v,got:%+v", rv.Type(), data)
-	}
-	return newData, nil
-}
-
 type PaginationParam struct {
 	_Table  TableI
 	_Fields Fields
@@ -459,6 +406,7 @@ type SetParamSQL struct {
 	Update string
 }
 
+// ToSQL 一次生成 查询、新增、修改 sql,若查询后记录存在,并且需要根据数据库记录值修改数据,则可以重新赋值后生成sql
 func (p SetParam) ToSQL() (sql *SetParamSQL, err error) {
 	table := p._Table.Table()
 	sql = &SetParamSQL{}
@@ -475,4 +423,55 @@ func (p SetParam) ToSQL() (sql *SetParamSQL, err error) {
 		return nil, err
 	}
 	return sql, nil
+}
+
+func MergeData(dataFns ...func() (any, error)) (map[string]any, error) {
+	newData := map[string]any{}
+	for _, dataFn := range dataFns {
+		if IsNil(dataFn) {
+			continue
+		}
+		data, err := dataFn()
+		if IsErrorValueNil(err) {
+			err = nil // 消除error
+		}
+		if err != nil {
+			return newData, err
+		}
+		subMap, err := dataAny2Map(data)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range subMap {
+			newData[k] = v
+		}
+	}
+	return newData, nil
+}
+
+// dataAny2Map data 从any 格式转为map格式
+func dataAny2Map(data any) (newData map[string]any, err error) {
+	newData = map[string]any{}
+	if IsNil(data) {
+		return nil, nil
+	}
+	rv := reflect.Indirect(reflect.ValueOf(data))
+	switch rv.Kind() {
+	case reflect.Map:
+		keys := rv.MapKeys()
+		for _, key := range keys {
+			newData[key.String()] = rv.MapIndex(key).Interface()
+		}
+	case reflect.Struct:
+		r, err := exp.NewRecordFromStruct(rv.Interface(), false, true)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range r {
+			newData[k] = v
+		}
+	default:
+		return nil, errors.Errorf("unsupported update interface type %+v,got:%+v", rv.Type(), data)
+	}
+	return newData, nil
 }
