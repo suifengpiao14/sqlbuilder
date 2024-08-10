@@ -98,24 +98,6 @@ func ValueFnWhereLike(val any) (value any, err error) {
 	return value, nil
 }
 
-type DocNameFn func(name string) string
-
-type DocNameFns []DocNameFn
-
-func (docFns *DocNameFns) Append(fns ...DocNameFn) {
-	if *docFns == nil {
-		*docFns = make(DocNameFns, 0)
-	}
-	*docFns = append(*docFns, fns...)
-}
-
-func (docFns DocNameFns) Value(name string) string {
-	for _, fn := range docFns {
-		name = fn(name)
-	}
-	return name
-}
-
 type InitFieldFn func(f *Field, fs ...*Field)
 
 func (fn InitFieldFn) Apply(f *Field, fs ...*Field) {
@@ -216,10 +198,10 @@ type Field struct {
 	Table         TableI      // 关联表,方便收集Table全量信息
 	Api           interface{} // 关联Api对象,方便收集Api全量信息
 	scene         Scene       // 场景
-	docNameFns    DocNameFns  // 修改文档字段名称
 	sceneInitFns  SceneInits  // 场景初始化配置
 	tags          Tags        // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
 	dbName        string
+	docName       string
 	selectColumns []any  // 查询时列
 	fieldName     string //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
 }
@@ -262,6 +244,7 @@ func (f *Field) Copy() (copyF *Field) {
 	copyF.sceneInitFns = f.sceneInitFns
 	copyF.selectColumns = f.selectColumns
 	copyF.dbName = f.dbName
+	copyF.docName = f.docName
 	copyF.tags = f.tags
 	copyF.fieldName = f.fieldName
 	return copyF
@@ -580,6 +563,86 @@ func (f *Field) SceneSelect(initFn InitFieldFn) *Field {
 	return f
 }
 
+type FieldFn[T any] func(value T) *Field
+
+func (fn FieldFn[T]) Apply(value T) *Field {
+	return fn(value)
+}
+
+type AttrI interface {
+	Builder() AttrI
+}
+
+// FieldStructToArray 将结构体结构的fields 转换成 数组类型 结构体格式的feilds 方便编程引用, 数组类型fields 方便当作数据批量处理,常用于生产文档、ddl等场景
+func FieldStructToArray(stru any) Fields {
+	fs := Fields{}
+	if stru == nil {
+		return fs
+	}
+	val := reflect.Indirect(reflect.ValueOf(stru))
+	fs = fieldStructToArray(val)
+	return fs
+}
+func fieldStructToArray(val reflect.Value) Fields {
+	fs := Fields{}
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+	typ := val.Type()
+	switch typ.Kind() {
+	case reflect.Func:
+		if val.IsNil() {
+			break
+		}
+		funcVal := val.Call([]reflect.Value{reflect.Zero(val.Type().In(0))})[0]
+		if funcVal.CanInterface() {
+			if fld, ok := funcVal.Interface().(*Field); ok {
+				fs = append(fs, fld)
+			}
+		}
+	case reflect.Struct:
+		for i := 0; i < val.NumField(); i++ {
+			field := val.Field(i)
+			attr := typ.Field(i)
+			subFields := fieldStructToArray(field)
+
+			for _, f := range subFields {
+				f.SetFieldName(funcs.ToLowerCamel(attr.Name)) //设置列名称
+			}
+			switch attr.Type.Kind() {
+			case reflect.Array, reflect.Slice, reflect.Struct:
+				if !attr.Anonymous { // 嵌入结构体,文档名称不增加前缀
+					for _, f := range subFields {
+						docName := f.GetDocName()
+						if docName != "" && !strings.HasPrefix(docName, "[]") {
+							docName = fmt.Sprintf(".%s", docName)
+						}
+						fName := fmt.Sprintf("%s%s", funcs.ToLowerCamel(attr.Name), docName)
+						fName = strings.TrimSuffix(fName, ".")
+						f.SetDocName(fName)
+					}
+				}
+			}
+			fs = append(fs, subFields...)
+
+		}
+
+	case reflect.Array, reflect.Slice:
+		for j := 0; j < val.Len(); j++ {
+			elem := val.Index(j)
+			subFields := fieldStructToArray(elem)
+			for _, f := range subFields {
+				fName := fmt.Sprintf("[].%s", f.GetDocName())
+				fName = strings.TrimSuffix(fName, ".")
+				f.SetDocName(fName)
+				fs = append(fs, f)
+			}
+		}
+
+	}
+	return fs
+}
+
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
 func NewField(value any, middlewareFns ...MiddlewareFn) (field *Field) {
 	field = &Field{}
@@ -622,23 +685,26 @@ var GlobalFnValueFns = func(f Field) ValueFns {
 	}
 }
 
-func (f *Field) AppendDocNameFn(subFns ...DocNameFn) {
-	f.docNameFns.Append(subFns...)
+func (f *Field) SetDocName(docName string) *Field {
+	f.docName = docName
+	return f
 }
 
-func (f Field) DocName() string {
-	name := f.docNameFns.Value(f.Name)
-	return name
+func (f Field) GetDocName() string {
+	if f.docName == "" {
+		f.docName = f.Name
+	}
+	return f.docName
 }
 
 func (f Field) DocRequestArg() (doc DocRequestArg) {
 	dbSchema := f.Schema
 	if dbSchema == nil {
-		return doc
+		dbSchema = new(Schema)
 	}
 	doc = DocRequestArg{
-		Name:        f.DocName(),
-		Required:    f.Schema.Required,
+		Name:        f.GetDocName(),
+		Required:    dbSchema.Required,
 		AllowEmpty:  dbSchema.AllowEmpty(),
 		Title:       dbSchema.Title,
 		Type:        "string",
@@ -654,8 +720,8 @@ func (f Field) DocRequestArg() (doc DocRequestArg) {
 func (f Field) DBColumn() (doc *Column, err error) {
 	schema := f.Schema
 	if schema == nil {
-		err = errors.Errorf("dbSchema required ,filed.Name:%s", f.Name)
-		return nil, err
+		schema = new(Schema)
+		f.Schema = schema
 	}
 
 	unsigned := schema.Minimum > -1 // 默认为无符号，需要符号，则最小值设置为最大负数即可
@@ -674,7 +740,7 @@ func (f Field) DBColumn() (doc *Column, err error) {
 
 	doc = &Column{
 		Name:          f.DBName(),
-		Comment:       f.Schema.FullComment(),
+		Comment:       schema.FullComment(),
 		Unsigned:      unsigned,
 		Type:          typ,
 		Default:       schema.Default,
@@ -987,12 +1053,6 @@ func (fs Fields) AppendWhereValueFn(whereValueFns ...ValueFn) Fields {
 		fs[i].WhereFns.Append(whereValueFns...)
 	}
 
-	return fs
-}
-func (fs Fields) AppendDocNameFn(docNameFns ...DocNameFn) Fields {
-	for i := 0; i < len(fs); i++ {
-		fs[i].docNameFns.Append(docNameFns...)
-	}
 	return fs
 }
 
