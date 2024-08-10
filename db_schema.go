@@ -498,15 +498,15 @@ var ApplyWhereLte InitFieldFn = func(f *Field, fs ...*Field) {
 	})
 }
 
-var ApplyWhereFindInSet InitFieldFn = func(f *Field, fs ...*Field) {
-	f.WhereFns.Append(func(inputValue any) (any, error) {
-		if IsNil(inputValue) {
-			return nil, nil
-		}
-		expression := goqu.L("FIND_IN_SET(?,?)", cast.ToString(inputValue), goqu.C(f.DBName()))
-		return expression, nil
-	})
-}
+// var ApplyWhereFindInSet InitFieldFn = func(f *Field, fs ...*Field) {
+// 	f.WhereFns.Append(func(inputValue any) (any, error) {
+// 		if IsNil(inputValue) {
+// 			return nil, nil
+// 		}
+// 		expression := goqu.L("FIND_IN_SET(?,?)", cast.ToString(inputValue), goqu.C(f.DBName()))
+// 		return expression, nil
+// 	})
+// }
 
 // GlobalValueFnEmptyStr2Nil 空字符串改成nil,值改成nil后,sql语句中会忽略该字段,常常用在update,where 字句中
 // func GlobalValueFnEmptyStr2Nil(field Field, exceptFileds ...*Field) (valueFn ValueFn) {
