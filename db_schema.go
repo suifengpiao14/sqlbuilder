@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/doug-martin/goqu/v9"
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 )
@@ -61,6 +60,20 @@ const (
 	Schema_Type_string SchemaType = "string"
 	Schema_Type_json   SchemaType = "json"
 	Schema_Type_int    SchemaType = "int"
+)
+
+const (
+	UnsinedInt_maximum_tinyint   = 1<<8 - 1
+	UnsinedInt_maximum_smallint  = 1<<16 - 1
+	UnsinedInt_maximum_mediumint = 1<<24 - 1
+	UnsinedInt_maximum_int       = 1<<32 - 1
+	UnsinedInt_maximum_bigint    = 1<<64 - 1
+
+	Int_maximum_tinyint   = 1<<7 - 1
+	Int_maximum_smallint  = 1<<15 - 1
+	Int_maximum_mediumint = 1<<23 - 1
+	Int_maximum_int       = 1<<31 - 1
+	Int_maximum_bigint    = 1<<63 - 1
 )
 
 type Enums []Enum
@@ -383,13 +396,6 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-var ApplyValueFormatBySchemaType InitFieldFn = func(f *Field, fs ...*Field) {
-	f.ValueFns.AppendIfNotFirst(func(inputValue any) (any, error) {
-		value := f.FormatType(inputValue)
-		return value, nil
-	})
-}
-
 // ValueFnDBSchemaFormat 根据DB类型要求,转换数据类型
 func ValueFnDBSchemaFormatType(field Field) (valueFn ValueFn) {
 	return func(in any) (any, error) {
@@ -477,36 +483,6 @@ func ValueFnIlike(in any) (value any, err error) {
 	}
 	return Ilike{"%", cast.ToString(in), "%"}, nil
 }
-
-var ApplyWhereGte InitFieldFn = func(f *Field, fs ...*Field) {
-	f.WhereFns.Append(func(inputValue any) (any, error) {
-		if IsNil(inputValue) {
-			return nil, nil
-		}
-		ex := goqu.C(f.DBName()).Gte(inputValue)
-		return ex, nil
-	})
-}
-
-var ApplyWhereLte InitFieldFn = func(f *Field, fs ...*Field) {
-	f.WhereFns.Append(func(inputValue any) (any, error) {
-		if IsNil(inputValue) {
-			return nil, nil
-		}
-		ex := goqu.C(f.DBName()).Lte(inputValue)
-		return ex, nil
-	})
-}
-
-// var ApplyWhereFindInSet InitFieldFn = func(f *Field, fs ...*Field) {
-// 	f.WhereFns.Append(func(inputValue any) (any, error) {
-// 		if IsNil(inputValue) {
-// 			return nil, nil
-// 		}
-// 		expression := goqu.L("FIND_IN_SET(?,?)", cast.ToString(inputValue), goqu.C(f.DBName()))
-// 		return expression, nil
-// 	})
-// }
 
 // GlobalValueFnEmptyStr2Nil 空字符串改成nil,值改成nil后,sql语句中会忽略该字段,常常用在update,where 字句中
 // func GlobalValueFnEmptyStr2Nil(field Field, exceptFileds ...*Field) (valueFn ValueFn) {

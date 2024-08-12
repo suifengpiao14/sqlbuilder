@@ -85,10 +85,6 @@ func (fns *ValueFns) Value(val any) (value any, err error) {
 	return value, nil
 }
 
-var ApplyWhereIlike InitFieldFn = func(f *Field, fs ...*Field) {
-	f.WhereFns.Append(ValueFnWhereLike)
-}
-
 func ValueFnWhereLike(val any) (value any, err error) {
 	str := cast.ToString(val)
 	if str == "" {
@@ -96,76 +92,6 @@ func ValueFnWhereLike(val any) (value any, err error) {
 	}
 	value = Ilike{"%", str, "%"}
 	return value, nil
-}
-
-type InitFieldFn func(f *Field, fs ...*Field)
-
-func (fn InitFieldFn) Apply(f *Field, fs ...*Field) {
-	fn(f, fs...)
-}
-
-type InitFieldFns []InitFieldFn
-
-func (fns InitFieldFns) Apply(f *Field, fs ...*Field) {
-	for _, fn := range fns {
-		fn.Apply(f, fs...)
-	}
-}
-
-type SceneInit struct {
-	Scene        Scene
-	InitFieldFns InitFieldFns
-}
-
-type SceneInits []SceneInit
-
-func (sceneInits SceneInits) GetByScene(scene Scene) SceneInit {
-	for _, s := range sceneInits {
-		if scene.Is(s.Scene) {
-			return s
-		}
-	}
-	return SceneInit{
-		Scene: scene,
-	}
-}
-
-// Append 常规添加
-func (sis *SceneInits) Append(sceneInits ...SceneInit) {
-	if *sis == nil {
-		*sis = make(SceneInits, 0)
-	}
-	for _, sceneInit := range sceneInits {
-		exists := false
-		for i := 0; i < len(*sis); i++ {
-			if (*sis)[i].Scene.Is(sceneInit.Scene) {
-				if (*sis)[i].InitFieldFns == nil {
-					(*sis)[i].InitFieldFns = make(InitFieldFns, 0)
-				}
-				(*sis)[i].InitFieldFns = append((*sis)[i].InitFieldFns, sceneInit.InitFieldFns...)
-				exists = true
-				break
-			}
-		}
-		if !exists {
-			*sis = append(*sis, sceneInit)
-		}
-
-	}
-
-}
-
-var ApplyOrderDesc InitFieldFn = func(f *Field, fs ...*Field) {
-	f._OrderFn = OrderFnDesc
-}
-var ApplyOrderAsc InitFieldFn = func(f *Field, fs ...*Field) {
-	f._OrderFn = OrderFnAsc
-}
-
-func ApplyOrderField(valueOrder ...any) InitFieldFn {
-	return func(f *Field, fs ...*Field) {
-		f._OrderFn = OrderFieldFn(valueOrder...)
-	}
 }
 
 var OrderFnDesc OrderFn = func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
@@ -190,20 +116,20 @@ type OrderFn func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpre
 
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Name          string      `json:"name"`
-	ValueFns      ValueFns    `json:"-"` // 增加error，方便封装字段验证规则
-	WhereFns      ValueFns    `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	_OrderFn      OrderFn     `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	Schema        *Schema     // 可以为空，为空建议设置默认值
-	Table         TableI      // 关联表,方便收集Table全量信息
-	Api           interface{} // 关联Api对象,方便收集Api全量信息
-	scene         Scene       // 场景
-	sceneInitFns  SceneInits  // 场景初始化配置
-	tags          Tags        // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
-	dbName        string
-	docName       string
-	selectColumns []any  // 查询时列
-	fieldName     string //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
+	Name               string             `json:"name"`
+	ValueFns           ValueFns           `json:"-"` // 增加error，方便封装字段验证规则
+	WhereFns           ValueFns           `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	_OrderFn           OrderFn            `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	Schema             *Schema            // 可以为空，为空建议设置默认值
+	Table              TableI             // 关联表,方便收集Table全量信息
+	Api                interface{}        // 关联Api对象,方便收集Api全量信息
+	scene              Scene              // 场景
+	sceneMiddlewareFns SceneMiddlewareFns // 场景初始化配置
+	tags               Tags               // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
+	dbName             string
+	docName            string
+	selectColumns      []any  // 查询时列
+	fieldName          string //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
 }
 
 type Tags []string
@@ -241,7 +167,7 @@ func (f *Field) Copy() (copyF *Field) {
 	copyF.Table = f.Table
 	copyF.Api = f.Api
 	copyF.scene = f.scene
-	copyF.sceneInitFns = f.sceneInitFns
+	copyF.sceneMiddlewareFns = f.sceneMiddlewareFns
 	copyF.selectColumns = f.selectColumns
 	copyF.dbName = f.dbName
 	copyF.docName = f.docName
@@ -344,6 +270,9 @@ func (f *Field) HastTag(tag string) bool {
 	return f.tags.HastTag(tag)
 }
 
+func (f *Field) GetTags() Tags {
+	return f.tags
+}
 func (f *Field) AppendEnum(enums ...Enum) *Field {
 	f.MergeSchema(Schema{
 		Enums: enums,
@@ -380,7 +309,7 @@ func (f *Field) ResetWhereFn(whereFns ...ValueFn) *Field {
 
 // RequiredWhenInsert 经常在新增时要求必填,所以单独一个函数,提供方便
 func (f *Field) RequiredWhenInsert(required bool) *Field {
-	f.SceneInsert(func(f *Field, fs ...*Field) {
+	f.SceneMiddlewarInsert(func(f *Field, fs ...*Field) {
 		f.SetRequired(true)
 	})
 	return f
@@ -388,7 +317,7 @@ func (f *Field) RequiredWhenInsert(required bool) *Field {
 
 // MinBoundaryLengthWhereInsert 数字最小值,字符串最小长度设置,提供方便
 func (f *Field) MinBoundaryWhereInsert(minimum int, minLength int) *Field {
-	f.SceneInsert(func(f *Field, fs ...*Field) {
+	f.SceneMiddlewarInsert(func(f *Field, fs ...*Field) {
 		f.MergeSchema(Schema{
 			Minimum:   minimum,
 			MinLength: minLength,
@@ -496,20 +425,6 @@ func TrimNilField(field *Field, fn func(field *Field)) {
 	fn(field)
 }
 
-type MiddlewareFn func(f *Field, fs ...*Field)
-
-func (oFn MiddlewareFn) Apply(f *Field, fs ...*Field) {
-	oFn(f, fs...)
-}
-
-type MiddlewareFns []MiddlewareFn
-
-func (oFns MiddlewareFns) Apply(f *Field, fs ...*Field) {
-	for _, oFn := range oFns {
-		oFn(f, fs...)
-	}
-}
-
 // SetSceneIfEmpty 设置 Scene 场景，已第一次设置为准，建议在具体使用时设置，增加 insert,update,select 场景，方便针对场景设置，如enums, 下拉选择有全选，新增、修改没有
 func (f *Field) SetSceneIfEmpty(scene Scene) *Field {
 	if f.scene == "" {
@@ -523,42 +438,42 @@ func (f *Field) SetScene(scene Scene) *Field {
 }
 
 // Scene  获取场景
-func (f *Field) SceneFn(scene Scene, initFns ...InitFieldFn) *Field {
-	f.sceneInitFns.Append(SceneInit{
+func (f *Field) SceneFn(scene Scene, middlewareFns ...MiddlewareFn) *Field {
+	f.sceneMiddlewareFns.Append(SceneMiddlewareFn{
 		Scene:        scene,
-		InitFieldFns: initFns,
+		MiddlewarFns: middlewareFns,
 	})
 	return f
 }
-func (f *Field) Apply(initFn InitFieldFn, fs ...*Field) *Field {
-	initFn.Apply(f)
+func (f *Field) MiddlewareFn(middlewareFn MiddlewareFn, fs ...*Field) *Field {
+	middlewareFn.Apply(f)
 	return f
 }
 
-func (f *Field) Applys(initFns InitFieldFns, fs ...*Field) *Field {
-	initFns.Apply(f)
+func (f *Field) MiddlewareFns(middlewareFns MiddlewareFns, fs ...*Field) *Field {
+	middlewareFns.Apply(f)
 	return f
 }
 
-func (f *Field) SceneInsert(initFn InitFieldFn) *Field {
-	f.sceneInitFns.Append(SceneInit{
+func (f *Field) SceneMiddlewarInsert(middlewareFn MiddlewareFn) *Field {
+	f.sceneMiddlewareFns.Append(SceneMiddlewareFn{
 		Scene:        SCENE_SQL_INSERT,
-		InitFieldFns: InitFieldFns{initFn},
+		MiddlewarFns: MiddlewareFns{middlewareFn},
 	})
 	return f
 }
-func (f *Field) SceneUpdate(initFn InitFieldFn) *Field {
-	f.sceneInitFns.Append(SceneInit{
+func (f *Field) SceneMiddlewarUpdate(middlewareFn MiddlewareFn) *Field {
+	f.sceneMiddlewareFns.Append(SceneMiddlewareFn{
 		Scene:        SCENE_SQL_UPDATE,
-		InitFieldFns: InitFieldFns{initFn},
+		MiddlewarFns: MiddlewareFns{middlewareFn},
 	})
 	return f
 }
 
-func (f *Field) SceneSelect(initFn InitFieldFn) *Field {
-	f.sceneInitFns.Append(SceneInit{
+func (f *Field) SceneMiddlewarSelect(middlewareFn MiddlewareFn) *Field {
+	f.sceneMiddlewareFns.Append(SceneMiddlewareFn{
 		Scene:        SCENE_SQL_SELECT,
-		InitFieldFns: InitFieldFns{initFn},
+		MiddlewarFns: MiddlewareFns{middlewareFn},
 	})
 	return f
 }
@@ -569,78 +484,9 @@ func (fn FieldFn[T]) Apply(value T) *Field {
 	return fn(value)
 }
 
-type AttrI interface {
-	Builder() AttrI
-}
-
-// FieldStructToArray 将结构体结构的fields 转换成 数组类型 结构体格式的feilds 方便编程引用, 数组类型fields 方便当作数据批量处理,常用于生产文档、ddl等场景
-func FieldStructToArray(stru any) Fields {
-	fs := Fields{}
-	if stru == nil {
-		return fs
-	}
-	val := reflect.Indirect(reflect.ValueOf(stru))
-	fs = fieldStructToArray(val)
-	return fs
-}
-func fieldStructToArray(val reflect.Value) Fields {
-	fs := Fields{}
-	if val.Kind() == reflect.Ptr {
-		val = val.Elem()
-	}
-	typ := val.Type()
-	switch typ.Kind() {
-	case reflect.Func:
-		if val.IsNil() {
-			break
-		}
-		funcVal := val.Call([]reflect.Value{reflect.Zero(val.Type().In(0))})[0]
-		if funcVal.CanInterface() {
-			if fld, ok := funcVal.Interface().(*Field); ok {
-				fs = append(fs, fld)
-			}
-		}
-	case reflect.Struct:
-		for i := 0; i < val.NumField(); i++ {
-			field := val.Field(i)
-			attr := typ.Field(i)
-			subFields := fieldStructToArray(field)
-
-			for _, f := range subFields {
-				f.SetFieldName(funcs.ToLowerCamel(attr.Name)) //设置列名称
-			}
-			switch attr.Type.Kind() {
-			case reflect.Array, reflect.Slice, reflect.Struct:
-				if !attr.Anonymous { // 嵌入结构体,文档名称不增加前缀
-					for _, f := range subFields {
-						docName := f.GetDocName()
-						if docName != "" && !strings.HasPrefix(docName, "[]") {
-							docName = fmt.Sprintf(".%s", docName)
-						}
-						fName := fmt.Sprintf("%s%s", funcs.ToLowerCamel(attr.Name), docName)
-						fName = strings.TrimSuffix(fName, ".")
-						f.SetDocName(fName)
-					}
-				}
-			}
-			fs = append(fs, subFields...)
-
-		}
-
-	case reflect.Array, reflect.Slice:
-		for j := 0; j < val.Len(); j++ {
-			elem := val.Index(j)
-			subFields := fieldStructToArray(elem)
-			for _, f := range subFields {
-				fName := fmt.Sprintf("[].%s", f.GetDocName())
-				fName = strings.TrimSuffix(fName, ".")
-				f.SetDocName(fName)
-				fs = append(fs, f)
-			}
-		}
-
-	}
-	return fs
+// AttributeI 领域对象属性接口
+type AttributeI interface {
+	Builder() AttributeI
 }
 
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
@@ -697,70 +543,11 @@ func (f Field) GetDocName() string {
 	return f.docName
 }
 
-func (f Field) DocRequestArg() (doc DocRequestArg) {
-	dbSchema := f.Schema
-	if dbSchema == nil {
-		dbSchema = new(Schema)
-	}
-	doc = DocRequestArg{
-		Name:        f.GetDocName(),
-		Required:    dbSchema.Required,
-		AllowEmpty:  dbSchema.AllowEmpty(),
-		Title:       dbSchema.Title,
-		Type:        "string",
-		Format:      dbSchema.Type.String(),
-		Default:     cast.ToString(dbSchema.Default),
-		Description: dbSchema.Comment,
-		Enums:       dbSchema.Enums,
-		RegExp:      dbSchema.RegExp,
-	}
-	return doc
-}
-
-func (f Field) DBColumn() (doc *Column, err error) {
-	schema := f.Schema
-	if schema == nil {
-		schema = new(Schema)
-		f.Schema = schema
-	}
-
-	unsigned := schema.Minimum > -1 // 默认为无符号，需要符号，则最小值设置为最大负数即可
-	typeMap := map[string]string{
-		"int":    "int",
-		"string": "string",
-	}
-	typ := typeMap[schema.Type.String()]
-	if typ == "" {
-		if schema.Minimum > 0 || schema.Maximum > 0 { // 如果规定了最小值,最大值，默认为整型
-			typ = "int"
-		} else {
-			typ = "string"
-		}
-	}
-
-	doc = &Column{
-		Name:          f.DBName(),
-		Comment:       schema.FullComment(),
-		Unsigned:      unsigned,
-		Type:          typ,
-		Default:       schema.Default,
-		Enums:         schema.Enums,
-		MaxLength:     schema.MaxLength,
-		MinLength:     schema.MinLength,
-		Maximum:       schema.Maximum,
-		Minimum:       schema.Minimum,
-		Primary:       schema.Primary,
-		AutoIncrement: schema.AutoIncrement,
-		Tags:          f.tags,
-	}
-	return doc, nil
-}
-
 func (f *Field) init(fs ...*Field) {
-	if f.sceneInitFns != nil {
-		sceneInit := f.sceneInitFns.GetByScene(f.scene)
-		if sceneInit.InitFieldFns != nil {
-			sceneInit.InitFieldFns.Apply(f, fs...)
+	if f.sceneMiddlewareFns != nil {
+		sceneInit := f.sceneMiddlewareFns.GetByScene(f.scene)
+		if sceneInit.MiddlewarFns != nil {
+			sceneInit.MiddlewarFns.Apply(f, fs...)
 		}
 
 	}
@@ -966,23 +753,23 @@ func (fs Fields) SetScene(scene Scene) Fields {
 	}
 	return fs
 }
-func (fs Fields) SceneInsert(fn InitFieldFn) Fields {
+func (fs Fields) SceneMiddlewarInsert(fn MiddlewareFn) Fields {
 	for i := 0; i < len(fs); i++ {
-		fs[i].SceneInsert(fn)
+		fs[i].SceneMiddlewarInsert(fn)
 	}
 	return fs
 }
 
-func (fs Fields) SceneUpdate(fn InitFieldFn) Fields {
+func (fs Fields) SceneUpdate(fn MiddlewareFn) Fields {
 	for i := 0; i < len(fs); i++ {
-		fs[i].SceneUpdate(fn)
+		fs[i].SceneMiddlewarUpdate(fn)
 	}
 	return fs
 }
 
-func (fs Fields) SceneSelect(fn InitFieldFn) Fields {
+func (fs Fields) SceneMiddlewarSelect(fn MiddlewareFn) Fields {
 	for i := 0; i < len(fs); i++ {
-		fs[i].SceneSelect(fn)
+		fs[i].SceneMiddlewarSelect(fn)
 	}
 	return fs
 }
@@ -1009,10 +796,6 @@ func (fs Fields) Pagination() (index int, size int) {
 	return index, size
 }
 
-func NewFields(fields ...*Field) *Fields {
-	return new(Fields).Append(fields...)
-}
-
 func (fs Fields) Contains(field Field) (exists bool) {
 	for _, f := range fs {
 		if strings.EqualFold(f.Name, field.Name) { // 暂时值判断名称,后续根据需求,再增加类型
@@ -1037,7 +820,7 @@ func (fs Fields) WithMiddlewares(middlewares ...MiddlewareFn) Fields {
 	return fs
 }
 
-func (fs Fields) Apply(fns ...InitFieldFn) Fields {
+func (fs Fields) Middleware(fns ...MiddlewareFn) Fields {
 	for i := 0; i < len(fs); i++ {
 		for _, fn := range fns {
 			fn(fs[i], fs...)
@@ -1093,33 +876,12 @@ func (fs Fields) GetByFieldName(fieldName string) (*Field, bool) {
 	return nil, false
 }
 
-// DocRequestArgs 生成文档请求参数部分
-func (fs Fields) DocRequestArgs() (args DocRequestArgs) {
-	args = make(DocRequestArgs, 0)
-	for _, f := range fs {
-		args = append(args, f.DocRequestArg())
-	}
-	return args
-}
-
 func (fs Fields) DBNames() (dbNames []string, err error) {
 	dbNames = make([]string, 0)
 	for _, f := range fs {
 		dbNames = append(dbNames, f.DBName())
 	}
 	return dbNames, nil
-}
-
-func (fs Fields) DBColumns() (columns Columns, err error) {
-	columns = make(Columns, 0)
-	for _, f := range fs {
-		column, err := f.DBColumn()
-		if err != nil {
-			return nil, err
-		}
-		columns = append(columns, *column)
-	}
-	return columns, nil
 }
 
 func (fs Fields) Where() (expressions Expressions, err error) {
@@ -1275,4 +1037,64 @@ var FieldName2DBColumnName = func(fieldName string) (dbColumnName string) {
 	dbColumnName = funcs.ToSnakeCase(fieldName)
 	dbColumnName = fmt.Sprintf("F%s", strings.TrimPrefix(dbColumnName, "f")) // 增加F前缀
 	return dbColumnName
+}
+
+// FieldStructToArray 将结构体结构的fields 转换成 数组类型 结构体格式的feilds 方便编程引用, 数组类型fields 方便当作数据批量处理,常用于生产文档、ddl等场景,支持对象属性、数组类型定制化
+func FieldStructToArray(stru any,
+	structFieldCustomFn func(val reflect.Value, structField reflect.StructField, fs Fields) Fields,
+	arrayFieldCustomFn func(fs Fields) Fields,
+) Fields {
+	fs := Fields{}
+	if stru == nil {
+		return fs
+	}
+	val := reflect.Indirect(reflect.ValueOf(stru))
+	fs = fieldStructToArray(val, structFieldCustomFn, arrayFieldCustomFn)
+	return fs
+}
+
+func fieldStructToArray(val reflect.Value,
+	structFieldCustomFn func(val reflect.Value, structField reflect.StructField, fs Fields) Fields,
+	arrayFieldCustomFn func(fs Fields) Fields,
+) Fields {
+	fs := Fields{}
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+	typ := val.Type()
+	switch typ.Kind() {
+	case reflect.Func:
+		if val.IsNil() {
+			break
+		}
+		funcVal := val.Call([]reflect.Value{reflect.Zero(val.Type().In(0))})[0]
+		if funcVal.CanInterface() {
+			if fld, ok := funcVal.Interface().(*Field); ok {
+				fs = append(fs, fld)
+			}
+		}
+	case reflect.Struct:
+		for i := 0; i < val.NumField(); i++ {
+			field := val.Field(i)
+			attr := typ.Field(i)
+			subFields := fieldStructToArray(field, structFieldCustomFn, arrayFieldCustomFn)
+			if structFieldCustomFn != nil {
+				subFields = structFieldCustomFn(field, attr, subFields)
+			}
+			fs = append(fs, subFields...)
+
+		}
+
+	case reflect.Array, reflect.Slice:
+		for j := 0; j < val.Len(); j++ {
+			elem := val.Index(j)
+			subFields := fieldStructToArray(elem, structFieldCustomFn, arrayFieldCustomFn)
+			if arrayFieldCustomFn != nil {
+				subFields = arrayFieldCustomFn(subFields)
+			}
+			fs = append(fs, subFields...)
+		}
+
+	}
+	return fs
 }

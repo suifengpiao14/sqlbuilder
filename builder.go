@@ -39,6 +39,22 @@ var Dialect = goqu.Dialect(Driver_sqlite3.String())
 
 var Dialect_Mysql = goqu.Dialect(Driver_mysql.String())
 
+type Scene string // 迁移场景
+
+func (s Scene) Is(target Scene) bool {
+	return strings.EqualFold(string(s), string(target))
+}
+
+const (
+	SCENE_SQL_INSERT   Scene = "insert"
+	SCENE_SQL_UPDATE   Scene = "update"
+	SCENE_SQL_DELETE   Scene = "delete"
+	SCENE_SQL_SELECT   Scene = "select"
+	SCENE_SQL_VIEW     Scene = "view"
+	SCENE_SQL_INCREASE Scene = "increse" // 字段递增
+	SCENE_SQL_DECREASE Scene = "decrese" // 字段递减
+)
+
 type TableI interface {
 	Table() (table string)
 }
