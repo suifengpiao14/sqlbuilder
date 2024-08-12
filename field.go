@@ -1082,7 +1082,6 @@ func fieldStructToArray(val reflect.Value,
 				subFields = structFieldCustomFn(field, attr, subFields)
 			}
 			fs = append(fs, subFields...)
-
 		}
 
 	case reflect.Array, reflect.Slice:
