@@ -309,7 +309,7 @@ func (f *Field) ResetWhereFn(whereFns ...ValueFn) *Field {
 
 // RequiredWhenInsert 经常在新增时要求必填,所以单独一个函数,提供方便
 func (f *Field) RequiredWhenInsert(required bool) *Field {
-	f.SceneMiddlewarInsert(func(f *Field, fs ...*Field) {
+	f.MiddlewareSceneInsert(func(f *Field, fs ...*Field) {
 		f.SetRequired(true)
 	})
 	return f
@@ -317,7 +317,7 @@ func (f *Field) RequiredWhenInsert(required bool) *Field {
 
 // MinBoundaryLengthWhereInsert 数字最小值,字符串最小长度设置,提供方便
 func (f *Field) MinBoundaryWhereInsert(minimum int, minLength int) *Field {
-	f.SceneMiddlewarInsert(func(f *Field, fs ...*Field) {
+	f.MiddlewareSceneInsert(func(f *Field, fs ...*Field) {
 		f.MergeSchema(Schema{
 			Minimum:   minimum,
 			MinLength: minLength,
@@ -455,14 +455,14 @@ func (f *Field) MiddlewareFns(middlewareFns MiddlewareFns, fs ...*Field) *Field 
 	return f
 }
 
-func (f *Field) SceneMiddlewarInsert(middlewareFn MiddlewareFn) *Field {
+func (f *Field) MiddlewareSceneInsert(middlewareFn MiddlewareFn) *Field {
 	f.sceneMiddlewareFns.Append(SceneMiddlewareFn{
 		Scene:        SCENE_SQL_INSERT,
 		MiddlewarFns: MiddlewareFns{middlewareFn},
 	})
 	return f
 }
-func (f *Field) SceneMiddlewarUpdate(middlewareFn MiddlewareFn) *Field {
+func (f *Field) MiddlewareSceneUpdate(middlewareFn MiddlewareFn) *Field {
 	f.sceneMiddlewareFns.Append(SceneMiddlewareFn{
 		Scene:        SCENE_SQL_UPDATE,
 		MiddlewarFns: MiddlewareFns{middlewareFn},
@@ -470,7 +470,7 @@ func (f *Field) SceneMiddlewarUpdate(middlewareFn MiddlewareFn) *Field {
 	return f
 }
 
-func (f *Field) SceneMiddlewarSelect(middlewareFn MiddlewareFn) *Field {
+func (f *Field) MiddlewareSceneSelect(middlewareFn MiddlewareFn) *Field {
 	f.sceneMiddlewareFns.Append(SceneMiddlewareFn{
 		Scene:        SCENE_SQL_SELECT,
 		MiddlewarFns: MiddlewareFns{middlewareFn},
@@ -755,21 +755,21 @@ func (fs Fields) SetScene(scene Scene) Fields {
 }
 func (fs Fields) SceneMiddlewarInsert(fn MiddlewareFn) Fields {
 	for i := 0; i < len(fs); i++ {
-		fs[i].SceneMiddlewarInsert(fn)
+		fs[i].MiddlewareSceneInsert(fn)
 	}
 	return fs
 }
 
 func (fs Fields) SceneUpdate(fn MiddlewareFn) Fields {
 	for i := 0; i < len(fs); i++ {
-		fs[i].SceneMiddlewarUpdate(fn)
+		fs[i].MiddlewareSceneUpdate(fn)
 	}
 	return fs
 }
 
 func (fs Fields) SceneMiddlewarSelect(fn MiddlewareFn) Fields {
 	for i := 0; i < len(fs); i++ {
-		fs[i].SceneMiddlewarSelect(fn)
+		fs[i].MiddlewareSceneSelect(fn)
 	}
 	return fs
 }
