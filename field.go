@@ -520,6 +520,9 @@ var GlobalFnValueFns = func(f Field) ValueFns {
 	return ValueFns{
 		//GlobalValueFnEmptyStr2Nil(f, ValueFnArgEmptyStr2NilExceptFields...), // 将空置转换为nil,代替对数据判断 if v==""{//ignore}  这个函数在全局修改了函数值，出现问题，比较难跟踪，改到每个组件自己处理
 		ValueFnDBSchemaFormatType(f), // 在转换为SQL前,将所有数据类型按照DB类型转换,主要是格式化int和string,提升SQL性能，将数据格式改成DB格式，不影响当期调用链，可以作为全局配置
+		func(inputValue any) (any, error) {
+			return ValueFnTrimBlankSpace(inputValue)
+		},
 		//todo 统一实现数据库字段前缀处理
 		//todo 统一实现代码字段驼峰形转数据库字段蛇形
 		//todo 统一实现数据库字段替换,方便数据库字段更名

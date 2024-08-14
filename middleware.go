@@ -141,3 +141,7 @@ var MiddlewareFnValueFormatBySchemaType MiddlewareFn = func(f *Field, fs ...*Fie
 		return value, nil
 	})
 }
+
+var MiddlewareFnValueFnTrimSpace MiddlewareFn = func(f *Field, fs ...*Field) {
+	f.ValueFns.AppendIfNotFirst(ValueFnTrimBlankSpace, ValueFnEmpty2Nil)
+}

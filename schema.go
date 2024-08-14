@@ -477,6 +477,18 @@ func ValueFnEmpty2Nil(in any) (any, error) {
 	}
 	return in, nil
 }
+
+// ValueFnTrimBlankSpace 删除字符串前后空格
+func ValueFnTrimBlankSpace(in any) (any, error) {
+	if in == nil {
+		return in, nil
+	}
+	if str, ok := in.(string); ok {
+		in = strings.Trim(str, " ")
+	}
+	return in, nil
+}
+
 func ValueFnIlike(in any) (value any, err error) {
 	if IsNil(in) {
 		return nil, nil
