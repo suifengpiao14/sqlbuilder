@@ -36,7 +36,7 @@ const (
 
 type EscapeString func(value string) string
 
-var MysqlRealEscapeString EscapeString = func(value string) string {
+var MysqlEscapeString EscapeString = func(value string) string {
 	var sb strings.Builder
 	for i := 0; i < len(value); i++ {
 		c := value[i]
@@ -53,6 +53,7 @@ var MysqlRealEscapeString EscapeString = func(value string) string {
 	}
 	return sb.String()
 }
+var SQLite3EscapeString EscapeString = MysqlEscapeString // 此处暂时使用mysql的
 
 type DialectWrapper struct {
 	dialect string
@@ -68,7 +69,9 @@ func (d DialectWrapper) DialectWrapper() goqu.DialectWrapper {
 func (d DialectWrapper) EscapeString(val string) string {
 	switch strings.ToLower(d.dialect) {
 	case strings.ToLower(Driver_mysql.String()):
-		return MysqlRealEscapeString(val)
+		return MysqlEscapeString(val)
+	case strings.ToLower(Driver_sqlite3.String()):
+		return SQLite3EscapeString(val)
 	}
 	return val
 }
