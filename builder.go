@@ -34,10 +34,55 @@ const (
 	Driver_sqlite3 Driver = "sqlite3"
 )
 
-// Dialect 设定驱动,方便直接使用
-var Dialect = goqu.Dialect(Driver_sqlite3.String())
+type EscapeString func(value string) string
 
-var Dialect_Mysql = goqu.Dialect(Driver_mysql.String())
+var MysqlRealEscapeString EscapeString = func(value string) string {
+	var sb strings.Builder
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		switch c {
+		case '\\', 0, '\n', '\r', '\'', '"':
+			sb.WriteByte('\\')
+			sb.WriteByte(c)
+		case '\032':
+			sb.WriteByte('\\')
+			sb.WriteByte('Z')
+		default:
+			sb.WriteByte(c)
+		}
+	}
+	return sb.String()
+}
+
+type DialectWrapper struct {
+	dialect string
+}
+
+func (d DialectWrapper) Dialect() string {
+	return d.dialect
+}
+func (d DialectWrapper) DialectWrapper() goqu.DialectWrapper {
+	return goqu.Dialect(d.dialect)
+}
+
+func (d DialectWrapper) EscapeString(val string) string {
+	switch strings.ToLower(d.dialect) {
+	case strings.ToLower(Driver_mysql.String()):
+		return MysqlRealEscapeString(val)
+	}
+	return val
+}
+
+func NewDialect(dialect string) DialectWrapper {
+	return DialectWrapper{
+		dialect: dialect,
+	}
+}
+
+// Dialect 设定驱动,方便直接使用
+var Dialect = NewDialect(Driver_sqlite3.String())
+
+var Dialect_Mysql = NewDialect(Driver_mysql.String())
 
 type Scene string // 迁移场景
 
@@ -113,7 +158,7 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 	table := p._TableI.Table()
-	ds := Dialect.Insert(table).Rows(rowData)
+	ds := Dialect.DialectWrapper().Insert(table).Rows(rowData)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -139,7 +184,7 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 		}
 		data = append(data, rowData)
 	}
-	ds := Dialect.Insert(table).Rows(data...)
+	ds := Dialect.DialectWrapper().Insert(table).Rows(data...)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -188,7 +233,7 @@ func (p DeleteParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.Update(p._TableI.Table()).Set(data).Where(where...)
+	ds := Dialect.DialectWrapper().Update(p._TableI.Table()).Set(data).Where(where...)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -232,7 +277,7 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.Update(p._TableI.Table()).Set(data).Where(where...)
+	ds := Dialect.DialectWrapper().Update(p._TableI.Table()).Set(data).Where(where...)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -276,7 +321,7 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.Select(p._Fields.Select()...).
+	ds := Dialect.DialectWrapper().Select(p._Fields.Select()...).
 		From(p._Table.Table()).
 		Where(where...).
 		Order(p._Order()...).
@@ -323,7 +368,7 @@ func (p ListParam) ToSQL() (sql string, err error) {
 		ofsset = 0
 	}
 
-	ds := Dialect.Select(p._Fields.Select()...).
+	ds := Dialect.DialectWrapper().Select(p._Fields.Select()...).
 		From(p._Table.Table()).
 		Where(where...).
 		Order(p._Order()...)
@@ -363,7 +408,7 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.From(p._Table.Table()).Where(where...).Select(goqu.COUNT(goqu.Star()).As("count"))
+	ds := Dialect.DialectWrapper().From(p._Table.Table()).Where(where...).Select(goqu.COUNT(goqu.Star()).As("count"))
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err

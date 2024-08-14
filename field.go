@@ -697,6 +697,9 @@ func (f Field) Data(fs ...*Field) (data any, err error) {
 	if f.scene.Is(SCENE_SQL_UPDATE) && f.Schema != nil && f.Schema.ShieldUpdate { // 当前为更新场景，并且设置屏蔽更新，则返回nil
 		return nil, nil
 	}
+	if valStr, ok := val.(string); ok {
+		val = Dialect.EscapeString(valStr)
+	}
 	data = map[string]any{
 		f.DBName(): val,
 	}
@@ -1028,7 +1031,7 @@ func TryParseExpressions(field string, value any) (expressions Expressions, ok b
 	return nil, false
 }
 func Expression2String(expressions ...goqu.Expression) string {
-	sql, _, _ := Dialect.Select().Where(expressions...).ToSQL()
+	sql, _, _ := Dialect.DialectWrapper().Select().Where(expressions...).ToSQL()
 	return sql
 }
 
