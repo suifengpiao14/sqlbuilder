@@ -122,7 +122,6 @@ type Field struct {
 	_OrderFn           OrderFn            `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
 	Schema             *Schema            // 可以为空，为空建议设置默认值
 	Table              TableI             // 关联表,方便收集Table全量信息
-	Api                interface{}        // 关联Api对象,方便收集Api全量信息
 	scene              Scene              // 场景
 	sceneMiddlewareFns SceneMiddlewareFns // 场景初始化配置
 	tags               Tags               // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
@@ -139,6 +138,18 @@ func (tags Tags) HastTag(tag string) bool {
 		if strings.EqualFold(t, tag) {
 			return true
 		}
+	}
+	return false
+}
+func (ts *Tags) Append(tags ...string) bool {
+	if *ts == nil {
+		*ts = make(Tags, 0)
+	}
+	for _, tag := range tags {
+		if ts.HastTag(tag) {
+			continue
+		}
+		*ts = append(*ts, tag)
 	}
 	return false
 }
@@ -165,7 +176,6 @@ func (f *Field) Copy() (copyF *Field) {
 	}
 	copyF.Schema = &schema // 重新给地址
 	copyF.Table = f.Table
-	copyF.Api = f.Api
 	copyF.scene = f.scene
 	copyF.sceneMiddlewareFns = f.sceneMiddlewareFns
 	copyF.selectColumns = f.selectColumns
@@ -283,7 +293,7 @@ func (f *Field) SetRequired(required bool) *Field {
 	if f.Schema == nil {
 		f.Schema = &Schema{}
 	}
-	f.Schema.Required = required
+	f.Schema.Required = required // 此处 requied 可以为false,通过MergerSchema 达不到效果
 	return f
 }
 
@@ -334,65 +344,53 @@ func (f *Field) ShieldUpdate(shieldUpdate bool) *Field {
 	return f
 }
 
+// Combine 混合field属性,通过Combine,可以将field 各属性分层段书写，提高复用率
+func (f *Field) Combine(combinedFields ...*Field) *Field {
+	schema := Schema{}
+	for _, combined := range combinedFields {
+		if f.Table == nil {
+			f.Table = combined.Table
+		}
+		if f.scene == "" {
+			f.scene = combined.scene
+		}
+		if f.dbName == "" {
+			f.dbName = combined.dbName
+		}
+		if f.docName == "" {
+			f.docName = combined.docName
+		}
+		if len(f.selectColumns) == 0 {
+			f.selectColumns = combined.selectColumns
+		}
+		if f.fieldName == "" {
+			f.fieldName = combined.fieldName
+		}
+		f.tags.Append(combined.tags...)
+		f.sceneMiddlewareFns.Append(combined.sceneMiddlewareFns...)
+		f.ValueFns.Append(combined.ValueFns...)
+		f.WhereFns.Append(combined.WhereFns...)
+		if f._OrderFn == nil {
+			f._OrderFn = combined._OrderFn
+		}
+		if combined.Schema != nil {
+			schema.Merge(*combined.Schema)
+		}
+
+	}
+
+	if f.Schema != nil {
+		schema.Merge(*f.Schema)
+	}
+	*f.Schema = schema
+	return f
+}
+
 func (f *Field) MergeSchema(schema Schema) *Field {
 	if f.Schema == nil {
 		f.Schema = &Schema{}
 	}
-
-	if schema.Title != "" {
-		f.Schema.Title = schema.Title
-	}
-	if schema.Required {
-		f.Schema.Required = schema.Required
-	}
-
-	if schema.Comment != "" {
-		f.Schema.Comment = schema.Comment
-	}
-	if schema.Type != "" {
-		f.Schema.Type = schema.Type
-	}
-	if schema.Default != "" {
-		f.Schema.Default = schema.Default
-	}
-
-	if len(schema.Enums) > 0 {
-		f.Schema.Enums.Append(schema.Enums...)
-	}
-
-	if schema.MaxLength > 0 {
-		f.Schema.MaxLength = schema.MaxLength
-	}
-
-	if schema.MinLength > 0 {
-		f.Schema.MinLength = schema.MinLength
-	}
-
-	if schema.Maximum > 0 {
-		f.Schema.Maximum = schema.Maximum
-	}
-
-	if schema.Minimum > 0 {
-		f.Schema.Minimum = schema.Minimum
-	}
-
-	if schema.RegExp != "" {
-		f.Schema.RegExp = schema.RegExp
-	}
-	if schema.Primary {
-		f.Schema.Primary = schema.Primary
-	}
-
-	if schema.AutoIncrement {
-		f.Schema.AutoIncrement = schema.AutoIncrement
-	}
-	if schema.Unique {
-		f.Schema.Unique = schema.Unique
-	}
-	if schema.ShieldUpdate {
-		f.Schema.ShieldUpdate = schema.ShieldUpdate
-	}
-
+	f.Schema.Merge(schema)
 	return f
 }
 

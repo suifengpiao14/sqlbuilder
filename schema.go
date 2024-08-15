@@ -44,6 +44,62 @@ func (schema Schema) FullComment() string {
 func (schema Schema) AllowEmpty() bool {
 	return schema.MinLength < 1 && schema.Type == Schema_Type_string
 }
+func (s *Schema) Merge(megred Schema) *Schema {
+	if megred.Title != "" {
+		s.Title = megred.Title
+	}
+	if megred.Required {
+		s.Required = megred.Required
+	}
+
+	if megred.Comment != "" {
+		s.Comment = megred.Comment
+	}
+	if megred.Type != "" {
+		s.Type = megred.Type
+	}
+	if megred.Default != "" {
+		s.Default = megred.Default
+	}
+
+	if len(megred.Enums) > 0 {
+		s.Enums.Append(megred.Enums...)
+	}
+
+	if megred.MaxLength > 0 {
+		s.MaxLength = megred.MaxLength
+	}
+
+	if megred.MinLength > 0 {
+		s.MinLength = megred.MinLength
+	}
+
+	if megred.Maximum > 0 {
+		s.Maximum = megred.Maximum
+	}
+
+	if megred.Minimum > 0 {
+		s.Minimum = megred.Minimum
+	}
+
+	if megred.RegExp != "" {
+		s.RegExp = megred.RegExp
+	}
+	if megred.Primary {
+		s.Primary = megred.Primary
+	}
+
+	if megred.AutoIncrement {
+		s.AutoIncrement = megred.AutoIncrement
+	}
+	if megred.Unique {
+		s.Unique = megred.Unique
+	}
+	if megred.ShieldUpdate {
+		s.ShieldUpdate = megred.ShieldUpdate
+	}
+	return s
+}
 
 // SchemaType 重新声明类型后，使用时IDE能自动识别到常量定义
 type SchemaType string
