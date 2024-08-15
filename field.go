@@ -757,21 +757,21 @@ func (fs Fields) SetScene(scene Scene) Fields {
 	}
 	return fs
 }
-func (fs Fields) SceneMiddlewarInsert(fn MiddlewareFn) Fields {
+func (fs Fields) MiddlewareSceneInsert(fn MiddlewareFn) Fields {
 	for i := 0; i < len(fs); i++ {
 		fs[i].MiddlewareSceneInsert(fn)
 	}
 	return fs
 }
 
-func (fs Fields) SceneUpdate(fn MiddlewareFn) Fields {
+func (fs Fields) MiddlewareSceneUpdate(fn MiddlewareFn) Fields {
 	for i := 0; i < len(fs); i++ {
 		fs[i].MiddlewareSceneUpdate(fn)
 	}
 	return fs
 }
 
-func (fs Fields) SceneMiddlewarSelect(fn MiddlewareFn) Fields {
+func (fs Fields) MiddlewareSceneSelect(fn MiddlewareFn) Fields {
 	for i := 0; i < len(fs); i++ {
 		fs[i].MiddlewareSceneSelect(fn)
 	}
