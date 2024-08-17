@@ -7,15 +7,15 @@ import (
 	"github.com/spf13/cast"
 )
 
-type MiddlewareFn func(f *Field, fs ...*Field)
+type ApplyFn func(f *Field, fs ...*Field)
 
-func (oFn MiddlewareFn) Apply(f *Field, fs ...*Field) {
+func (oFn ApplyFn) Apply(f *Field, fs ...*Field) {
 	oFn(f, fs...)
 }
 
-type MiddlewareFns []MiddlewareFn
+type ApplyFns []ApplyFn
 
-func (oFns MiddlewareFns) Apply(f *Field, fs ...*Field) {
+func (oFns ApplyFns) Apply(f *Field, fs ...*Field) {
 	for _, oFn := range oFns {
 		oFn(f, fs...)
 	}
@@ -24,7 +24,7 @@ func (oFns MiddlewareFns) Apply(f *Field, fs ...*Field) {
 type SceneFn struct {
 	Name  string
 	Scene Scene
-	Fn    MiddlewareFn
+	Fn    ApplyFn
 }
 
 type SceneFns []SceneFn
@@ -58,32 +58,32 @@ func (sis *SceneFns) Append(sceneFns ...SceneFn) {
 
 }
 
-// IncreaseMiddleware 字段值递增中间件
-var IncreaseMiddleware MiddlewareFn = func(f *Field, fs ...*Field) {
+// ApplyFnIncrease 字段值递增中间件
+var ApplyFnIncrease ApplyFn = func(f *Field, fs ...*Field) {
 	f.ValueFns.AppendIfNotFirst(func(inputValue any) (any, error) {
 		val := fmt.Sprintf("`%s`+1", f.DBName())
 		return goqu.L(val), nil
 	})
 }
 
-var MiddlewareFnWhereIlike MiddlewareFn = func(f *Field, fs ...*Field) {
+var ApplyFnWhereIlike ApplyFn = func(f *Field, fs ...*Field) {
 	f.WhereFns.Append(ValueFnWhereLike)
 }
 
-var MiddlewareFnOrderDesc MiddlewareFn = func(f *Field, fs ...*Field) {
+var ApplyFnOrderDesc ApplyFn = func(f *Field, fs ...*Field) {
 	f._OrderFn = OrderFnDesc
 }
-var MiddlewareFnOrderAsc MiddlewareFn = func(f *Field, fs ...*Field) {
+var ApplyFnOrderAsc ApplyFn = func(f *Field, fs ...*Field) {
 	f._OrderFn = OrderFnAsc
 }
 
-func MiddlewareFnOrderField(valueOrder ...any) MiddlewareFn {
+func ApplyFnOrderField(valueOrder ...any) ApplyFn {
 	return func(f *Field, fs ...*Field) {
 		f._OrderFn = OrderFieldFn(valueOrder...)
 	}
 }
 
-var MiddlewareFnWhereGte MiddlewareFn = func(f *Field, fs ...*Field) {
+var ApplyFnWhereGte ApplyFn = func(f *Field, fs ...*Field) {
 	f.WhereFns.Append(func(inputValue any) (any, error) {
 		if IsNil(inputValue) {
 			return nil, nil
@@ -93,7 +93,7 @@ var MiddlewareFnWhereGte MiddlewareFn = func(f *Field, fs ...*Field) {
 	})
 }
 
-var MiddlewareFnWhereLte MiddlewareFn = func(f *Field, fs ...*Field) {
+var ApplyFnWhereLte ApplyFn = func(f *Field, fs ...*Field) {
 	f.WhereFns.Append(func(inputValue any) (any, error) {
 		if IsNil(inputValue) {
 			return nil, nil
@@ -103,8 +103,8 @@ var MiddlewareFnWhereLte MiddlewareFn = func(f *Field, fs ...*Field) {
 	})
 }
 
-// MiddlewareFnWhereFindInColumnSet 传入的值在列字段集合内
-var MiddlewareFnWhereFindInColumnSet MiddlewareFn = func(f *Field, fs ...*Field) {
+// ApplyFnWhereFindInColumnSet 传入的值在列字段集合内
+var ApplyFnWhereFindInColumnSet ApplyFn = func(f *Field, fs ...*Field) {
 	f.WhereFns.Append(func(inputValue any) (any, error) {
 		if IsNil(inputValue) {
 			return nil, nil
@@ -116,8 +116,8 @@ var MiddlewareFnWhereFindInColumnSet MiddlewareFn = func(f *Field, fs ...*Field)
 	})
 }
 
-// MiddlewareFnWhereFindInValueSet 列字段值在传入的集合内
-var MiddlewareFnWhereFindInValueSet MiddlewareFn = func(f *Field, fs ...*Field) {
+// ApplyFnWhereFindInValueSet 列字段值在传入的集合内
+var ApplyFnWhereFindInValueSet ApplyFn = func(f *Field, fs ...*Field) {
 	f.WhereFns.Append(func(inputValue any) (any, error) {
 		if IsNil(inputValue) {
 			return nil, nil
@@ -129,13 +129,13 @@ var MiddlewareFnWhereFindInValueSet MiddlewareFn = func(f *Field, fs ...*Field) 
 	})
 }
 
-var MiddlewareFnValueFormatBySchemaType MiddlewareFn = func(f *Field, fs ...*Field) {
+var ApplyFnValueFormatBySchemaType ApplyFn = func(f *Field, fs ...*Field) {
 	f.ValueFns.AppendIfNotFirst(func(inputValue any) (any, error) {
 		value := f.FormatType(inputValue)
 		return value, nil
 	})
 }
 
-var MiddlewareFnValueFnTrimSpace MiddlewareFn = func(f *Field, fs ...*Field) {
+var ApplyFnValueFnTrimSpace ApplyFn = func(f *Field, fs ...*Field) {
 	f.ValueFns.AppendIfNotFirst(ValueFnTrimBlankSpace, ValueFnEmpty2Nil)
 }

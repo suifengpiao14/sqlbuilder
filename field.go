@@ -406,12 +406,12 @@ func (f *Field) LogString() string {
 	return out
 }
 
-func (f *Field) WithMiddlewares(middlewareFns MiddlewareFns, fs ...*Field) *Field {
+func (f *Field) WithMiddlewares(middlewareFns ApplyFns, fs ...*Field) *Field {
 	middlewareFns.Apply(f, fs...)
 	return f
 }
 
-func (f *Field) WithMiddleware(middlewareFn MiddlewareFn, fs ...*Field) *Field {
+func (f *Field) WithMiddleware(middlewareFn ApplyFn, fs ...*Field) *Field {
 	middlewareFn.Apply(f, fs...)
 	return f
 }
@@ -446,24 +446,24 @@ func (f *Field) SceneFnRmove(name string) *Field {
 	}
 	return f
 }
-func (f *Field) Apply(middlewareFn MiddlewareFn, fs ...*Field) *Field {
+func (f *Field) Apply(middlewareFn ApplyFn, fs ...*Field) *Field {
 	middlewareFn.Apply(f)
 	return f
 }
 
-func (f *Field) Applys(middlewareFns MiddlewareFns, fs ...*Field) *Field {
+func (f *Field) Applys(middlewareFns ApplyFns, fs ...*Field) *Field {
 	middlewareFns.Apply(f)
 	return f
 }
 
-func (f *Field) SceneInsert(middlewareFn MiddlewareFn) *Field {
+func (f *Field) SceneInsert(middlewareFn ApplyFn) *Field {
 	f.sceneFns.Append(SceneFn{
 		Scene: SCENE_SQL_INSERT,
 		Fn:    middlewareFn,
 	})
 	return f
 }
-func (f *Field) SceneUpdate(middlewareFn MiddlewareFn) *Field {
+func (f *Field) SceneUpdate(middlewareFn ApplyFn) *Field {
 	f.sceneFns.Append(SceneFn{
 		Scene: SCENE_SQL_UPDATE,
 		Fn:    middlewareFn,
@@ -471,7 +471,7 @@ func (f *Field) SceneUpdate(middlewareFn MiddlewareFn) *Field {
 	return f
 }
 
-func (f *Field) SceneSelect(middlewareFn MiddlewareFn) *Field {
+func (f *Field) SceneSelect(middlewareFn ApplyFn) *Field {
 	f.sceneFns.Append(SceneFn{
 		Scene: SCENE_SQL_SELECT,
 		Fn:    middlewareFn,
@@ -491,7 +491,7 @@ type AttributeI interface {
 }
 
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
-func NewField(value any, middlewareFns ...MiddlewareFn) (field *Field) {
+func NewField(value any, middlewareFns ...ApplyFn) (field *Field) {
 	field = &Field{}
 	valueFn, ok := value.(func(inputValue any) (any, error))
 	if !ok {
@@ -504,7 +504,7 @@ func NewField(value any, middlewareFns ...MiddlewareFn) (field *Field) {
 	}
 
 	field.ValueFns.InsertAsFirst(valueFn)
-	MiddlewareFns(middlewareFns).Apply(field)
+	ApplyFns(middlewareFns).Apply(field)
 	return field
 }
 
@@ -760,21 +760,21 @@ func (fs Fields) SetScene(scene Scene) Fields {
 	}
 	return fs
 }
-func (fs Fields) MiddlewareSceneInsert(fn MiddlewareFn) Fields {
+func (fs Fields) MiddlewareSceneInsert(fn ApplyFn) Fields {
 	for i := 0; i < len(fs); i++ {
 		fs[i].SceneInsert(fn)
 	}
 	return fs
 }
 
-func (fs Fields) MiddlewareSceneUpdate(fn MiddlewareFn) Fields {
+func (fs Fields) MiddlewareSceneUpdate(fn ApplyFn) Fields {
 	for i := 0; i < len(fs); i++ {
 		fs[i].SceneUpdate(fn)
 	}
 	return fs
 }
 
-func (fs Fields) MiddlewareSceneSelect(fn MiddlewareFn) Fields {
+func (fs Fields) MiddlewareSceneSelect(fn ApplyFn) Fields {
 	for i := 0; i < len(fs); i++ {
 		fs[i].SceneSelect(fn)
 	}
@@ -820,14 +820,14 @@ func (fs *Fields) Append(fields ...*Field) *Fields {
 	return fs
 }
 
-func (fs Fields) WithMiddlewares(middlewares ...MiddlewareFn) Fields {
+func (fs Fields) WithMiddlewares(middlewares ...ApplyFn) Fields {
 	for _, f := range fs {
-		MiddlewareFns(middlewares).Apply(f, fs...)
+		ApplyFns(middlewares).Apply(f, fs...)
 	}
 	return fs
 }
 
-func (fs Fields) Middleware(fns ...MiddlewareFn) Fields {
+func (fs Fields) Middleware(fns ...ApplyFn) Fields {
 	for i := 0; i < len(fs); i++ {
 		for _, fn := range fns {
 			fn(fs[i], fs...)
