@@ -21,46 +21,40 @@ func (oFns MiddlewareFns) Apply(f *Field, fs ...*Field) {
 	}
 }
 
-type SceneMiddlewareFn struct {
-	Scene        Scene
-	MiddlewarFns MiddlewareFns
+type SceneFn struct {
+	Name  string
+	Scene Scene
+	Fn    MiddlewareFn
 }
 
-type SceneMiddlewareFns []SceneMiddlewareFn
+type SceneFns []SceneFn
 
-func (sceneMiddlewareFns SceneMiddlewareFns) GetByScene(scene Scene) SceneMiddlewareFn {
-	for _, s := range sceneMiddlewareFns {
+func (sceneFns SceneFns) GetByScene(scene Scene) SceneFns {
+	sub := make(SceneFns, 0)
+	for _, s := range sceneFns {
 		if scene.Is(s.Scene) {
-			return s
+			sub.Append(s)
 		}
 	}
-	return SceneMiddlewareFn{
-		Scene: scene,
+	return sub
+}
+func (sceneFns *SceneFns) Remove(name string) {
+	tmp := make(SceneFns, 0)
+	for _, scenaFn := range *sceneFns {
+		if scenaFn.Name == name {
+			continue
+		}
+		tmp.Append(scenaFn)
 	}
+	*sceneFns = tmp
 }
 
 // Append 常规添加
-func (sis *SceneMiddlewareFns) Append(sceneMiddlewareFns ...SceneMiddlewareFn) {
+func (sis *SceneFns) Append(sceneFns ...SceneFn) {
 	if *sis == nil {
-		*sis = make(SceneMiddlewareFns, 0)
+		*sis = make(SceneFns, 0)
 	}
-	for _, sceneInit := range sceneMiddlewareFns {
-		exists := false
-		for i := 0; i < len(*sis); i++ {
-			if (*sis)[i].Scene.Is(sceneInit.Scene) {
-				if (*sis)[i].MiddlewarFns == nil {
-					(*sis)[i].MiddlewarFns = make(MiddlewareFns, 0)
-				}
-				(*sis)[i].MiddlewarFns = append((*sis)[i].MiddlewarFns, sceneInit.MiddlewarFns...)
-				exists = true
-				break
-			}
-		}
-		if !exists {
-			*sis = append(*sis, sceneInit)
-		}
-
-	}
+	*sis = append(*sis, sceneFns...)
 
 }
 

@@ -116,19 +116,19 @@ type OrderFn func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpre
 
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Name               string             `json:"name"`
-	ValueFns           ValueFns           `json:"-"` // 增加error，方便封装字段验证规则
-	WhereFns           ValueFns           `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	_OrderFn           OrderFn            `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	Schema             *Schema            // 可以为空，为空建议设置默认值
-	Table              TableI             // 关联表,方便收集Table全量信息
-	scene              Scene              // 场景
-	sceneMiddlewareFns SceneMiddlewareFns // 场景初始化配置
-	tags               Tags               // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
-	dbName             string
-	docName            string
-	selectColumns      []any  // 查询时列
-	fieldName          string //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
+	Name          string   `json:"name"`
+	ValueFns      ValueFns `json:"-"` // 增加error，方便封装字段验证规则
+	WhereFns      ValueFns `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	_OrderFn      OrderFn  `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	Schema        *Schema  // 可以为空，为空建议设置默认值
+	Table         TableI   // 关联表,方便收集Table全量信息
+	scene         Scene    // 场景
+	sceneFns      SceneFns // 场景初始化配置
+	tags          Tags     // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
+	dbName        string
+	docName       string
+	selectColumns []any  // 查询时列
+	fieldName     string //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
 }
 
 type Tags []string
@@ -177,7 +177,7 @@ func (f *Field) Copy() (copyF *Field) {
 	copyF.Schema = &schema // 重新给地址
 	copyF.Table = f.Table
 	copyF.scene = f.scene
-	copyF.sceneMiddlewareFns = f.sceneMiddlewareFns
+	copyF.sceneFns = f.sceneFns
 	copyF.selectColumns = f.selectColumns
 	copyF.dbName = f.dbName
 	copyF.docName = f.docName
@@ -319,7 +319,7 @@ func (f *Field) ResetWhereFn(whereFns ...ValueFn) *Field {
 
 // RequiredWhenInsert 经常在新增时要求必填,所以单独一个函数,提供方便
 func (f *Field) RequiredWhenInsert(required bool) *Field {
-	f.MiddlewareSceneInsert(func(f *Field, fs ...*Field) {
+	f.SceneInsert(func(f *Field, fs ...*Field) {
 		f.SetRequired(true)
 	})
 	return f
@@ -327,7 +327,7 @@ func (f *Field) RequiredWhenInsert(required bool) *Field {
 
 // MinBoundaryLengthWhereInsert 数字最小值,字符串最小长度设置,提供方便
 func (f *Field) MinBoundaryWhereInsert(minimum int, minLength int) *Field {
-	f.MiddlewareSceneInsert(func(f *Field, fs ...*Field) {
+	f.SceneInsert(func(f *Field, fs ...*Field) {
 		f.MergeSchema(Schema{
 			Minimum:   minimum,
 			MinLength: minLength,
@@ -367,7 +367,7 @@ func (f *Field) Combine(combinedFields ...*Field) *Field {
 			f.fieldName = combined.fieldName
 		}
 		f.tags.Append(combined.tags...)
-		f.sceneMiddlewareFns.Append(combined.sceneMiddlewareFns...)
+		f.sceneFns.Append(combined.sceneFns...)
 		f.ValueFns.Append(combined.ValueFns...)
 		f.WhereFns.Append(combined.WhereFns...)
 		if f._OrderFn == nil {
@@ -436,42 +436,45 @@ func (f *Field) SetScene(scene Scene) *Field {
 }
 
 // Scene  获取场景
-func (f *Field) SceneFn(scene Scene, middlewareFns ...MiddlewareFn) *Field {
-	f.sceneMiddlewareFns.Append(SceneMiddlewareFn{
-		Scene:        scene,
-		MiddlewarFns: middlewareFns,
-	})
+func (f *Field) SceneFn(sceneFn SceneFn) *Field {
+	f.sceneFns.Append(sceneFn)
 	return f
 }
-func (f *Field) MiddlewareFn(middlewareFn MiddlewareFn, fs ...*Field) *Field {
+func (f *Field) SceneFnRmove(name string) *Field {
+	if len(f.sceneFns) > 0 {
+		f.sceneFns.Remove(name)
+	}
+	return f
+}
+func (f *Field) Apply(middlewareFn MiddlewareFn, fs ...*Field) *Field {
 	middlewareFn.Apply(f)
 	return f
 }
 
-func (f *Field) MiddlewareFns(middlewareFns MiddlewareFns, fs ...*Field) *Field {
+func (f *Field) Applys(middlewareFns MiddlewareFns, fs ...*Field) *Field {
 	middlewareFns.Apply(f)
 	return f
 }
 
-func (f *Field) MiddlewareSceneInsert(middlewareFn MiddlewareFn) *Field {
-	f.sceneMiddlewareFns.Append(SceneMiddlewareFn{
-		Scene:        SCENE_SQL_INSERT,
-		MiddlewarFns: MiddlewareFns{middlewareFn},
+func (f *Field) SceneInsert(middlewareFn MiddlewareFn) *Field {
+	f.sceneFns.Append(SceneFn{
+		Scene: SCENE_SQL_INSERT,
+		Fn:    middlewareFn,
 	})
 	return f
 }
-func (f *Field) MiddlewareSceneUpdate(middlewareFn MiddlewareFn) *Field {
-	f.sceneMiddlewareFns.Append(SceneMiddlewareFn{
-		Scene:        SCENE_SQL_UPDATE,
-		MiddlewarFns: MiddlewareFns{middlewareFn},
+func (f *Field) SceneUpdate(middlewareFn MiddlewareFn) *Field {
+	f.sceneFns.Append(SceneFn{
+		Scene: SCENE_SQL_UPDATE,
+		Fn:    middlewareFn,
 	})
 	return f
 }
 
-func (f *Field) MiddlewareSceneSelect(middlewareFn MiddlewareFn) *Field {
-	f.sceneMiddlewareFns.Append(SceneMiddlewareFn{
-		Scene:        SCENE_SQL_SELECT,
-		MiddlewarFns: MiddlewareFns{middlewareFn},
+func (f *Field) SceneSelect(middlewareFn MiddlewareFn) *Field {
+	f.sceneFns.Append(SceneFn{
+		Scene: SCENE_SQL_SELECT,
+		Fn:    middlewareFn,
 	})
 	return f
 }
@@ -545,10 +548,10 @@ func (f Field) GetDocName() string {
 }
 
 func (f *Field) init(fs ...*Field) {
-	if f.sceneMiddlewareFns != nil {
-		sceneInit := f.sceneMiddlewareFns.GetByScene(f.scene)
-		if sceneInit.MiddlewarFns != nil {
-			sceneInit.MiddlewarFns.Apply(f, fs...)
+	if f.sceneFns != nil {
+		sceneFns := f.sceneFns.GetByScene(f.scene)
+		for _, sceneFn := range sceneFns {
+			sceneFn.Fn.Apply(f, fs...)
 		}
 
 	}
@@ -759,21 +762,21 @@ func (fs Fields) SetScene(scene Scene) Fields {
 }
 func (fs Fields) MiddlewareSceneInsert(fn MiddlewareFn) Fields {
 	for i := 0; i < len(fs); i++ {
-		fs[i].MiddlewareSceneInsert(fn)
+		fs[i].SceneInsert(fn)
 	}
 	return fs
 }
 
 func (fs Fields) MiddlewareSceneUpdate(fn MiddlewareFn) Fields {
 	for i := 0; i < len(fs); i++ {
-		fs[i].MiddlewareSceneUpdate(fn)
+		fs[i].SceneUpdate(fn)
 	}
 	return fs
 }
 
 func (fs Fields) MiddlewareSceneSelect(fn MiddlewareFn) Fields {
 	for i := 0; i < len(fs); i++ {
-		fs[i].MiddlewareSceneSelect(fn)
+		fs[i].SceneSelect(fn)
 	}
 	return fs
 }
