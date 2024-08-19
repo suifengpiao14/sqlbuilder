@@ -169,6 +169,15 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
+func (p InsertParam) Exec(execHandler ExecHandler) (err error) {
+	sql, err := p.ToSQL()
+	if err != nil {
+		return err
+	}
+	err = execHandler(sql)
+	return err
+}
+
 type InsertParams []InsertParam
 
 func (rows InsertParams) ToSQL() (sql string, err error) {
@@ -243,6 +252,14 @@ func (p DeleteParam) ToSQL() (sql string, err error) {
 	}
 	return sql, nil
 }
+func (p DeleteParam) Exec(execHandler ExecHandler) (err error) {
+	sql, err := p.ToSQL()
+	if err != nil {
+		return err
+	}
+	err = execHandler(sql)
+	return err
+}
 
 type UpdateParam struct {
 	_TableI TableI
@@ -286,6 +303,15 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 	return sql, nil
+}
+
+func (p UpdateParam) Exec(execHandler ExecHandler) (err error) {
+	sql, err := p.ToSQL()
+	if err != nil {
+		return err
+	}
+	err = execHandler(sql)
+	return err
 }
 
 // type FirstParamI interface {
@@ -575,11 +601,11 @@ func (p SetParam) Set(queryHandler QueryHandler, execHandler ExecHandler) error 
 		return err
 	}
 	if exists {
-		_, err = NewUpdateBuilder(table).AppendFields(p._Fields...).Exec(execHandler)
+		err = NewUpdateBuilder(table).AppendFields(p._Fields...).Exec(execHandler)
 	} else {
-		_, err = NewInsertBuilder(table).AppendFields(p._Fields...).Exec(execHandler)
+		err = NewInsertBuilder(table).AppendFields(p._Fields...).Exec(execHandler)
 	}
-
+	return err
 }
 
 func MergeData(dataFns ...func() (any, error)) (map[string]any, error) {
