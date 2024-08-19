@@ -141,8 +141,8 @@ var ApplyFnValueFnTrimSpace ApplyFn = func(f *Field, fs ...*Field) {
 	f.ValueFns.AppendIfNotFirst(ValueFnTrimBlankSpace, ValueFnEmpty2Nil)
 }
 
-// UniqueFieldApplyFn 单列唯一索引键,新增场景中间件
-func UniqueFieldApplyFn(table string, existsFn func(sql string) (exists bool, err error)) ApplyFn {
+// ApplyFnUniqueField 单列唯一索引键,新增场景中间件
+func ApplyFnUniqueField(table string, existsFn func(sql string) (exists bool, err error)) ApplyFn {
 	return func(f *Field, fs ...*Field) {
 		sceneFnName := "checkexists"
 		sceneFn := SceneFn{
