@@ -385,6 +385,71 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
+type ExistsParam struct {
+	_Table  TableI
+	_Fields Fields
+}
+
+func (p ExistsParam) AppendFields(fields ...*Field) ExistsParam {
+	p._Fields.Append(fields...)
+	return p
+}
+
+func NewExistsBuilder(tableName string) ExistsParam {
+	return ExistsParam{
+		_Table: TableFn(func() string { return tableName }),
+	}
+}
+
+func (p ExistsParam) _Where() (expressions Expressions, err error) {
+	return p._Fields.Where()
+}
+
+func (p ExistsParam) ToSQL() (sql string, err error) {
+	p._Fields.SetSceneIfEmpty(SCENE_SQL_SELECT)
+	where, err := p._Where()
+	if err != nil {
+		return "", err
+	}
+	pageIndex, pageSize := p._Fields.Pagination()
+	ofsset := pageIndex * pageSize
+	if ofsset < 0 {
+		ofsset = 0
+	}
+
+	ds := Dialect.DialectWrapper().Select(goqu.L("1").As("count")).
+		From(p._Table.Table()).
+		Where(where...).
+		Limit(1)
+	sql, _, err = ds.ToSQL()
+	if err != nil {
+		return "", err
+	}
+	return sql, nil
+}
+
+func (p ExistsParam) Exists(queryHandler QueryHandler) (exists bool, err error) {
+	sql, err := p.ToSQL()
+	if err != nil {
+		return false, err
+	}
+	result := make([]any, 0)
+	err = queryHandler(sql, &result)
+	if err != nil {
+		return false, err
+	}
+	if len(result) > 0 {
+		return true, nil
+	}
+	return false, nil
+}
+
+type CountHandler func(sql string) (count int64, err error)
+type PaginationHandler func(totalSql string, ListSql string, result any) (count int64, err error)
+type QueryHandler func(sql string, result any) (err error)
+
+type ExecHandler func(sql string) (err error)
+
 type TotalParam struct {
 	_Table  TableI
 	_Fields Fields
@@ -419,6 +484,14 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
+func (p TotalParam) Count(countHandler CountHandler) (total int64, err error) {
+	sql, err := p.ToSQL()
+	if err != nil {
+		return -1, err
+	}
+	return countHandler(sql)
+}
+
 type PaginationParam struct {
 	_Table  TableI
 	_Fields Fields
@@ -448,6 +521,19 @@ func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 	return totalSql, listSql, nil
 }
 
+func (p PaginationParam) Pagination(paginationHandler PaginationHandler, result any) (count int64, err error) {
+	table := p._Table.Table()
+	totalSql, err := NewTotalBuilder(table).AppendFields(p._Fields...).ToSQL()
+	if err != nil {
+		return 0, err
+	}
+	listSql, err := NewTotalBuilder(table).AppendFields(p._Fields...).ToSQL()
+	if err != nil {
+		return 0, err
+	}
+	return paginationHandler(totalSql, listSql, result)
+}
+
 type SetParam struct {
 	_Table  TableI
 	_Fields Fields
@@ -464,29 +550,36 @@ func NewSetBuilder(tableName string) SetParam {
 	}
 }
 
-type SetParamSQL struct {
-	Get    string
-	Insert string
-	Update string
+// ToSQL 一次生成 查询、新增、修改 sql,若查询后记录存在,并且需要根据数据库记录值修改数据,则可以重新赋值后生成sql
+func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string, err error) {
+	table := p._Table.Table()
+	existsSql, err = NewExistsBuilder(table).AppendFields(p._Fields...).ToSQL()
+	if err != nil {
+		return "", "", "", err
+	}
+	insertSql, err = NewInsertBuilder(table).AppendFields(p._Fields...).ToSQL()
+	if err != nil {
+		return "", "", "", err
+	}
+	updateSql, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ToSQL()
+	if err != nil {
+		return "", "", "", err
+	}
+	return existsSql, insertSql, updateSql, nil
 }
 
-// ToSQL 一次生成 查询、新增、修改 sql,若查询后记录存在,并且需要根据数据库记录值修改数据,则可以重新赋值后生成sql
-func (p SetParam) ToSQL() (sql *SetParamSQL, err error) {
+func (p SetParam) Set(queryHandler QueryHandler, execHandler ExecHandler) error {
 	table := p._Table.Table()
-	sql = &SetParamSQL{}
-	sql.Get, err = NewFirstBuilder(table).AppendFields(p._Fields...).ToSQL()
+	exists, err := NewExistsBuilder(table).AppendFields(p._Fields...).Exists(queryHandler)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	sql.Insert, err = NewInsertBuilder(table).AppendFields(p._Fields...).ToSQL()
-	if err != nil {
-		return nil, err
+	if exists {
+		_, err = NewUpdateBuilder(table).AppendFields(p._Fields...).Exec(execHandler)
+	} else {
+		_, err = NewInsertBuilder(table).AppendFields(p._Fields...).Exec(execHandler)
 	}
-	sql.Update, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ToSQL()
-	if err != nil {
-		return nil, err
-	}
-	return sql, nil
+
 }
 
 func MergeData(dataFns ...func() (any, error)) (map[string]any, error) {
