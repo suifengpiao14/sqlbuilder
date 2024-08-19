@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/doug-martin/goqu/v9"
+	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 )
 
@@ -138,4 +139,44 @@ var ApplyFnValueFormatBySchemaType ApplyFn = func(f *Field, fs ...*Field) {
 
 var ApplyFnValueFnTrimSpace ApplyFn = func(f *Field, fs ...*Field) {
 	f.ValueFns.AppendIfNotFirst(ValueFnTrimBlankSpace, ValueFnEmpty2Nil)
+}
+
+// UniqueFieldApplyFn 单列唯一索引键,新增场景中间件
+func UniqueFieldApplyFn(table string, existsFn func(sql string) (exists bool, err error)) ApplyFn {
+	return func(f *Field, fs ...*Field) {
+		sceneFnName := "checkexists"
+		sceneFn := SceneFn{
+			Name:  sceneFnName,
+			Scene: SCENE_SQL_INSERT,
+			Fn: func(f *Field, fs ...*Field) {
+				f1 := f.Copy()               //复制不影响外部,在内部copy 是运行时 copy,确保 builder阶段的设置都能考呗到
+				f1.SceneFnRmove(sceneFnName) // 避免死循环
+				f1.WhereFns.Append(ValueFnForward)
+				f.ValueFns.Append(func(inputValue any) (any, error) {
+					totalParam := NewTotalBuilder(table).AppendFields(f1)
+					sql, err := totalParam.ToSQL()
+					if err != nil {
+						return nil, err
+					}
+					exists, err := existsFn(sql)
+					if err != nil {
+						return nil, err
+					}
+					if exists {
+						err = errors.Errorf("unique column %s value %s exists", f1.DBName(), inputValue)
+						return nil, err
+					}
+					return inputValue, nil
+				})
+
+			},
+		}
+		f.SceneFn(sceneFn)
+		f.SceneUpdate(func(f *Field, fs ...*Field) {
+			f.WhereFns.Append(ValueFnForward)
+		})
+		f.SceneSelect(func(f *Field, fs ...*Field) {
+			f.WhereFns.Append(ValueFnEmpty2Nil)
+		})
+	}
 }
