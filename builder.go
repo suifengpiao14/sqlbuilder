@@ -362,6 +362,14 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
+func (p FirstParam) First(result any, firstHandler FirstHandler) (exists bool, err error) {
+	sql, err := p.ToSQL()
+	if err != nil {
+		return false, err
+	}
+	return firstHandler(sql, result)
+}
+
 type ListParam struct {
 	_Table  TableI
 	_Fields Fields
@@ -409,6 +417,14 @@ func (p ListParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 	return sql, nil
+}
+
+func (p ListParam) Query(result any, queryHandler QueryHandler) (err error) {
+	sql, err := p.ToSQL()
+	if err != nil {
+		return err
+	}
+	return queryHandler(sql, result)
 }
 
 type ExistsParam struct {
@@ -473,6 +489,7 @@ func (p ExistsParam) Exists(queryHandler QueryHandler) (exists bool, err error) 
 type CountHandler func(sql string) (count int64, err error)
 type PaginationHandler func(totalSql string, ListSql string, result any) (count int64, err error)
 type QueryHandler func(sql string, result any) (err error)
+type FirstHandler func(sql string, result any) (exists bool, err error)
 
 type ExecHandler func(sql string) (err error)
 
