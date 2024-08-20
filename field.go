@@ -1042,7 +1042,7 @@ func Expression2String(expressions ...goqu.Expression) string {
 // FieldName2DBColumnName 将接口字段转换为数据表字段列名称
 var FieldName2DBColumnName = func(fieldName string) (dbColumnName string) {
 	dbColumnName = funcs.ToSnakeCase(fieldName)
-	dbColumnName = fmt.Sprintf("F%s", strings.TrimPrefix(dbColumnName, "f")) // 增加F前缀
+	dbColumnName = fmt.Sprintf("F%s", strings.TrimPrefix(dbColumnName, "F")) // 增加F前缀
 	return dbColumnName
 }
 
