@@ -487,7 +487,7 @@ func (p ExistsParam) Exists(queryHandler QueryHandler) (exists bool, err error) 
 }
 
 type CountHandler func(sql string) (count int64, err error)
-type PaginationHandler func(totalSql string, ListSql string, result any) (count int64, err error)
+type PaginationHandler func(totalSql string, listSql string, result any) (count int64, err error)
 type QueryHandler func(sql string, result any) (err error)
 type FirstHandler func(sql string, result any) (exists bool, err error)
 
@@ -564,13 +564,13 @@ func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 	return totalSql, listSql, nil
 }
 
-func (p PaginationParam) Pagination(paginationHandler PaginationHandler, result any) (count int64, err error) {
+func (p PaginationParam) Pagination(result any, paginationHandler PaginationHandler) (count int64, err error) {
 	table := p._Table.Table()
 	totalSql, err := NewTotalBuilder(table).AppendFields(p._Fields...).ToSQL()
 	if err != nil {
 		return 0, err
 	}
-	listSql, err := NewTotalBuilder(table).AppendFields(p._Fields...).ToSQL()
+	listSql, err := NewListBuilder(table).AppendFields(p._Fields...).ToSQL()
 	if err != nil {
 		return 0, err
 	}
