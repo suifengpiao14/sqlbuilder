@@ -185,6 +185,7 @@ func NewInsertBuilder(tableName string) InsertParam {
 	return InsertParam{
 		_TableI: TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),
+		_log:    ConsoleLog{},
 	}
 }
 
@@ -238,9 +239,29 @@ type InsertParams struct {
 	_log      LogI
 }
 
-func (rows InsertParams) ToSQL() (sql string, err error) {
+func NewInsertsBuilder(tableName string) InsertParams {
+	return InsertParams{
+		_TableI:   TableFn(func() string { return tableName }),
+		rowFields: make([]Fields, 0),
+		_log:      ConsoleLog{},
+	}
+}
+
+func (p *InsertParams) SetLog(log LogI) InsertParams {
+	p._log = log
+	return *p
+}
+func (p InsertParams) AppendFields(fields ...Fields) InsertParams {
+	if p.rowFields == nil {
+		p.rowFields = make([]Fields, 0)
+	}
+	p.rowFields = append(p.rowFields, fields...)
+	return p
+}
+
+func (is InsertParams) ToSQL() (sql string, err error) {
 	data := make([]any, 0)
-	for _, fields := range rows.rowFields {
+	for _, fields := range is.rowFields {
 		rowData, err := fields.Data()
 		if err != nil {
 			return "", err
@@ -250,13 +271,13 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 		}
 		data = append(data, rowData)
 	}
-	ds := Dialect.DialectWrapper().Insert(rows._TableI.Table()).Rows(data...)
+	ds := Dialect.DialectWrapper().Insert(is._TableI.Table()).Rows(data...)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
 	}
-	if rows._log != nil {
-		rows._log.Log(sql)
+	if is._log != nil {
+		is._log.Log(sql)
 	}
 	return sql, nil
 }
@@ -276,6 +297,7 @@ func NewDeleteBuilder(tableName string) DeleteParam {
 	return DeleteParam{
 		_TableI: TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),
+		_log:    ConsoleLog{},
 	}
 }
 
@@ -342,6 +364,7 @@ func NewUpdateBuilder(tableName string) UpdateParam {
 	return UpdateParam{
 		_TableI: TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),
+		_log:    ConsoleLog{},
 	}
 }
 
@@ -414,6 +437,7 @@ func NewFirstBuilder(tableName string, columns ...any) FirstParam {
 	return FirstParam{
 		_Table:  TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),
+		_log:    ConsoleLog{},
 	}
 }
 
@@ -473,6 +497,7 @@ func (p ListParam) AppendFields(fields ...*Field) ListParam {
 func NewListBuilder(tableName string) ListParam {
 	return ListParam{
 		_Table: TableFn(func() string { return tableName }),
+		_log:   ConsoleLog{},
 	}
 }
 
@@ -607,6 +632,7 @@ type TotalParam struct {
 func NewTotalBuilder(tableName string) TotalParam {
 	return TotalParam{
 		_Table: TableFn(func() string { return tableName }),
+		_log:   ConsoleLog{},
 	}
 }
 func (p *TotalParam) SetLog(log LogI) TotalParam {
