@@ -486,13 +486,6 @@ func (p ExistsParam) Exists(queryHandler QueryHandler) (exists bool, err error) 
 	return false, nil
 }
 
-type CountHandler func(sql string) (count int64, err error)
-type PaginationHandler func(totalSql string, listSql string, result any) (count int64, err error)
-type QueryHandler func(sql string, result any) (err error)
-type FirstHandler func(sql string, result any) (exists bool, err error)
-
-type ExecHandler func(sql string) (err error)
-
 type TotalParam struct {
 	_Table  TableI
 	_Fields Fields
