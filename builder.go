@@ -1,6 +1,7 @@
 package sqlbuilder
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -172,6 +173,12 @@ func ConcatExpression(expressions ...exp.Expression) Expressions {
 type InsertParam struct {
 	_TableI TableI
 	_Fields Fields
+	_log    LogI
+}
+
+func (p *InsertParam) SetLog(log LogI) InsertParam {
+	p._log = log
+	return *p
 }
 
 func NewInsertBuilder(tableName string) InsertParam {
@@ -210,6 +217,9 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
+	if p._log != nil {
+		p._log.Log(sql)
+	}
 	return sql, nil
 }
 
@@ -222,16 +232,16 @@ func (p InsertParam) Exec(execHandler ExecHandler) (err error) {
 	return err
 }
 
-type InsertParams []InsertParam
+type InsertParams struct {
+	rowFields []Fields
+	_TableI   TableI
+	_log      LogI
+}
 
 func (rows InsertParams) ToSQL() (sql string, err error) {
 	data := make([]any, 0)
-	table := ""
-	for i, r := range rows {
-		if i == 0 {
-			table = r._TableI.Table()
-		}
-		rowData, err := r._Data()
+	for _, fields := range rows.rowFields {
+		rowData, err := fields.Data()
 		if err != nil {
 			return "", err
 		}
@@ -240,10 +250,13 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 		}
 		data = append(data, rowData)
 	}
-	ds := Dialect.DialectWrapper().Insert(table).Rows(data...)
+	ds := Dialect.DialectWrapper().Insert(rows._TableI.Table()).Rows(data...)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
+	}
+	if rows._log != nil {
+		rows._log.Log(sql)
 	}
 	return sql, nil
 }
@@ -251,6 +264,12 @@ func (rows InsertParams) ToSQL() (sql string, err error) {
 type DeleteParam struct {
 	_TableI TableI
 	_Fields Fields
+	_log    LogI
+}
+
+func (p *DeleteParam) SetLog(log LogI) DeleteParam {
+	p._log = log
+	return *p
 }
 
 func NewDeleteBuilder(tableName string) DeleteParam {
@@ -294,6 +313,9 @@ func (p DeleteParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
+	if p._log != nil {
+		p._log.Log(sql)
+	}
 	return sql, nil
 }
 func (p DeleteParam) Exec(execHandler ExecHandler) (err error) {
@@ -308,6 +330,12 @@ func (p DeleteParam) Exec(execHandler ExecHandler) (err error) {
 type UpdateParam struct {
 	_TableI TableI
 	_Fields Fields
+	_log    LogI
+}
+
+func (p *UpdateParam) SetLog(log LogI) UpdateParam {
+	p._log = log
+	return *p
 }
 
 func NewUpdateBuilder(tableName string) UpdateParam {
@@ -346,6 +374,9 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
+	if p._log != nil {
+		p._log.Log(sql)
+	}
 	return sql, nil
 }
 
@@ -366,6 +397,12 @@ func (p UpdateParam) Exec(execHandler ExecHandler) (err error) {
 type FirstParam struct {
 	_Table  TableI
 	_Fields Fields
+	_log    LogI
+}
+
+func (p *FirstParam) SetLog(log LogI) FirstParam {
+	p._log = log
+	return *p
 }
 
 func (p FirstParam) AppendFields(fields ...*Field) FirstParam {
@@ -403,6 +440,9 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
+	if p._log != nil {
+		p._log.Log(sql)
+	}
 	return sql, nil
 }
 
@@ -417,6 +457,12 @@ func (p FirstParam) First(result any, firstHandler FirstHandler) (exists bool, e
 type ListParam struct {
 	_Table  TableI
 	_Fields Fields
+	_log    LogI
+}
+
+func (p *ListParam) SetLog(log LogI) ListParam {
+	p._log = log
+	return *p
 }
 
 func (p ListParam) AppendFields(fields ...*Field) ListParam {
@@ -460,6 +506,9 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
+	if p._log != nil {
+		p._log.Log(sql)
+	}
 	return sql, nil
 }
 
@@ -471,19 +520,35 @@ func (p ListParam) Query(result any, queryHandler QueryHandler) (err error) {
 	return queryHandler(sql, result)
 }
 
+type LogI interface {
+	Log(sql string, args ...any)
+}
+
+type ConsoleLog struct{}
+
+func (log ConsoleLog) Log(sql string, args ...any) {
+	fmt.Println("sql:", sql, "args:", args)
+}
+
 type ExistsParam struct {
 	_Table  TableI
 	_Fields Fields
+	_log    LogI
 }
 
 func (p ExistsParam) AppendFields(fields ...*Field) ExistsParam {
 	p._Fields.Append(fields...)
 	return p
 }
+func (p *ExistsParam) SetLog(log LogI) ExistsParam {
+	p._log = log
+	return *p
+}
 
 func NewExistsBuilder(tableName string) ExistsParam {
 	return ExistsParam{
 		_Table: TableFn(func() string { return tableName }),
+		_log:   ConsoleLog{},
 	}
 }
 
@@ -511,6 +576,9 @@ func (p ExistsParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
+	if p._log != nil {
+		p._log.Log(sql)
+	}
 	return sql, nil
 }
 
@@ -533,12 +601,17 @@ func (p ExistsParam) Exists(queryHandler QueryHandler) (exists bool, err error) 
 type TotalParam struct {
 	_Table  TableI
 	_Fields Fields
+	_log    LogI
 }
 
 func NewTotalBuilder(tableName string) TotalParam {
 	return TotalParam{
 		_Table: TableFn(func() string { return tableName }),
 	}
+}
+func (p *TotalParam) SetLog(log LogI) TotalParam {
+	p._log = log
+	return *p
 }
 
 func (p TotalParam) AppendFields(fields ...*Field) TotalParam {
@@ -568,6 +641,9 @@ func (p TotalParam) Count(countHandler CountHandler) (total int64, err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return -1, err
+	}
+	if p._log != nil {
+		p._log.Log(sql)
 	}
 	return countHandler(sql)
 }
