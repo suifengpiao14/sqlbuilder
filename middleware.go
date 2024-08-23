@@ -138,7 +138,11 @@ var ApplyFnValueFormatBySchemaType ApplyFn = func(f *Field, fs ...*Field) {
 }
 
 var ApplyFnValueFnTrimSpace ApplyFn = func(f *Field, fs ...*Field) {
-	f.ValueFns.AppendIfNotFirst(ValueFnTrimBlankSpace, ValueFnEmpty2Nil)
+	f.ValueFns.AppendIfNotFirst(ValueFnTrimBlankSpace)
+}
+
+var ApplyFnValueEmpty2Nil ApplyFn = func(f *Field, fs ...*Field) {
+	f.ValueFns.AppendIfNotFirst(ValueFnEmpty2Nil)
 }
 
 // ApplyFnUniqueField 单列唯一索引键,新增场景中间件
