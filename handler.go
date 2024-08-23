@@ -20,6 +20,10 @@ type Handler interface {
 
 type GormHandler func() *gorm.DB
 
+func NewGormHandler(getDB func() *gorm.DB) GormHandler {
+	return GormHandler(getDB)
+}
+
 func (h GormHandler) Exec(sql string) (err error) {
 	return h().Exec(sql).Error
 }

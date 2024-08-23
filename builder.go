@@ -19,7 +19,7 @@ type Builder struct {
 }
 
 func NewGormBuilder(table string, getDB func() *gorm.DB) *Builder {
-	handler := GormHandler(getDB)
+	handler := NewGormHandler(getDB)
 	return &Builder{handler: handler, table: table}
 }
 
