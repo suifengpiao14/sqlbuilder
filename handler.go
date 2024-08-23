@@ -18,40 +18,34 @@ type Handler interface {
 	Count(sql string) (count int64, err error)
 }
 
-type GormHandler struct {
-	getDB func() *gorm.DB
+type GormHandler func() *gorm.DB
+
+func (h GormHandler) Exec(sql string) (err error) {
+	return h().Exec(sql).Error
+}
+func (h GormHandler) First(sql string, result any) (exists bool, err error) {
+	return h().First(result, sql).RowsAffected > 0, nil
 }
 
-func NewGormHandler(getDB func() *gorm.DB) Handler {
-	return &GormHandler{getDB: getDB}
+func (h GormHandler) Query(sql string, result any) (err error) {
+	return h().Raw(sql).Find(result).Error
 }
-
-func (h *GormHandler) Exec(sql string) (err error) {
-	return h.getDB().Exec(sql).Error
-}
-func (h *GormHandler) First(sql string, result any) (exists bool, err error) {
-	return h.getDB().First(result, sql).RowsAffected > 0, nil
-}
-
-func (h *GormHandler) Query(sql string, result any) (err error) {
-	return h.getDB().Raw(sql).Find(result).Error
-}
-func (h *GormHandler) Pagination(totalSql string, listSql string, result any) (count int64, err error) {
-	if err = h.getDB().Raw(totalSql).Count(&count).Error; err != nil {
+func (h GormHandler) Pagination(totalSql string, listSql string, result any) (count int64, err error) {
+	if err = h().Raw(totalSql).Count(&count).Error; err != nil {
 		return 0, err
 	}
 	if count > 0 {
-		if err = h.getDB().Raw(listSql).Find(result).Error; err != nil {
+		if err = h().Raw(listSql).Find(result).Error; err != nil {
 			return 0, err
 		}
 	}
 	return count, nil
 }
-func (h *GormHandler) Count(sql string) (count int64, err error) {
-	err = h.getDB().Raw(sql).Count(&count).Error
+func (h GormHandler) Count(sql string) (count int64, err error) {
+	err = h().Raw(sql).Count(&count).Error
 	return count, err
 }
 
-func (h *GormHandler) GetDB() *gorm.DB {
-	return h.getDB()
+func (h GormHandler) GetDB() *gorm.DB {
+	return h()
 }
