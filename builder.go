@@ -185,7 +185,7 @@ func NewInsertBuilder(tableName string) InsertParam {
 	return InsertParam{
 		_TableI: TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),
-		_log:    ConsoleLog{},
+		_log:    DefaultLog,
 	}
 }
 
@@ -243,7 +243,7 @@ func NewInsertsBuilder(tableName string) InsertParams {
 	return InsertParams{
 		_TableI:   TableFn(func() string { return tableName }),
 		rowFields: make([]Fields, 0),
-		_log:      ConsoleLog{},
+		_log:      DefaultLog,
 	}
 }
 
@@ -297,7 +297,7 @@ func NewDeleteBuilder(tableName string) DeleteParam {
 	return DeleteParam{
 		_TableI: TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),
-		_log:    ConsoleLog{},
+		_log:    DefaultLog,
 	}
 }
 
@@ -364,7 +364,7 @@ func NewUpdateBuilder(tableName string) UpdateParam {
 	return UpdateParam{
 		_TableI: TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),
-		_log:    ConsoleLog{},
+		_log:    DefaultLog,
 	}
 }
 
@@ -437,7 +437,7 @@ func NewFirstBuilder(tableName string, columns ...any) FirstParam {
 	return FirstParam{
 		_Table:  TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),
-		_log:    ConsoleLog{},
+		_log:    DefaultLog,
 	}
 }
 
@@ -497,7 +497,7 @@ func (p ListParam) AppendFields(fields ...*Field) ListParam {
 func NewListBuilder(tableName string) ListParam {
 	return ListParam{
 		_Table: TableFn(func() string { return tableName }),
-		_log:   ConsoleLog{},
+		_log:   DefaultLog,
 	}
 }
 
@@ -555,6 +555,14 @@ func (log ConsoleLog) Log(sql string, args ...any) {
 	fmt.Println("sql:", sql, "args:", args)
 }
 
+type EmptyLog struct{}
+
+func (log EmptyLog) Log(sql string, args ...any) {
+
+}
+
+var DefaultLog = ConsoleLog{}
+
 type ExistsParam struct {
 	_Table  TableI
 	_Fields Fields
@@ -573,7 +581,7 @@ func (p *ExistsParam) SetLog(log LogI) ExistsParam {
 func NewExistsBuilder(tableName string) ExistsParam {
 	return ExistsParam{
 		_Table: TableFn(func() string { return tableName }),
-		_log:   ConsoleLog{},
+		_log:   DefaultLog,
 	}
 }
 
@@ -632,7 +640,7 @@ type TotalParam struct {
 func NewTotalBuilder(tableName string) TotalParam {
 	return TotalParam{
 		_Table: TableFn(func() string { return tableName }),
-		_log:   ConsoleLog{},
+		_log:   DefaultLog,
 	}
 }
 func (p *TotalParam) SetLog(log LogI) TotalParam {
