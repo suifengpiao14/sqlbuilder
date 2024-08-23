@@ -142,7 +142,7 @@ var ApplyFnValueFnTrimSpace ApplyFn = func(f *Field, fs ...*Field) {
 }
 
 // ApplyFnUniqueField 单列唯一索引键,新增场景中间件
-func ApplyFnUniqueField(table string, existsFn func(sql string) (exists bool, err error)) ApplyFn {
+func ApplyFnUniqueField(table string, queryFn QueryHandler) ApplyFn {
 	return func(f *Field, fs ...*Field) {
 		sceneFnName := "checkexists"
 		sceneFn := SceneFn{
@@ -153,12 +153,8 @@ func ApplyFnUniqueField(table string, existsFn func(sql string) (exists bool, er
 				f1.SceneFnRmove(sceneFnName) // 避免死循环
 				f1.WhereFns.Append(ValueFnForward)
 				f.ValueFns.Append(func(inputValue any) (any, error) {
-					totalParam := NewTotalBuilder(table).AppendFields(f1)
-					sql, err := totalParam.ToSQL()
-					if err != nil {
-						return nil, err
-					}
-					exists, err := existsFn(sql)
+					exitstsParam := NewExistsBuilder(table).AppendFields(f1)
+					exists, err := exitstsParam.Exists(queryFn)
 					if err != nil {
 						return nil, err
 					}
