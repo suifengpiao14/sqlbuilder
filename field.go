@@ -446,13 +446,8 @@ func (f *Field) SceneFnRmove(name string) *Field {
 	}
 	return f
 }
-func (f *Field) Apply(middlewareFn ApplyFn, fs ...*Field) *Field {
-	middlewareFn.Apply(f)
-	return f
-}
-
-func (f *Field) Applys(middlewareFns ApplyFns, fs ...*Field) *Field {
-	middlewareFns.Apply(f)
+func (f *Field) Apply(applyFns ...ApplyFn) *Field {
+	ApplyFns(applyFns).Apply(f)
 	return f
 }
 
