@@ -534,6 +534,19 @@ func ValueFnEmpty2Nil(in any) (any, error) {
 	return in, nil
 }
 
+func ValueFnGte(in any) (value any, err error) {
+	if IsNil(in) {
+		return nil, nil
+	}
+	return Between{in}, nil
+}
+func ValueFnLte(in any) (value any, err error) {
+	if IsNil(in) {
+		return nil, nil
+	}
+	return Between{nil, in}, nil
+}
+
 // ValueFnTrimBlankSpace 删除字符串前后空格
 func ValueFnTrimBlankSpace(in any) (any, error) {
 	if in == nil {
