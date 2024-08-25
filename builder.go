@@ -433,7 +433,7 @@ func (p FirstParam) AppendFields(fields ...*Field) FirstParam {
 	return p
 }
 
-func NewFirstBuilder(tableName string, columns ...any) FirstParam {
+func NewFirstBuilder(tableName string) FirstParam {
 	return FirstParam{
 		_Table:  TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),

@@ -180,3 +180,41 @@ func ApplyFnUniqueField(table string, queryFn QueryHandler) ApplyFn {
 		})
 	}
 }
+
+func ApplyFnUpdateIfNull(table string, firstHandler FirstHandler) ApplyFn {
+	return func(f *Field, fs ...*Field) {
+		f.SceneUpdate(func(f *Field, fs ...*Field) {
+			f.ValueFns.Append(func(inputValue any) (any, error) {
+				if IsNil(inputValue) {
+					return inputValue, nil
+				}
+
+				cpFields := Fields(fs).Copy()
+				if len(cpFields) > 0 {
+					cpFields[0].SetSelectColumns(f.DBName())
+				}
+				var dbValue any
+				exists, err := NewFirstBuilder(table).AppendFields(cpFields...).First(&dbValue, firstHandler)
+				if err != nil {
+					return nil, err
+				}
+				if !exists {
+					return inputValue, err
+				}
+				shieldUpdate := false
+				if !IsNil(dbValue) {
+					switch val := dbValue.(type) {
+					case int:
+						shieldUpdate = val > 0
+					case int64:
+						shieldUpdate = val > 0
+					case string:
+						shieldUpdate = val != ""
+					}
+				}
+				f.ShieldUpdate(shieldUpdate) // 设置是否屏蔽更新
+				return inputValue, nil
+			})
+		})
+	}
+}
