@@ -121,7 +121,7 @@ type Field struct {
 	WhereFns      ValueFns `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
 	_OrderFn      OrderFn  `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
 	Schema        *Schema  // 可以为空，为空建议设置默认值
-	Table         TableI   // 关联表,方便收集Table全量信息
+	table         string   // 关联表,方便收集Table全量信息
 	scene         Scene    // 场景
 	sceneFns      SceneFns // 场景初始化配置
 	tags          Tags     // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
@@ -175,7 +175,7 @@ func (f *Field) Copy() (copyF *Field) {
 		schema = *f.Schema
 	}
 	copyF.Schema = &schema // 重新给地址
-	copyF.Table = f.Table
+	copyF.table = f.table
 	copyF.scene = f.scene
 	copyF.sceneFns = f.sceneFns
 	copyF.selectColumns = f.selectColumns
@@ -193,6 +193,11 @@ const (
 
 func (f *Field) SetOrderFn(orderFn OrderFn) *Field {
 	f._OrderFn = orderFn
+	return f
+}
+
+func (f *Field) SetTable(table string) *Field {
+	f.table = table
 	return f
 }
 
@@ -348,8 +353,8 @@ func (f *Field) ShieldUpdate(shieldUpdate bool) *Field {
 func (f *Field) Combine(combinedFields ...*Field) *Field {
 	schema := Schema{}
 	for _, combined := range combinedFields {
-		if f.Table == nil {
-			f.Table = combined.Table
+		if f.table == "" {
+			f.table = combined.table
 		}
 		if f.scene == "" {
 			f.scene = combined.scene
@@ -368,7 +373,7 @@ func (f *Field) Combine(combinedFields ...*Field) *Field {
 		}
 		f.tags.Append(combined.tags...)
 		f.sceneFns.Append(combined.sceneFns...)
-		f.ValueFns.Append(combined.ValueFns...)
+		//	f.ValueFns.Append(combined.ValueFns...) value 不可写入
 		f.WhereFns.Append(combined.WhereFns...)
 		if f._OrderFn == nil {
 			f._OrderFn = combined._OrderFn
@@ -747,6 +752,29 @@ func (fs Fields) SetSceneIfEmpty(scene Scene) Fields {
 		fs[i].SetSceneIfEmpty(scene)
 	}
 	return fs
+}
+
+func (fs Fields) SetTable(table string) Fields {
+	for i := 0; i < len(fs); i++ {
+		if fs[i].table == "" {
+			fs[i].SetTable(table)
+		}
+	}
+	return fs
+}
+
+func (fs Fields) Tables() []string {
+	m := map[string]struct{}{}
+	for i := 0; i < len(fs); i++ {
+		m[fs[i].table] = struct{}{}
+	}
+	tables := make([]string, 0)
+	for k := range m {
+		if k != "" {
+			tables = append(tables, k)
+		}
+	}
+	return tables
 }
 
 func (fs Fields) SetScene(scene Scene) Fields {

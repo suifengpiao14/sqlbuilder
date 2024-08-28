@@ -704,7 +704,7 @@ func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	listSql, err = NewTotalBuilder(table).AppendFields(p._Fields...).ToSQL()
+	listSql, err = NewListBuilder(table).AppendFields(p._Fields...).ToSQL()
 	if err != nil {
 		return "", "", err
 	}
@@ -712,12 +712,7 @@ func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 }
 
 func (p PaginationParam) Pagination(result any, paginationHandler PaginationHandler) (count int64, err error) {
-	table := p._Table.Table()
-	totalSql, err := NewTotalBuilder(table).AppendFields(p._Fields...).ToSQL()
-	if err != nil {
-		return 0, err
-	}
-	listSql, err := NewListBuilder(table).AppendFields(p._Fields...).ToSQL()
+	totalSql, listSql, err := p.ToSQL()
 	if err != nil {
 		return 0, err
 	}
