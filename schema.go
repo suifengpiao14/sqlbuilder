@@ -236,6 +236,17 @@ func (es Enums) SubEnums(keys ...any) (subEnums Enums) {
 	return subEnums
 }
 
+// ConvertEnumKeyType 转换枚举值类型
+func ConvertEnumKeyType[T any](enumKeys ...T) (enumKeysAny []any) {
+	enumKeysAny = make([]any, 0)
+
+	for _, key := range enumKeys {
+		enumKeysAny = append(enumKeysAny, key)
+
+	}
+	return enumKeysAny
+}
+
 func (es Enums) ValuesStr() (valuesStr []string) {
 	values := es.Values()
 	valuesStr = make([]string, 0)

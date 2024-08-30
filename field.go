@@ -353,6 +353,9 @@ func (f *Field) ShieldUpdate(shieldUpdate bool) *Field {
 func (f *Field) Combine(combinedFields ...*Field) *Field {
 	schema := Schema{}
 	for _, combined := range combinedFields {
+		if f.Name == "" {
+			f.Name = combined.Name
+		}
 		if f.table == "" {
 			f.table = combined.table
 		}
@@ -383,10 +386,10 @@ func (f *Field) Combine(combinedFields ...*Field) *Field {
 		}
 
 	}
-
-	if f.Schema != nil {
-		schema.Merge(*f.Schema)
+	if f.Schema == nil {
+		f.Schema = &schema
 	}
+	schema.Merge(*f.Schema)
 	*f.Schema = schema
 	return f
 }
