@@ -372,19 +372,21 @@ func (schema Schema) Validate(fieldName string, field reflect.Value) error {
 	var varInt int64
 
 	kind := field.Kind()
+	length := 0
 	switch kind {
 	case reflect.String:
 		valStr = field.String()
+		length = len([]rune(valStr)) // 字符串长度中文字当做一个字符计
 	case reflect.Int:
 		varInt = field.Int()
 	}
 
 	// 验证 maxLength
-	if schema.MaxLength > 0 && kind == reflect.String && len(valStr) > schema.MaxLength {
+	if schema.MaxLength > 0 && kind == reflect.String && length > schema.MaxLength {
 		return fmt.Errorf("%s exceeds maximum length of %d", fieldName, schema.MaxLength)
 	}
 	// 验证 minLength
-	if schema.MinLength > 0 && kind == reflect.String && len(valStr) < schema.MinLength {
+	if schema.MinLength > 0 && kind == reflect.String && length < schema.MinLength {
 		return fmt.Errorf("%s is less than minimum length of %d", fieldName, schema.MinLength)
 	}
 	// 验证 maximum
