@@ -213,11 +213,10 @@ func (f *Field) ReadOnly() *Field {
 
 // DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
 func (f *Field) DBName() string {
-	dbName := f.dbName
-	if dbName == "" {
-		dbName = f.Name
+	if f.dbName != "" { // 存在dbName则使用dbName
+		return f.dbName
 	}
-	return FieldName2DBColumnName(dbName)
+	return FieldName2DBColumnName(f.Name)
 }
 
 // DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
