@@ -1,6 +1,7 @@
 package sqlbuilder
 
 import (
+	"github.com/pkg/errors"
 	"gorm.io/gorm"
 )
 
@@ -28,7 +29,20 @@ func (h GormHandler) Exec(sql string) (err error) {
 	return h().Exec(sql).Error
 }
 func (h GormHandler) First(sql string, result any) (exists bool, err error) {
-	return h().First(result, sql).RowsAffected > 0, nil
+	err = h().Raw(sql).First(result).Error
+	exists = true
+	if err != nil {
+		exists = false                              // 有错误，认为不存在
+		if errors.Is(err, gorm.ErrRecordNotFound) { // 明确不存在时，不返回错误
+			exists = false
+			err = nil
+		}
+	}
+
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
 }
 
 func (h GormHandler) Query(sql string, result any) (err error) {
