@@ -139,6 +139,7 @@ func (s Scene) Is(target Scene) bool {
 }
 
 const (
+	SCENE_SQL_INIT     Scene = "init"
 	SCENE_SQL_INSERT   Scene = "insert"
 	SCENE_SQL_UPDATE   Scene = "update"
 	SCENE_SQL_DELETE   Scene = "delete"

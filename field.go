@@ -458,6 +458,13 @@ func (f *Field) Apply(applyFns ...ApplyFn) *Field {
 	return f
 }
 
+func (f *Field) SceneInit(middlewareFn ApplyFn) *Field {
+	f.sceneFns.Append(SceneFn{
+		Scene: SCENE_SQL_INIT,
+		Fn:    middlewareFn,
+	})
+	return f
+}
 func (f *Field) SceneInsert(middlewareFn ApplyFn) *Field {
 	f.sceneFns.Append(SceneFn{
 		Scene: SCENE_SQL_INSERT,
@@ -551,11 +558,16 @@ func (f Field) GetDocName() string {
 
 func (f *Field) init(fs ...*Field) {
 	if f.sceneFns != nil {
+
+		initFns := f.sceneFns.GetByScene(SCENE_SQL_INIT) //init 场景每次都运行
+		for _, sceneFn := range initFns {
+			sceneFn.Fn.Apply(f, fs...)
+		}
+
 		sceneFns := f.sceneFns.GetByScene(f.scene)
 		for _, sceneFn := range sceneFns {
 			sceneFn.Fn.Apply(f, fs...)
 		}
-
 	}
 }
 
