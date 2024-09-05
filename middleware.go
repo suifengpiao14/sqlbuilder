@@ -153,6 +153,7 @@ func ApplyFnUniqueField(table string, queryFn QueryHandler) ApplyFn {
 			Name:  sceneFnName,
 			Scene: SCENE_SQL_INSERT,
 			Fn: func(f *Field, fs ...*Field) {
+				f.SetRequired(true)          // 新增场景 设置必填
 				f1 := f.Copy()               //复制不影响外部,在内部copy 是运行时 copy,确保 builder阶段的设置都能考呗到
 				f1.SceneFnRmove(sceneFnName) // 避免死循环
 				f1.WhereFns.Append(ValueFnForward)
@@ -173,6 +174,7 @@ func ApplyFnUniqueField(table string, queryFn QueryHandler) ApplyFn {
 		}
 		f.SceneFn(sceneFn)
 		f.SceneUpdate(func(f *Field, fs ...*Field) {
+			f.ShieldUpdate(true)
 			f.WhereFns.Append(ValueFnForward)
 		})
 		f.SceneSelect(func(f *Field, fs ...*Field) {
