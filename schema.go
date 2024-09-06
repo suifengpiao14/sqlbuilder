@@ -221,6 +221,13 @@ func (es Enums) Contains(val any) (ok bool) {
 	return false
 }
 
+func (es Enums) Validate(val any) error {
+	if !contains(es.ValuesStr(), cast.ToString(val)) {
+		return fmt.Errorf("must be one of %v,got:%v", es.Values(), val)
+	}
+	return nil
+}
+
 // SubEnums 用于提取部分枚举值(比如状态机提取能转到B状态的源，方便输出提示)
 func (es Enums) SubEnums(keys ...any) (subEnums Enums) {
 	subEnums = make(Enums, 0)
@@ -410,8 +417,9 @@ func (schema Schema) Validate(fieldName string, field reflect.Value) error {
 	// 验证 enums
 	if len(schema.Enums) > 0 {
 		val := field.Interface()
-		if !contains(schema.Enums.ValuesStr(), cast.ToString(val)) {
-			return fmt.Errorf("%s must be one of %v,got:%v", fieldName, schema.Enums.Values(), val)
+		err := schema.Enums.Validate(val)
+		if err != nil {
+			return errors.WithMessagef(err, "field name :%s", fieldName)
 		}
 	}
 	if schema.RegExp != "" {
