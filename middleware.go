@@ -144,6 +144,7 @@ var ApplyFnValueFnTrimSpace ApplyFn = func(f *Field, fs ...*Field) {
 var ApplyFnValueEmpty2Nil ApplyFn = func(f *Field, fs ...*Field) {
 	f.ValueFns.AppendIfNotFirst(ValueFnEmpty2Nil)
 }
+var ERROR_Unique = errors.New("unique error")
 
 // ApplyFnUniqueField 单列唯一索引键,新增场景中间件
 func ApplyFnUniqueField(table string, queryFn QueryHandler) ApplyFn {
@@ -164,7 +165,7 @@ func ApplyFnUniqueField(table string, queryFn QueryHandler) ApplyFn {
 						return nil, err
 					}
 					if exists {
-						err = errors.Errorf("unique column %s value %s exists", f1.DBName(), inputValue)
+						err = errors.WithMessagef(ERROR_Unique, "unique column %s value %s exists", f1.DBName(), inputValue) // 有时存在，需要返回指定错误，方便业务自主处理错误（如批量新增，存在忽略即可）
 						return nil, err
 					}
 					return inputValue, nil
