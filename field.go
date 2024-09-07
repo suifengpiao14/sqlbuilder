@@ -13,6 +13,67 @@ import (
 	"github.com/suifengpiao14/funcs"
 )
 
+const (
+	Value_Layer_SetValue    string = "SetValue"    //赋值层
+	Value_Layer_ApiFormat   string = "ApiFormat"   //解码层
+	Value_Layer_ApiValidate string = "ApiValidate" //验证层
+	Value_Layer_DBFormat    string = "DBFormat"    //格式化层
+
+)
+
+var (
+	layer_order = []string{Value_Layer_SetValue, Value_Layer_ApiFormat, Value_Layer_ApiValidate, Value_Layer_DBFormat} // 层序,越靠前越先执行
+)
+
+type Value struct {
+	Fn    ValueFn
+	Layer string
+}
+
+type Values []Value
+
+func (vs *Values) Append(value ...Value) *Values {
+	if *vs == nil {
+		*vs = make(Values, 0)
+	}
+	*vs = append(*vs, value...)
+	return vs
+}
+
+func (values Values) GetByLayer(layer string) (subValues Values) {
+	subValues = make(Values, 0)
+	for _, v := range values {
+		if strings.EqualFold(v.Layer, layer) {
+			subValues = append(subValues, v)
+		}
+	}
+	return subValues
+}
+
+func (values Values) HasSetValueLayer() bool {
+	return len(values.GetByLayer(Value_Layer_SetValue)) > 0
+}
+
+func (values Values) Value(val any) (value any, err error) {
+	if !values.HasSetValueLayer() {
+		return nil, nil
+	}
+	value = val
+	for _, layer := range layer_order {
+		subValues := values.GetByLayer(layer)
+		for _, v := range subValues {
+			if v.Fn == nil {
+				continue
+			}
+			value, err = v.Fn(value) //格式化值
+			if err != nil {
+				return value, err
+			}
+		}
+	}
+	return value, nil
+}
+
 // type ValueFnfunc(in any) (value any,err error) //函数签名返回参数命名后,容易误导写成 func(in any) (value any,err error){return value,nil};  正确代码:func(in any) (value any,err error){return in,nil};
 type ValueFn func(inputValue any) (any, error) // 函数之所有接收in 入参，有时模型内部加工生成的数据需要存储，需要定制格式化，比如多边形产生的边界框4个点坐标
 
