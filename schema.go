@@ -385,6 +385,25 @@ func (e Enum) IsEqual(val any) (ok bool) {
 }
 
 func (schema Schema) Validate(fieldName string, field reflect.Value) error {
+	kind := field.Kind()
+	switch kind {
+	case reflect.Slice, reflect.Array:
+		//循环验证数组
+		for i := 0; i < field.Len(); i++ {
+			err := schema.validate(fieldName, field.Index(i))
+			if err != nil {
+				err = errors.WithMessagef(err, "original value:%v", field.Interface())
+				return err
+			}
+		}
+	default:
+		return schema.validate(fieldName, field)
+	}
+	return nil
+
+}
+
+func (schema Schema) validate(fieldName string, field reflect.Value) error {
 	// 验证 required
 	isNotValid := !field.IsValid() // 空值 由nil 过来的值
 	if schema.Required && (isNotValid || isEmptyValue(field)) {

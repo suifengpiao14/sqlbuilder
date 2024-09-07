@@ -401,6 +401,14 @@ func (f *Field) MergeSchema(schema Schema) *Field {
 	return f
 }
 
+func (f *Field) SetSchema(schema Schema) *Field {
+	if schema.Title == "" && f.Schema != nil {
+		schema.Title = f.Schema.Title // 标题不存在则复制
+	}
+	f.Schema = &schema
+	return f
+}
+
 // LogString 日志字符串格式
 func (f *Field) LogString() string {
 	title := f.Name
