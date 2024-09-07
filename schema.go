@@ -222,8 +222,27 @@ func (es Enums) Contains(val any) (ok bool) {
 }
 
 func (es Enums) Validate(val any) error {
-	if !contains(es.ValuesStr(), cast.ToString(val)) {
-		return fmt.Errorf("must be one of %v,got:%v", es.Values(), val)
+	rv := reflect.Indirect(reflect.ValueOf(val))
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < rv.Len(); i++ {
+			valStr := cast.ToString(rv.Index(i).Interface())
+			if err := enumValidate(es, valStr); err != nil {
+				err = errors.WithMessagef(err, "original value:%v", val)
+				return err
+			}
+		}
+	default:
+		valStr := cast.ToString(val)
+		return enumValidate(es, valStr)
+	}
+
+	return nil
+}
+
+func enumValidate(es Enums, enumStr string) error {
+	if !contains(es.ValuesStr(), enumStr) {
+		return fmt.Errorf("must be one of %v,got:%v", es.Values(), enumStr)
 	}
 	return nil
 }
