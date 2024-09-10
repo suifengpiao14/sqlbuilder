@@ -61,9 +61,12 @@ func (sis *SceneFns) Append(sceneFns ...SceneFn) {
 
 // ApplyFnIncrease 字段值递增中间件
 var ApplyFnIncrease ApplyFn = func(f *Field, fs ...*Field) {
-	f.ValueFns.AppendIfNotFirst(func(inputValue any) (any, error) {
-		val := fmt.Sprintf("`%s`+1", f.DBName())
-		return goqu.L(val), nil
+	f.ValueFns.Append(ValueFn{
+		Fn: func(inputValue any) (any, error) {
+			val := fmt.Sprintf("`%s`+1", f.DBName())
+			return goqu.L(val), nil
+		},
+		Layer: Value_Layer_DBFormat,
 	})
 }
 
@@ -85,64 +88,63 @@ func ApplyFnOrderField(valueOrder ...any) ApplyFn {
 }
 
 var ApplyFnWhereGte ApplyFn = func(f *Field, fs ...*Field) {
-	f.WhereFns.Append(func(inputValue any) (any, error) {
-		if IsNil(inputValue) {
-			return nil, nil
-		}
-		ex := goqu.C(f.DBName()).Gte(inputValue)
-		return ex, nil
+	f.WhereFns.Append(ValueFn{
+		Fn: func(inputValue any) (any, error) {
+			if IsNil(inputValue) {
+				return nil, nil
+			}
+			ex := goqu.C(f.DBName()).Gte(inputValue)
+			return ex, nil
+		},
+		Layer: Value_Layer_DBFormat,
 	})
 }
 
 var ApplyFnWhereLte ApplyFn = func(f *Field, fs ...*Field) {
-	f.WhereFns.Append(func(inputValue any) (any, error) {
-		if IsNil(inputValue) {
-			return nil, nil
-		}
-		ex := goqu.C(f.DBName()).Lte(inputValue)
-		return ex, nil
+	f.WhereFns.Append(ValueFn{
+		Fn: func(inputValue any) (any, error) {
+			if IsNil(inputValue) {
+				return nil, nil
+			}
+			ex := goqu.C(f.DBName()).Lte(inputValue)
+			return ex, nil
+		},
+		Layer: Value_Layer_DBFormat,
 	})
 }
 
 // ApplyFnWhereFindInColumnSet 传入的值在列字段集合内
 var ApplyFnWhereFindInColumnSet ApplyFn = func(f *Field, fs ...*Field) {
-	f.WhereFns.Append(func(inputValue any) (any, error) {
-		if IsNil(inputValue) {
-			return nil, nil
-		}
-		val := cast.ToString(inputValue)
-		column := goqu.C(f.DBName())
-		expression := goqu.L("FIND_IN_SET(?,?)", val, column)
-		return expression, nil
-	})
-}
-
-// ApplyFnWhereFindInValueSet 列字段值在传入的集合内
-var ApplyFnWhereFindInValueSet ApplyFn = func(f *Field, fs ...*Field) {
-	f.WhereFns.Append(func(inputValue any) (any, error) {
-		if IsNil(inputValue) {
-			return nil, nil
-		}
-		val := cast.ToString(inputValue)
-		column := goqu.C(f.DBName())
-		expression := goqu.L("FIND_IN_SET(?,?)", column, val)
-		return expression, nil
+	f.WhereFns.Append(ValueFn{
+		Fn: func(inputValue any) (any, error) {
+			if IsNil(inputValue) {
+				return nil, nil
+			}
+			val := cast.ToString(inputValue)
+			column := goqu.C(f.DBName())
+			expression := goqu.L("FIND_IN_SET(?,?)", val, column)
+			return expression, nil
+		},
+		Layer: Value_Layer_DBFormat,
 	})
 }
 
 var ApplyFnValueFormatBySchemaType ApplyFn = func(f *Field, fs ...*Field) {
-	f.ValueFns.AppendIfNotFirst(func(inputValue any) (any, error) {
-		value := f.FormatType(inputValue)
-		return value, nil
+	f.ValueFns.Append(ValueFn{
+		Fn: func(inputValue any) (any, error) {
+			value := f.FormatType(inputValue)
+			return value, nil
+		},
+		Layer: Value_Layer_DBFormat,
 	})
 }
 
 var ApplyFnValueFnTrimSpace ApplyFn = func(f *Field, fs ...*Field) {
-	f.ValueFns.AppendIfNotFirst(ValueFnTrimBlankSpace)
+	f.ValueFns.Append(ValueFnTrimBlankSpace)
 }
 
 var ApplyFnValueEmpty2Nil ApplyFn = func(f *Field, fs ...*Field) {
-	f.ValueFns.AppendIfNotFirst(ValueFnEmpty2Nil)
+	f.ValueFns.Append(ValueFnEmpty2Nil)
 }
 var ERROR_Unique = errors.New("unique error")
 
@@ -158,17 +160,20 @@ func ApplyFnUniqueField(table string, queryFn QueryHandler) ApplyFn {
 				f1 := f.Copy()               //复制不影响外部,在内部copy 是运行时 copy,确保 builder阶段的设置都能考呗到
 				f1.SceneFnRmove(sceneFnName) // 避免死循环
 				f1.WhereFns.Append(ValueFnForward)
-				f.ValueFns.Append(func(inputValue any) (any, error) {
-					exitstsParam := NewExistsBuilder(table).AppendFields(f1)
-					exists, err := exitstsParam.Exists(queryFn)
-					if err != nil {
-						return nil, err
-					}
-					if exists {
-						err = errors.WithMessagef(ERROR_Unique, "unique column %s value %s exists", f1.DBName(), inputValue) // 有时存在，需要返回指定错误，方便业务自主处理错误（如批量新增，存在忽略即可）
-						return nil, err
-					}
-					return inputValue, nil
+				f.ValueFns.Append(ValueFn{
+					Fn: func(inputValue any) (any, error) {
+						exitstsParam := NewExistsBuilder(table).AppendFields(f1)
+						exists, err := exitstsParam.Exists(queryFn)
+						if err != nil {
+							return nil, err
+						}
+						if exists {
+							err = errors.WithMessagef(ERROR_Unique, "unique column %s value %s exists", f1.DBName(), inputValue) // 有时存在，需要返回指定错误，方便业务自主处理错误（如批量新增，存在忽略即可）
+							return nil, err
+						}
+						return inputValue, nil
+					},
+					Layer: Value_Layer_ApiValidate,
 				})
 
 			},
@@ -187,36 +192,39 @@ func ApplyFnUniqueField(table string, queryFn QueryHandler) ApplyFn {
 func ApplyFnUpdateIfNull(table string, firstHandler FirstHandler) ApplyFn {
 	return func(f *Field, fs ...*Field) {
 		f.SceneUpdate(func(f *Field, fs ...*Field) {
-			f.ValueFns.Append(func(inputValue any) (any, error) {
-				if IsNil(inputValue) {
-					return inputValue, nil
-				}
-
-				cpFields := Fields(fs).Copy()
-				if len(cpFields) > 0 {
-					cpFields[0].SetSelectColumns(f.DBName())
-				}
-				var dbValue any
-				exists, err := NewFirstBuilder(table).AppendFields(cpFields...).First(&dbValue, firstHandler)
-				if err != nil {
-					return nil, err
-				}
-				if !exists {
-					return inputValue, err
-				}
-				shieldUpdate := false
-				if !IsNil(dbValue) {
-					switch val := dbValue.(type) {
-					case int:
-						shieldUpdate = val > 0
-					case int64:
-						shieldUpdate = val > 0
-					case string:
-						shieldUpdate = val != ""
+			f.ValueFns.Append(ValueFn{
+				Fn: func(inputValue any) (any, error) {
+					if IsNil(inputValue) {
+						return inputValue, nil
 					}
-				}
-				f.ShieldUpdate(shieldUpdate) // 设置是否屏蔽更新
-				return inputValue, nil
+
+					cpFields := Fields(fs).Copy()
+					if len(cpFields) > 0 {
+						cpFields[0].SetSelectColumns(f.DBName())
+					}
+					var dbValue any
+					exists, err := NewFirstBuilder(table).AppendFields(cpFields...).First(&dbValue, firstHandler)
+					if err != nil {
+						return nil, err
+					}
+					if !exists {
+						return inputValue, err
+					}
+					shieldUpdate := false
+					if !IsNil(dbValue) {
+						switch val := dbValue.(type) {
+						case int:
+							shieldUpdate = val > 0
+						case int64:
+							shieldUpdate = val > 0
+						case string:
+							shieldUpdate = val != ""
+						}
+					}
+					f.ShieldUpdate(shieldUpdate) // 设置是否屏蔽更新
+					return inputValue, nil
+				},
+				Layer: Value_Layer_DBFormat,
 			})
 		})
 	}

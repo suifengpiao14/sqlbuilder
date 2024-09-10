@@ -13,56 +13,72 @@ import (
 	"github.com/suifengpiao14/funcs"
 )
 
+type Layer string
+
+func (l Layer) String() string {
+	return string(l)
+}
+func (l Layer) EqualFold(layer Layer) bool {
+	return strings.EqualFold(l.String(), layer.String())
+}
+
 const (
-	Value_Layer_SetValue    string = "SetValue"    //赋值层
-	Value_Layer_ApiFormat   string = "ApiFormat"   //解码层
-	Value_Layer_ApiValidate string = "ApiValidate" //验证层
-	Value_Layer_DBFormat    string = "DBFormat"    //格式化层
+	Value_Layer_SetValue    Layer = "SetValue"    //赋值层
+	Value_Layer_ApiFormat   Layer = "ApiFormat"   //解码层
+	Value_Layer_ApiValidate Layer = "ApiValidate" //验证层
+	Value_Layer_DBValidate  Layer = "DBValidate"  //DB验证层
+	Value_Layer_DBFormat    Layer = "DBFormat"    //格式化层
 
 )
 
 var (
-	layer_order = []string{Value_Layer_SetValue, Value_Layer_ApiFormat, Value_Layer_ApiValidate, Value_Layer_DBFormat} // 层序,越靠前越先执行
+	Layer_order = []Layer{Value_Layer_SetValue, Value_Layer_ApiFormat, Value_Layer_ApiValidate, Value_Layer_DBValidate, Value_Layer_DBFormat} // 层序,越靠前越先执行
 )
 
-type Value struct {
-	Fn    ValueFn
-	Layer string
+type ValueFnFn func(inputValue any) (any, error)
+type ValueFn struct {
+	Fn    ValueFnFn
+	Layer Layer
 }
 
-type Values []Value
+func (fn ValueFn) IsNil() bool {
+	return fn.Fn == nil
+}
+func (fn ValueFn) IsSetValueFn() bool {
+	return fn.Layer.EqualFold(Value_Layer_SetValue)
+}
 
-func (vs *Values) Append(value ...Value) *Values {
+func (vs *ValueFns) Append(value ...ValueFn) *ValueFns {
 	if *vs == nil {
-		*vs = make(Values, 0)
+		*vs = make(ValueFns, 0)
 	}
 	*vs = append(*vs, value...)
 	return vs
 }
 
-func (values Values) GetByLayer(layer string) (subValues Values) {
-	subValues = make(Values, 0)
+func (values ValueFns) GetByLayer(layer Layer) (subValues ValueFns) {
+	subValues = make(ValueFns, 0)
 	for _, v := range values {
-		if strings.EqualFold(v.Layer, layer) {
+		if strings.EqualFold(v.Layer.String(), layer.String()) {
 			subValues = append(subValues, v)
 		}
 	}
 	return subValues
 }
 
-func (values Values) HasSetValueLayer() bool {
+func (values ValueFns) HasSetValueLayer() bool {
 	return len(values.GetByLayer(Value_Layer_SetValue)) > 0
 }
 
-func (values Values) Value(val any) (value any, err error) {
+func (values ValueFns) Value(val any) (value any, err error) {
 	if !values.HasSetValueLayer() {
 		return nil, nil
 	}
 	value = val
-	for _, layer := range layer_order {
+	for _, layer := range Layer_order {
 		subValues := values.GetByLayer(layer)
 		for _, v := range subValues {
-			if v.Fn == nil {
+			if v.IsNil() {
 				continue
 			}
 			value, err = v.Fn(value) //格式化值
@@ -75,84 +91,107 @@ func (values Values) Value(val any) (value any, err error) {
 }
 
 // type ValueFnfunc(in any) (value any,err error) //函数签名返回参数命名后,容易误导写成 func(in any) (value any,err error){return value,nil};  正确代码:func(in any) (value any,err error){return in,nil};
-type ValueFn func(inputValue any) (any, error) // 函数之所有接收in 入参，有时模型内部加工生成的数据需要存储，需要定制格式化，比如多边形产生的边界框4个点坐标
+//type ValueFn func(inputValue any) (any, error) // 函数之所有接收in 入参，有时模型内部加工生成的数据需要存储，需要定制格式化，比如多边形产生的边界框4个点坐标
 
 type ValueFns []ValueFn
 
-// Insert 追加元素,不建议使用,建议用InsertAsFirst,InsertAsSecond
-func (fns *ValueFns) Insert(index int, subFns ...ValueFn) {
-	if *fns == nil {
-		*fns = make(ValueFns, 0)
-	}
-	l := len(*fns)
-	if l == 0 || index < 0 || l <= index { // 本身没有,直接添加,或者计划添加到结尾,或者指定位置比现有数组长,直接追加
-		*fns = append(*fns, subFns...)
-		return
-	}
-	if index == 0 { // index =0 插入第一个
-		tmp := make(ValueFns, 0)
-		tmp = append(tmp, subFns...)
-		tmp = append(tmp, *fns...)
-		*fns = tmp
-		return
-	}
-	pre, after := (*fns)[:index], (*fns)[index:]
-	tmp := make(ValueFns, 0)
-	tmp = append(tmp, pre...)
-	tmp = append(tmp, subFns...)
-	tmp = append(tmp, after...)
-	*fns = tmp
-}
+// // Insert 追加元素,不建议使用,建议用InsertAsFirst,InsertAsSecond
+// func (fns *ValueFns) Insert(index int, subFns ...ValueFn) {
+// 	if *fns == nil {
+// 		*fns = make(ValueFns, 0)
+// 	}
+// 	l := len(*fns)
+// 	if l == 0 || index < 0 || l <= index { // 本身没有,直接添加,或者计划添加到结尾,或者指定位置比现有数组长,直接追加
+// 		*fns = append(*fns, subFns...)
+// 		return
+// 	}
+// 	if index == 0 { // index =0 插入第一个
+// 		tmp := make(ValueFns, 0)
+// 		tmp = append(tmp, subFns...)
+// 		tmp = append(tmp, *fns...)
+// 		*fns = tmp
+// 		return
+// 	}
+// 	pre, after := (*fns)[:index], (*fns)[index:]
+// 	tmp := make(ValueFns, 0)
+// 	tmp = append(tmp, pre...)
+// 	tmp = append(tmp, subFns...)
+// 	tmp = append(tmp, after...)
+// 	*fns = tmp
+// }
 
-// InsertAsFirst 作为第一个元素插入,一般用于将数据导入到whereFn 中
-func (fns *ValueFns) InsertAsFirst(subFns ...ValueFn) {
-	fns.Insert(0, subFns...)
-}
+// // InsertAsFirst 作为第一个元素插入,一般用于将数据导入到whereFn 中
+// func (fns *ValueFns) InsertAsFirst(subFns ...ValueFn) {
+// 	fns.Insert(0, subFns...)
+// }
 
-// InsertAsSecond 作为第二个元素插入,一般用于在获取数据后立即验证器插入
-func (fns *ValueFns) InsertAsSecond(subFns ...ValueFn) {
-	fns.Insert(1, subFns...)
-}
+// // InsertAsSecond 作为第二个元素插入,一般用于在获取数据后立即验证器插入
+// func (fns *ValueFns) InsertAsSecond(subFns ...ValueFn) {
+// 	fns.Insert(1, subFns...)
+// }
 
-// Append 常规添加
-func (fns *ValueFns) Append(subFns ...ValueFn) {
-	fns.Insert(-1, subFns...)
-}
+// // Append 常规添加
+// func (fns *ValueFns) Append(subFns ...ValueFn) {
+// 	fns.Insert(-1, subFns...)
+// }
 
 func (fns *ValueFns) Reset(subFns ...ValueFn) {
 	*fns = make(ValueFns, 0)
 	*fns = append(*fns, subFns...)
 }
 
-// AppendIfNotFirst 追加到最后,但是不能是第一个,一般用于生成SQL时格式化数据
-func (fns *ValueFns) AppendIfNotFirst(subFns ...ValueFn) {
-	if len(*fns) == 0 {
-		return
+// ResetSetValueFn 重置设置值类型函数
+func (fns *ValueFns) ResetSetValueFn(setValueFnFns ...ValueFnFn) {
+	tmp := make(ValueFns, 0)
+	for _, setValueFnFn := range setValueFnFns {
+		setValueFn := ValueFn{
+			Fn:    setValueFnFn,
+			Layer: Value_Layer_SetValue,
+		}
+		tmp = append(tmp, setValueFn)
 	}
-	fns.Append(subFns...)
-}
-
-func (fns *ValueFns) Value(val any) (value any, err error) {
-	value = val
-	for _, fn := range *fns {
-		if fn == nil {
+	for _, v := range *fns {
+		if v.IsSetValueFn() {
 			continue
 		}
-		value, err = fn(value) //格式化值
-		if err != nil {
-			return value, err
-		}
+		tmp = append(tmp, v)
 	}
-	return value, nil
+
+	*fns = tmp
 }
 
-func ValueFnWhereLike(val any) (value any, err error) {
-	str := cast.ToString(val)
-	if str == "" {
-		return val, nil
-	}
-	value = Ilike{"%", str, "%"}
-	return value, nil
+// // AppendIfNotFirst 追加到最后,但是不能是第一个,一般用于生成SQL时格式化数据
+// func (fns *ValueFns) AppendIfNotFirst(subFns ...ValueFn) {
+// 	if len(*fns) == 0 {
+// 		return
+// 	}
+// 	fns.Append(subFns...)
+// }
+
+// func (fns *ValueFns) Value(val any) (value any, err error) {
+// 	value = val
+// 	for _, fn := range *fns {
+// 		if fn.Fn == nil {
+// 			continue
+// 		}
+// 		value, err = fn.Fn(value) //格式化值
+// 		if err != nil {
+// 			return value, err
+// 		}
+// 	}
+// 	return value, nil
+// }
+
+var ValueFnWhereLike = ValueFn{
+	Fn: func(val any) (value any, err error) {
+		str := cast.ToString(val)
+		if str == "" {
+			return val, nil
+		}
+		value = Ilike{"%", str, "%"}
+		return value, nil
+	},
+	Layer: Value_Layer_DBFormat,
 }
 
 var OrderFnDesc OrderFn = func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
@@ -571,17 +610,22 @@ type AttributeI interface {
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
 func NewField(value any, middlewareFns ...ApplyFn) (field *Field) {
 	field = &Field{}
-	valueFn, ok := value.(func(inputValue any) (any, error))
+	valueFn, ok := value.(ValueFn)
 	if !ok {
-		valueFn, ok = value.(ValueFn)
-		if !ok {
-			valueFn = func(inputValue any) (any, error) {
+		valueFnRef, ok := value.(*ValueFn)
+		if ok && valueFnRef != nil {
+			valueFn = *valueFnRef
+		}
+	} else {
+		valueFn = ValueFn{
+			Fn: func(inputValue any) (any, error) {
 				return value, nil
-			}
+			},
+			Layer: Value_Layer_SetValue,
 		}
 	}
 
-	field.ValueFns.InsertAsFirst(valueFn)
+	field.ValueFns.Append(valueFn)
 	ApplyFns(middlewareFns).Apply(field)
 	return field
 }
@@ -599,9 +643,7 @@ var GlobalFnValueFns = func(f Field) ValueFns {
 	return ValueFns{
 		//GlobalValueFnEmptyStr2Nil(f, ValueFnArgEmptyStr2NilExceptFields...), // 将空置转换为nil,代替对数据判断 if v==""{//ignore}  这个函数在全局修改了函数值，出现问题，比较难跟踪，改到每个组件自己处理
 		ValueFnDBSchemaFormatType(f), // 在转换为SQL前,将所有数据类型按照DB类型转换,主要是格式化int和string,提升SQL性能，将数据格式改成DB格式，不影响当期调用链，可以作为全局配置
-		func(inputValue any) (any, error) {
-			return ValueFnTrimBlankSpace(inputValue)
-		},
+		ValueFnTrimBlankSpace,
 		//todo 统一实现数据库字段前缀处理
 		//todo 统一实现代码字段驼峰形转数据库字段蛇形
 		//todo 统一实现数据库字段替换,方便数据库字段更名
@@ -641,14 +683,17 @@ func (f *Field) init(fs ...*Field) {
 }
 
 func (f Field) GetValue() (value any, err error) {
-	f.ValueFns.InsertAsSecond(func(in any) (any, error) { //插入数据验证
-		err = f.Validate(in)
-		if err != nil {
-			return in, err
-		}
-		return in, nil
+	f.ValueFns.Append(ValueFn{
+		Fn: func(in any) (any, error) { //插入数据验证
+			err = f.Validate(in)
+			if err != nil {
+				return in, err
+			}
+			return in, nil
+		},
+		Layer: Value_Layer_DBValidate,
 	})
-	f.ValueFns.AppendIfNotFirst(GlobalFnValueFns(f)...) // 在最后生成SQL数据时追加格式化数据
+	f.ValueFns.Append(GlobalFnValueFns(f)...) // 在最后生成SQL数据时追加格式化数据
 	value, err = f.ValueFns.Value(nil)
 	if err != nil {
 		return value, err
@@ -675,7 +720,10 @@ func (f Field) WhereData(fs ...*Field) (value any, err error) {
 		return value, err
 	}
 	for _, fn := range f.WhereFns {
-		value, err = fn(value) // value 为nil 继续循环，主要考虑调试方便，若中途中断，可能导致调试困难(代码未按照预期运行，不知道哪里中断了)，另外一般调试时，都没有写参数值，方便能快速查看效果
+		if fn.IsNil() {
+			continue
+		}
+		value, err = fn.Fn(value) // value 为nil 继续循环，主要考虑调试方便，若中途中断，可能导致调试困难(代码未按照预期运行，不知道哪里中断了)，另外一般调试时，都没有写参数值，方便能快速查看效果
 		if err != nil {
 			return value, err
 		}
@@ -691,7 +739,7 @@ func FilterNil(in any, valueFn ValueFn) (any, error) {
 	if IsNil(in) {
 		return nil, nil
 	}
-	return valueFn(in)
+	return valueFn.Fn(in)
 }
 
 // IsEqual 判断名称值是否相等

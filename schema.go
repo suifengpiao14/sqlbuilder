@@ -40,6 +40,34 @@ func (schema Schema) FullComment() string {
 	return fmt.Sprintf("%s%s", schema.Comment, schema.Enums.String())
 }
 
+func (schema Schema) SetMaxLength(max int) *Schema {
+	schema.MaxLength = max
+	return &schema
+}
+func (schema Schema) SetMaximum(max uint) *Schema {
+	schema.Maximum = max
+	return &schema
+}
+
+func (schema Schema) SetMinLength(min int) *Schema {
+	schema.MinLength = min
+	return &schema
+}
+func (schema Schema) SetMinimum(min int) *Schema {
+	schema.Minimum = min
+	return &schema
+}
+
+func (schema Schema) SetDefault(def any) *Schema {
+	schema.Default = def
+	return &schema
+}
+
+func (schema Schema) SetRegExp(reg string) *Schema {
+	schema.RegExp = reg
+	return &schema
+}
+
 // AllowEmpty 是否可以为空
 func (schema Schema) AllowEmpty() bool {
 	return schema.MinLength < 1 && schema.Type == Schema_Type_string
@@ -513,14 +541,17 @@ func contains(slice []string, item string) bool {
 
 // ValueFnDBSchemaFormat 根据DB类型要求,转换数据类型
 func ValueFnDBSchemaFormatType(field Field) (valueFn ValueFn) {
-	return func(in any) (any, error) {
-		value := field.FormatType(in)
-		return value, nil
+	return ValueFn{
+		Fn: func(in any) (any, error) {
+			value := field.FormatType(in)
+			return value, nil
+		},
+		Layer: Value_Layer_DBFormat,
 	}
 }
 
-// ValueFnUniqueueArray 数组元素去重
-func ValueFnUniqueueArray[T int | int64 | string](in any) (any, error) {
+// UniqueueArray 数组元素去重
+func UniqueueArray[T int | int64 | string](in any) (any, error) {
 	arr, ok := in.([]T)
 	if !ok {
 		return in, nil
@@ -538,25 +569,36 @@ func ValueFnUniqueueArray[T int | int64 | string](in any) (any, error) {
 
 }
 
-func ValueFnForward(in any) (any, error) {
-	return in, nil
+var ValueFnForward = ValueFn{
+	Fn: func(in any) (any, error) {
+		return in, nil
+	},
+	Layer: Value_Layer_DBFormat,
 }
 
 // ValueFnFormatArray 格式化数组,只有一个元素时,直接返回当前元素，常用户where in 条件
-func ValueFnFormatArray(in any) (any, error) {
-	valValue := reflect.Indirect(reflect.ValueOf(in))
-	valType := valValue.Type()
-	switch valType.Kind() {
-	case reflect.Slice, reflect.Array:
-		if valValue.Len() == 1 {
-			in = valValue.Index(0).Interface()
+var ValueFnFormatArray = ValueFn{
+	Fn: func(in any) (any, error) {
+		valValue := reflect.Indirect(reflect.ValueOf(in))
+		valType := valValue.Type()
+		switch valType.Kind() {
+		case reflect.Slice, reflect.Array:
+			if valValue.Len() == 1 {
+				in = valValue.Index(0).Interface()
+			}
 		}
-	}
-	return in, nil
+		return in, nil
+	},
+	Layer: Value_Layer_DBFormat,
 }
 
 // ValueFnDecodeComma 参数中,拼接的字符串解码成数组
-func ValueFnDecodeComma(in any) (any, error) {
+var ValueFnDecodeComma = ValueFn{
+	Fn:    ValueFnDecodeCommaFn,
+	Layer: Value_Layer_ApiFormat,
+}
+
+func ValueFnDecodeCommaFn(in any) (any, error) {
 	if IsNil(in) {
 		return in, nil
 	}
@@ -565,7 +607,7 @@ func ValueFnDecodeComma(in any) (any, error) {
 		return in, nil
 	}
 	arr := strings.Split(s, ",")
-	uniqArr, _ := ValueFnUniqueueArray[string](arr) // 去重
+	uniqArr, _ := UniqueueArray[string](arr) // 去重
 	strArr := uniqArr.([]string)
 	if len(strArr) == 1 {
 		in = strArr[0] // 去重后只有一个，则转成字符串
@@ -575,53 +617,72 @@ func ValueFnDecodeComma(in any) (any, error) {
 	return in, nil
 }
 
-func ValueFnShield(in any) (any, error) {
-	return nil, nil
+var ValueFnShield = ValueFn{ // 屏蔽数据
+	Fn: func(in any) (any, error) {
+		return nil, nil
+	},
+	Layer: Value_Layer_DBFormat,
 }
 
-func ValueFnEmpty2Nil(in any) (any, error) {
-	switch val := in.(type) {
-	case string:
-		if val == "" {
-			return nil, nil
+var ValueFnEmpty2Nil = ValueFn{ // 空字符串改成nil,值改成nil后,sql语句中会忽略该字段,常常用在update,where 字句中
+	Fn: func(in any) (any, error) {
+		switch val := in.(type) {
+		case string:
+			if val == "" {
+				return nil, nil
+			}
+		case int:
+			if val == 0 {
+				return nil, nil
+			}
 		}
-	case int:
-		if val == 0 {
-			return nil, nil
-		}
-	}
-	return in, nil
+		return in, nil
+	},
+	Layer: Value_Layer_ApiFormat,
 }
 
-func ValueFnGte(in any) (value any, err error) {
-	if IsNil(in) {
-		return nil, nil
-	}
-	return Between{in}, nil
+var ValueFnGte = ValueFn{
+	Fn: func(in any) (value any, err error) {
+		if IsNil(in) {
+			return nil, nil
+		}
+		return Between{in}, nil
+	},
+	Layer: Value_Layer_DBFormat,
 }
-func ValueFnLte(in any) (value any, err error) {
-	if IsNil(in) {
-		return nil, nil
-	}
-	return Between{nil, in}, nil
+
+var ValueFnLte = ValueFn{
+	Fn: func(in any) (value any, err error) {
+		if IsNil(in) {
+			return nil, nil
+		}
+		return Between{nil, in}, nil
+	},
+	Layer: Value_Layer_DBFormat,
 }
 
 // ValueFnTrimBlankSpace 删除字符串前后空格
-func ValueFnTrimBlankSpace(in any) (any, error) {
-	if in == nil {
+var ValueFnTrimBlankSpace = ValueFn{
+	Fn: func(in any) (any, error) {
+		if in == nil {
+			return in, nil
+		}
+		if str, ok := in.(string); ok {
+			in = strings.Trim(str, " ")
+		}
 		return in, nil
-	}
-	if str, ok := in.(string); ok {
-		in = strings.Trim(str, " ")
-	}
-	return in, nil
+	},
+	Layer: Value_Layer_ApiFormat,
 }
 
-func ValueFnIlike(in any) (value any, err error) {
-	if IsNil(in) {
-		return nil, nil
-	}
-	return Ilike{"%", cast.ToString(in), "%"}, nil
+var ValueFnIlike = ValueFn{
+	Fn: func(in any) (value any, err error) {
+		if IsNil(in) {
+			return nil, nil
+		}
+		return Ilike{"%", cast.ToString(in), "%"}, nil
+	},
+	Layer: Value_Layer_DBFormat,
 }
 
 // GlobalValueFnEmptyStr2Nil 空字符串改成nil,值改成nil后,sql语句中会忽略该字段,常常用在update,where 字句中
