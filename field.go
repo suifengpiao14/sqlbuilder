@@ -615,13 +615,13 @@ func NewField(value any, middlewareFns ...ApplyFn) (field *Field) {
 		valueFnRef, ok := value.(*ValueFn)
 		if ok && valueFnRef != nil {
 			valueFn = *valueFnRef
-		}
-	} else {
-		valueFn = ValueFn{
-			Fn: func(inputValue any) (any, error) {
-				return value, nil
-			},
-			Layer: Value_Layer_SetValue,
+		} else {
+			valueFn = ValueFn{
+				Fn: func(inputValue any) (any, error) {
+					return value, nil
+				},
+				Layer: Value_Layer_SetValue,
+			}
 		}
 	}
 
