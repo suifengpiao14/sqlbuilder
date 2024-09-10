@@ -21,6 +21,9 @@ func (l Layer) String() string {
 func (l Layer) EqualFold(layer Layer) bool {
 	return strings.EqualFold(l.String(), layer.String())
 }
+func (l Layer) IsEmpty() bool {
+	return l.String() == ""
+}
 
 const (
 	Value_Layer_SetValue    Layer = "SetValue"    //赋值层
@@ -608,20 +611,31 @@ type AttributeI interface {
 }
 
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
-func NewField(value any, middlewareFns ...ApplyFn) (field *Field) {
+func NewField[T int | int64 | uint64 | []int | []int64 | []uint64 | string | []string | ValueFn | ValueFnFn | func(inputValue any) (any, error)](value T, middlewareFns ...ApplyFn) (field *Field) {
 	field = &Field{}
-	valueFn, ok := value.(ValueFn)
-	if !ok {
-		valueFnRef, ok := value.(*ValueFn)
-		if ok && valueFnRef != nil {
-			valueFn = *valueFnRef
-		} else {
-			valueFn = ValueFn{
-				Fn: func(inputValue any) (any, error) {
-					return value, nil
-				},
-				Layer: Value_Layer_SetValue,
-			}
+	var valueFn ValueFn
+	switch v := any(value).(type) {
+	case func(inputValue any) (any, error):
+		valueFn = ValueFn{
+			Fn:    v,
+			Layer: Value_Layer_SetValue,
+		}
+	case ValueFnFn:
+		valueFn = ValueFn{
+			Fn:    v,
+			Layer: Value_Layer_SetValue,
+		}
+	case ValueFn:
+		valueFn = v
+		if valueFn.Layer.IsEmpty() { // 默认设置
+			valueFn.Layer = Value_Layer_SetValue
+		}
+	default:
+		valueFn = ValueFn{
+			Fn: func(inputValue any) (any, error) {
+				return v, nil
+			},
+			Layer: Value_Layer_SetValue,
 		}
 	}
 

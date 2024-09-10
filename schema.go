@@ -384,8 +384,11 @@ func (es Enums) String() (str string) {
 
 // NewEnumTitleField 根据enum field 生成title列
 func NewEnumTitleField(key any, enumField *Field) *Field {
-	valueFn := func(in any) (any, error) {
-		return enumField.Schema.Enums.Title(key), nil
+	valueFn := ValueFn{
+		Fn: func(in any) (any, error) {
+			return enumField.Schema.Enums.Title(key), nil
+		},
+		Layer: Value_Layer_SetValue,
 	}
 	name := fmt.Sprintf("%sTitle", enumField.Name)
 	title := fmt.Sprintf("%s标题", enumField.Schema.Title)
