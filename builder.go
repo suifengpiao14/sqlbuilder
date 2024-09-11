@@ -602,7 +602,7 @@ func (p ExistsParam) ToSQL() (sql string, err error) {
 		ofsset = 0
 	}
 
-	ds := Dialect.DialectWrapper().Select(goqu.L("1").As("count")).
+	ds := Dialect.DialectWrapper().Select(goqu.L("1").As("exists")).
 		From(p._Table.Table()).
 		Where(where...).
 		Limit(1)

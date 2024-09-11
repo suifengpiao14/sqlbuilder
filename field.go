@@ -314,6 +314,10 @@ func (f *Field) ReadOnly() *Field {
 	f.ShieldUpdate(true)
 	return f
 }
+func (f *Field) CanUpdate(condition bool) *Field {
+	f.ShieldUpdate(!condition)
+	return f
+}
 
 // DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
 func (f *Field) DBName() string {
@@ -1239,6 +1243,7 @@ func fieldStructToArray(val reflect.Value,
 	}
 	typ := val.Type()
 	switch typ.Kind() {
+	// 整型、字符串 等基本类型不处理, 对于使用 FieldsI 接口的,充分应用了这点
 	case reflect.Func:
 		if val.IsNil() {
 			break
@@ -1250,6 +1255,12 @@ func fieldStructToArray(val reflect.Value,
 			}
 		}
 	case reflect.Struct:
+		isImplementedFieldI := typ.Implements(reflect.TypeOf((*FieldsI)(nil)).Elem())
+		if isImplementedFieldI {
+			if fieldsI, ok := val.Interface().(FieldsI); ok {
+				fs = append(fs, fieldsI.Fields()...)
+			}
+		}
 		for i := 0; i < val.NumField(); i++ {
 			field := val.Field(i)
 			attr := typ.Field(i)
