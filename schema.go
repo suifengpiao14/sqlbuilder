@@ -142,8 +142,8 @@ func (st SchemaType) IsEqual(other SchemaType) bool {
 
 const (
 	Schema_Type_string SchemaType = "string"
-	Schema_Type_json   SchemaType = "json"
-	Schema_Type_int    SchemaType = "int"
+	//Schema_Type_json   SchemaType = "json"
+	Schema_Type_int SchemaType = "int"
 )
 
 const (

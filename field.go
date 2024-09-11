@@ -40,8 +40,9 @@ var (
 
 type ValueFnFn func(inputValue any) (any, error)
 type ValueFn struct {
-	Fn    ValueFnFn
-	Layer Layer
+	Fn          ValueFnFn
+	Layer       Layer
+	Description string // 描述
 }
 
 func (fn ValueFn) IsNil() bool {
@@ -824,9 +825,9 @@ func (c Field) formatSingleType(val any) any {
 	switch c.Schema.Type {
 	case Schema_Type_string:
 		value = cast.ToString(value)
-	case Schema_Type_json:
-		b, _ := json.Marshal(value)
-		value = string(b)
+	// case Schema_Type_json:
+	// 	b, _ := json.Marshal(value)
+	// 	value = string(b)
 	case Schema_Type_int:
 		value = cast.ToInt(value)
 	}
