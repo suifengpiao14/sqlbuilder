@@ -1269,17 +1269,20 @@ func fieldStructToArray(val reflect.Value,
 				subFields = structFieldCustomFn(field, attr, subFields)
 			}
 			fs = append(fs, subFields...)
+
 		}
 
 	case reflect.Array, reflect.Slice:
-		for j := 0; j < val.Len(); j++ {
-			elem := val.Index(j)
-			subFields := fieldStructToArray(elem, structFieldCustomFn, arrayFieldCustomFn)
-			if arrayFieldCustomFn != nil {
-				subFields = arrayFieldCustomFn(subFields)
-			}
-			fs = append(fs, subFields...)
+		childTyp := typ.Elem()
+		if childTyp.Kind() == reflect.Ptr {
+			childTyp = childTyp.Elem()
 		}
+		childVal := reflect.New(childTyp)
+		subFields := fieldStructToArray(childVal, structFieldCustomFn, arrayFieldCustomFn)
+		if arrayFieldCustomFn != nil {
+			subFields = arrayFieldCustomFn(subFields)
+		}
+		fs = append(fs, subFields...)
 
 	}
 	return fs
