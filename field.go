@@ -1241,6 +1241,9 @@ func fieldStructToArray(val reflect.Value,
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
 	}
+	if !val.IsValid() {
+		return fs
+	}
 	typ := val.Type()
 	switch typ.Kind() {
 	// 整型、字符串 等基本类型不处理, 对于使用 FieldsI 接口的,充分应用了这点
