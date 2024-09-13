@@ -60,12 +60,15 @@ func (vs *ValueFns) Append(value ...ValueFn) *ValueFns {
 	return vs
 }
 
-func (values ValueFns) GetByLayer(layer Layer) (subValues ValueFns) {
+func (values ValueFns) GetByLayer(layers ...Layer) (subValues ValueFns) {
 	subValues = make(ValueFns, 0)
 	for _, v := range values {
-		if strings.EqualFold(v.Layer.String(), layer.String()) {
-			subValues = append(subValues, v)
+		for _, l := range layers {
+			if strings.EqualFold(v.Layer.String(), l.String()) {
+				subValues = append(subValues, v)
+			}
 		}
+
 	}
 	return subValues
 }
@@ -270,24 +273,12 @@ const (
 
 // 不复制whereFns，ValueFns
 func (f *Field) Copy() (copyF *Field) {
-	copyF = &Field{}
-	copyF.Name = f.Name
-	copyF.ValueFns.Append(f.ValueFns...)
-	copyF.WhereFns.Append(f.WhereFns...)
-	var schema Schema
-	if f.Schema != nil {
-		schema = *f.Schema
+	fcp := *f
+	if f.Schema != nil { // schema 为地址引用，需要单独复制
+		schema := *f.Schema
+		fcp.Schema = &schema
 	}
-	copyF.Schema = &schema // 重新给地址
-	copyF.table = f.table
-	copyF.scene = f.scene
-	copyF.sceneFns = f.sceneFns
-	copyF.selectColumns = f.selectColumns
-	copyF.dbName = f.dbName
-	copyF.docName = f.docName
-	copyF.tags = f.tags
-	copyF.fieldName = f.fieldName
-	return copyF
+	return &fcp
 }
 
 const (
@@ -701,18 +692,30 @@ func (f *Field) init(fs ...*Field) {
 	}
 }
 
-func (f Field) GetValue() (value any, err error) {
+func (f Field) InjectValueFn() Field {
 	f.ValueFns.Append(ValueFn{
 		Fn: func(in any) (any, error) { //插入数据验证
-			err = f.Validate(in)
+			err := f.Validate(in)
 			if err != nil {
 				return in, err
 			}
 			return in, nil
 		},
-		Layer: Value_Layer_DBValidate,
+		Layer: Value_Layer_ApiValidate,
 	})
 	f.ValueFns.Append(GlobalFnValueFns(f)...) // 在最后生成SQL数据时追加格式化数据
+	return f
+}
+
+func (f Field) GetValue() (value any, err error) {
+	f = f.InjectValueFn()
+	return f.getValue()
+}
+
+func (f Field) getValue() (value any, err error) {
+	if f.ValueFns == nil { // 防止空指针
+		return nil, nil
+	}
 	value, err = f.ValueFns.Value(nil)
 	if err != nil {
 		return value, err
@@ -895,6 +898,30 @@ func (fs Fields) Copy() (fields Fields) {
 		fields = append(fields, f.Copy())
 	}
 	return fields
+}
+
+type ValidateErrors []error
+
+func (errs ValidateErrors) Error() string {
+	var err error
+	for _, e := range errs {
+		err = errors.Wrap(err, e.Error())
+	}
+	return err.Error()
+}
+
+// Validate 方便前期校验
+func (fs Fields) Validate() (errs ValidateErrors) {
+	errs = make(ValidateErrors, 0)
+	for _, f := range fs {
+		field := f.InjectValueFn()
+		field.ValueFns = field.ValueFns.GetByLayer(Value_Layer_SetValue, Value_Layer_ApiFormat)
+		_, err := field.getValue()
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errs
 }
 
 func (fs Fields) SetSceneIfEmpty(scene Scene) Fields {

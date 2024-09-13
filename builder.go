@@ -55,6 +55,9 @@ func (b *Builder) Delete(fields ...*Field) (err error) {
 func (b *Builder) Exists(fields ...*Field) (exists bool, err error) {
 	return NewExistsBuilder(b.table).AppendFields(fields...).Exists(b.handler.Query)
 }
+func (b *Builder) Set(fields ...*Field) (err error) {
+	return NewSetBuilder(b.table).AppendFields(fields...).Set(b.handler.Query, b.handler.Exec)
+}
 
 type Driver string
 
@@ -701,11 +704,11 @@ func NewPaginationBuilder(tableName string) PaginationParam {
 
 func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 	table := p._Table.Table()
-	totalSql, err = NewTotalBuilder(table).AppendFields(p._Fields...).ToSQL()
+	totalSql, err = NewTotalBuilder(table).AppendFields(p._Fields.Copy()...).ToSQL()
 	if err != nil {
 		return "", "", err
 	}
-	listSql, err = NewListBuilder(table).AppendFields(p._Fields...).ToSQL()
+	listSql, err = NewListBuilder(table).AppendFields(p._Fields.Copy()...).ToSQL()
 	if err != nil {
 		return "", "", err
 	}
@@ -739,15 +742,15 @@ func NewSetBuilder(tableName string) SetParam {
 // ToSQL 一次生成 查询、新增、修改 sql,若查询后记录存在,并且需要根据数据库记录值修改数据,则可以重新赋值后生成sql
 func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string, err error) {
 	table := p._Table.Table()
-	existsSql, err = NewExistsBuilder(table).AppendFields(p._Fields...).ToSQL()
+	existsSql, err = NewExistsBuilder(table).AppendFields(p._Fields.Copy()...).ToSQL() // 有些根据场景设置 如枚举值 ""，所有需要复制
 	if err != nil {
 		return "", "", "", err
 	}
-	insertSql, err = NewInsertBuilder(table).AppendFields(p._Fields...).ToSQL()
+	insertSql, err = NewInsertBuilder(table).AppendFields(p._Fields.Copy()...).ToSQL()
 	if err != nil {
 		return "", "", "", err
 	}
-	updateSql, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ToSQL()
+	updateSql, err = NewUpdateBuilder(table).AppendFields(p._Fields.Copy()...).ToSQL()
 	if err != nil {
 		return "", "", "", err
 	}
@@ -756,14 +759,14 @@ func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string,
 
 func (p SetParam) Set(queryHandler QueryHandler, execHandler ExecHandler) error {
 	table := p._Table.Table()
-	exists, err := NewExistsBuilder(table).AppendFields(p._Fields...).Exists(queryHandler)
+	exists, err := NewExistsBuilder(table).AppendFields(p._Fields.Copy()...).Exists(queryHandler)
 	if err != nil {
 		return err
 	}
 	if exists {
-		err = NewUpdateBuilder(table).AppendFields(p._Fields...).Exec(execHandler)
+		err = NewUpdateBuilder(table).AppendFields(p._Fields.Copy()...).Exec(execHandler)
 	} else {
-		err = NewInsertBuilder(table).AppendFields(p._Fields...).Exec(execHandler)
+		err = NewInsertBuilder(table).AppendFields(p._Fields.Copy()...).Exec(execHandler)
 	}
 	return err
 }
