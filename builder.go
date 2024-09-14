@@ -198,13 +198,10 @@ func (p InsertParam) AppendFields(fields ...*Field) InsertParam {
 	return p
 }
 
-func (p InsertParam) _Data() (data any, err error) {
-	return p._Fields.Data()
-}
-
 func (p InsertParam) ToSQL() (sql string, err error) {
-	p._Fields.SetSceneIfEmpty(SCENE_SQL_INSERT)
-	rowData, err := p._Data()
+	fs := p._Fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
+	rowData, err := fs.Data()
 	if err != nil {
 		return "", err
 	}
@@ -266,7 +263,9 @@ func (p InsertParams) AppendFields(fields ...Fields) InsertParams {
 func (is InsertParams) ToSQL() (sql string, err error) {
 	data := make([]any, 0)
 	for _, fields := range is.rowFields {
-		rowData, err := fields.Data()
+		fs := fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+		fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
+		rowData, err := fs.Data()
 		if err != nil {
 			return "", err
 		}
@@ -310,27 +309,20 @@ func (p DeleteParam) AppendFields(fields ...*Field) DeleteParam {
 	return p
 }
 
-func (p DeleteParam) _Data() (data any, err error) {
-	return p._Fields.Data()
-}
-
-func (p DeleteParam) _Where() (expressions Expressions, err error) {
-	return p._Fields.Where()
-}
-
 func (p DeleteParam) ToSQL() (sql string, err error) {
-	p._Fields.SetSceneIfEmpty(SCENE_SQL_DELETE)
-	_, ok := p._Fields.GetByFieldName(Field_name_deletedAt)
+	fs := p._Fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs.SetSceneIfEmpty(SCENE_SQL_DELETE)
+	_, ok := fs.GetByFieldName(Field_name_deletedAt)
 	if !ok {
 		err = errors.Errorf("not found deleted column by fieldName:%s", Field_name_deletedAt)
 		return "", err
 	}
-	data, err := p._Data()
+	data, err := fs.Data()
 	if err != nil {
 		return "", err
 	}
 
-	where, err := p._Where()
+	where, err := fs.Where()
 	if err != nil {
 		return "", err
 	}
@@ -377,22 +369,15 @@ func (p UpdateParam) AppendFields(fields ...*Field) UpdateParam {
 	return p
 }
 
-func (p UpdateParam) _Data() (data any, err error) {
-	return p._Fields.Data()
-}
-
-func (p UpdateParam) _Where() (expressions Expressions, err error) {
-	return p._Fields.Where()
-}
-
 func (p UpdateParam) ToSQL() (sql string, err error) {
-	p._Fields.SetSceneIfEmpty(SCENE_SQL_UPDATE)
-	data, err := p._Data()
+	fs := p._Fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs.SetSceneIfEmpty(SCENE_SQL_UPDATE)
+	data, err := fs.Data()
 	if err != nil {
 		return "", err
 	}
 
-	where, err := p._Where()
+	where, err := fs.Where()
 	if err != nil {
 		return "", err
 	}
@@ -415,11 +400,6 @@ func (p UpdateParam) Exec(execHandler ExecHandler) (err error) {
 	err = execHandler(sql)
 	return err
 }
-
-// type FirstParamI interface {
-// 	TableI
-// 	_Select
-// }
 
 type FirstParam struct {
 	_Table  TableI
@@ -445,24 +425,17 @@ func NewFirstBuilder(tableName string) FirstParam {
 	}
 }
 
-func (p FirstParam) _Where() (expressions Expressions, err error) {
-	return p._Fields.Where()
-}
-
-func (p FirstParam) _Order() (orderedExpression []exp.OrderedExpression) {
-	return p._Fields.Order()
-}
-
 func (p FirstParam) ToSQL() (sql string, err error) {
-	p._Fields.SetSceneIfEmpty(SCENE_SQL_SELECT)
-	where, err := p._Where()
+	fs := p._Fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
+	where, err := fs.Where()
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.DialectWrapper().Select(p._Fields.Select()...).
+	ds := Dialect.DialectWrapper().Select(fs.Select()...).
 		From(p._Table.Table()).
 		Where(where...).
-		Order(p._Order()...).
+		Order(fs.Order()...).
 		Limit(1)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
@@ -505,29 +478,23 @@ func NewListBuilder(tableName string) ListParam {
 	}
 }
 
-func (p ListParam) _Where() (expressions Expressions, err error) {
-	return p._Fields.Where()
-}
-func (p ListParam) _Order() (orderedExpression []exp.OrderedExpression) {
-	return p._Fields.Order()
-}
-
 func (p ListParam) ToSQL() (sql string, err error) {
-	p._Fields.SetSceneIfEmpty(SCENE_SQL_SELECT)
-	where, err := p._Where()
+	fs := p._Fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
+	where, err := fs.Where()
 	if err != nil {
 		return "", err
 	}
-	pageIndex, pageSize := p._Fields.Pagination()
+	pageIndex, pageSize := fs.Pagination()
 	ofsset := pageIndex * pageSize
 	if ofsset < 0 {
 		ofsset = 0
 	}
 
-	ds := Dialect.DialectWrapper().Select(p._Fields.Select()...).
+	ds := Dialect.DialectWrapper().Select(fs.Select()...).
 		From(p._Table.Table()).
 		Where(where...).
-		Order(p._Order()...)
+		Order(fs.Order()...)
 	if pageSize > 0 {
 		ds = ds.Offset(uint(ofsset)).Limit(uint(pageSize))
 	}
@@ -589,17 +556,14 @@ func NewExistsBuilder(tableName string) ExistsParam {
 	}
 }
 
-func (p ExistsParam) _Where() (expressions Expressions, err error) {
-	return p._Fields.Where()
-}
-
 func (p ExistsParam) ToSQL() (sql string, err error) {
-	p._Fields.SetSceneIfEmpty(SCENE_SQL_SELECT)
-	where, err := p._Where()
+	fs := p._Fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
+	where, err := fs.Where()
 	if err != nil {
 		return "", err
 	}
-	pageIndex, pageSize := p._Fields.Pagination()
+	pageIndex, pageSize := fs.Pagination()
 	ofsset := pageIndex * pageSize
 	if ofsset < 0 {
 		ofsset = 0
@@ -657,13 +621,10 @@ func (p TotalParam) AppendFields(fields ...*Field) TotalParam {
 	return p
 }
 
-func (p TotalParam) Where() (expressions Expressions, err error) {
-	return p._Fields.Where()
-}
-
 func (p TotalParam) ToSQL() (sql string, err error) {
-	p._Fields.SetSceneIfEmpty(SCENE_SQL_SELECT)
-	where, err := p.Where()
+	fs := p._Fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
+	where, err := fs.Where()
 	if err != nil {
 		return "", err
 	}
@@ -704,11 +665,11 @@ func NewPaginationBuilder(tableName string) PaginationParam {
 
 func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 	table := p._Table.Table()
-	totalSql, err = NewTotalBuilder(table).AppendFields(p._Fields.Copy()...).ToSQL()
+	totalSql, err = NewTotalBuilder(table).AppendFields(p._Fields...).ToSQL()
 	if err != nil {
 		return "", "", err
 	}
-	listSql, err = NewListBuilder(table).AppendFields(p._Fields.Copy()...).ToSQL()
+	listSql, err = NewListBuilder(table).AppendFields(p._Fields...).ToSQL()
 	if err != nil {
 		return "", "", err
 	}
@@ -742,15 +703,15 @@ func NewSetBuilder(tableName string) SetParam {
 // ToSQL 一次生成 查询、新增、修改 sql,若查询后记录存在,并且需要根据数据库记录值修改数据,则可以重新赋值后生成sql
 func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string, err error) {
 	table := p._Table.Table()
-	existsSql, err = NewExistsBuilder(table).AppendFields(p._Fields.Copy()...).ToSQL() // 有些根据场景设置 如枚举值 ""，所有需要复制
+	existsSql, err = NewExistsBuilder(table).AppendFields(p._Fields...).ToSQL() // 有些根据场景设置 如枚举值 ""，所有需要复制
 	if err != nil {
 		return "", "", "", err
 	}
-	insertSql, err = NewInsertBuilder(table).AppendFields(p._Fields.Copy()...).ToSQL()
+	insertSql, err = NewInsertBuilder(table).AppendFields(p._Fields...).ToSQL()
 	if err != nil {
 		return "", "", "", err
 	}
-	updateSql, err = NewUpdateBuilder(table).AppendFields(p._Fields.Copy()...).ToSQL()
+	updateSql, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ToSQL()
 	if err != nil {
 		return "", "", "", err
 	}
@@ -759,14 +720,14 @@ func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string,
 
 func (p SetParam) Set(queryHandler QueryHandler, execHandler ExecHandler) error {
 	table := p._Table.Table()
-	exists, err := NewExistsBuilder(table).AppendFields(p._Fields.Copy()...).Exists(queryHandler)
+	exists, err := NewExistsBuilder(table).AppendFields(p._Fields...).Exists(queryHandler)
 	if err != nil {
 		return err
 	}
 	if exists {
-		err = NewUpdateBuilder(table).AppendFields(p._Fields.Copy()...).Exec(execHandler)
+		err = NewUpdateBuilder(table).AppendFields(p._Fields...).Exec(execHandler)
 	} else {
-		err = NewInsertBuilder(table).AppendFields(p._Fields.Copy()...).Exec(execHandler)
+		err = NewInsertBuilder(table).AppendFields(p._Fields...).Exec(execHandler)
 	}
 	return err
 }
