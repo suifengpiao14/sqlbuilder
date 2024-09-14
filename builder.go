@@ -45,7 +45,7 @@ func (b *Builder) First(result any, fields ...*Field) (exists bool, err error) {
 func (b *Builder) Insert(fields ...*Field) (err error) {
 	return NewInsertBuilder(b.table).AppendFields(fields...).Exec(b.handler.Exec)
 }
-func (b *Builder) InsertWithLastInsertId(fields ...*Field) (rowsAffected int64, lastInsertId uint64, err error) {
+func (b *Builder) InsertWithLastInsertId(fields ...*Field) (lastInsertId uint64, rowsAffected int64, err error) {
 	return NewInsertBuilder(b.table).AppendFields(fields...).InsertWithLastId(b.handler.InsertWithLastIdHandler)
 }
 func (b *Builder) Update(fields ...*Field) (err error) {
@@ -64,8 +64,8 @@ func (b *Builder) DeleteWithRowsAffected(fields ...*Field) (rowsAffected int64, 
 func (b *Builder) Exists(fields ...*Field) (exists bool, err error) {
 	return NewExistsBuilder(b.table).AppendFields(fields...).Exists(b.handler.Query)
 }
-func (b *Builder) Set(fields ...*Field) (err error) {
-	return NewSetBuilder(b.table).AppendFields(fields...).Set(b.handler.Query, b.handler.Exec)
+func (b *Builder) Set(fields ...*Field) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
+	return NewSetBuilder(b.table).AppendFields(fields...).Set(b.handler.Query, b.handler.InsertWithLastIdHandler, b.handler.ExecWithRowsAffected)
 }
 
 type Driver string
@@ -242,13 +242,12 @@ func (p InsertParam) Exec(execHandler ExecHandler) (err error) {
 	err = execHandler(sql)
 	return err
 }
-func (p InsertParam) InsertWithLastId(execHandler InsertWithLastIdHandler) (rowsAffected int64, lastInsertId uint64, err error) {
+func (p InsertParam) InsertWithLastId(insertWithLastIdHandler InsertWithLastIdHandler) (lastInsertId uint64, rowsAffected int64, err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return 0, 0, err
 	}
-	lastInsertId, rowsAffected, err = execHandler(sql)
-	return rowsAffected, lastInsertId, err
+	return insertWithLastIdHandler(sql)
 }
 
 type InsertParams struct {
@@ -751,18 +750,19 @@ func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string,
 	return existsSql, insertSql, updateSql, nil
 }
 
-func (p SetParam) Set(queryHandler QueryHandler, execHandler ExecHandler) error {
+func (p SetParam) Set(queryHandler QueryHandler, insertWithLastIdHandler InsertWithLastIdHandler, execHandler ExecWithRowsAffectedHandler) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
 	table := p._Table.Table()
 	exists, err := NewExistsBuilder(table).AppendFields(p._Fields...).Exists(queryHandler)
 	if err != nil {
-		return err
+		return false, 0, 0, err
 	}
 	if exists {
-		err = NewUpdateBuilder(table).AppendFields(p._Fields...).Exec(execHandler)
+		rowsAffected, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ExecWithRowsAffected(execHandler)
 	} else {
-		err = NewInsertBuilder(table).AppendFields(p._Fields...).Exec(execHandler)
+		lastInsertId, rowsAffected, err = NewInsertBuilder(table).AppendFields(p._Fields...).InsertWithLastId(insertWithLastIdHandler)
 	}
-	return err
+	isInsert = !exists
+	return isInsert, lastInsertId, rowsAffected, err
 }
 
 func MergeData(dataFns ...func() (any, error)) (map[string]any, error) {
