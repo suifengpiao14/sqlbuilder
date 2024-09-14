@@ -45,11 +45,20 @@ func (b *Builder) First(result any, fields ...*Field) (exists bool, err error) {
 func (b *Builder) Insert(fields ...*Field) (err error) {
 	return NewInsertBuilder(b.table).AppendFields(fields...).Exec(b.handler.Exec)
 }
+func (b *Builder) InsertWithLastInsertId(fields ...*Field) (rowsAffected int64, lastInsertId uint64, err error) {
+	return NewInsertBuilder(b.table).AppendFields(fields...).InsertWithLastId(b.handler.InsertWithLastIdHandler)
+}
 func (b *Builder) Update(fields ...*Field) (err error) {
 	return NewUpdateBuilder(b.table).AppendFields(fields...).Exec(b.handler.Exec)
 }
+func (b *Builder) UpdateWithRowsAffected(fields ...*Field) (rowsAffected int64, err error) {
+	return NewUpdateBuilder(b.table).AppendFields(fields...).ExecWithRowsAffected(b.handler.ExecWithRowsAffected)
+}
 func (b *Builder) Delete(fields ...*Field) (err error) {
 	return NewDeleteBuilder(b.table).AppendFields(fields...).Exec(b.handler.Exec)
+}
+func (b *Builder) DeleteWithRowsAffected(fields ...*Field) (rowsAffected int64, err error) {
+	return NewDeleteBuilder(b.table).AppendFields(fields...).ExecWithRowsAffected(b.handler.ExecWithRowsAffected)
 }
 
 func (b *Builder) Exists(fields ...*Field) (exists bool, err error) {
@@ -233,6 +242,14 @@ func (p InsertParam) Exec(execHandler ExecHandler) (err error) {
 	err = execHandler(sql)
 	return err
 }
+func (p InsertParam) InsertWithLastId(execHandler InsertWithLastIdHandler) (rowsAffected int64, lastInsertId uint64, err error) {
+	sql, err := p.ToSQL()
+	if err != nil {
+		return 0, 0, err
+	}
+	lastInsertId, rowsAffected, err = execHandler(sql)
+	return rowsAffected, lastInsertId, err
+}
 
 type InsertParams struct {
 	rowFields []Fields
@@ -344,6 +361,14 @@ func (p DeleteParam) Exec(execHandler ExecHandler) (err error) {
 	err = execHandler(sql)
 	return err
 }
+func (p DeleteParam) ExecWithRowsAffected(execWithRowsAffectedHandler ExecWithRowsAffectedHandler) (rowsAffected int64, err error) {
+	sql, err := p.ToSQL()
+	if err != nil {
+		return rowsAffected, err
+	}
+	rowsAffected, err = execWithRowsAffectedHandler(sql)
+	return rowsAffected, err
+}
 
 type UpdateParam struct {
 	_TableI TableI
@@ -399,6 +424,14 @@ func (p UpdateParam) Exec(execHandler ExecHandler) (err error) {
 	}
 	err = execHandler(sql)
 	return err
+}
+func (p UpdateParam) ExecWithRowsAffected(execWithRowsAffectedHandler ExecWithRowsAffectedHandler) (rowsAffected int64, err error) {
+	sql, err := p.ToSQL()
+	if err != nil {
+		return 0, err
+	}
+	rowsAffected, err = execWithRowsAffectedHandler(sql)
+	return rowsAffected, err
 }
 
 type FirstParam struct {

@@ -10,9 +10,13 @@ type PaginationHandler func(totalSql string, listSql string, result any) (count 
 type QueryHandler func(sql string, result any) (err error)
 type FirstHandler func(sql string, result any) (exists bool, err error)
 type ExecHandler func(sql string) (err error)
+type ExecWithRowsAffectedHandler func(sql string) (rowsAffected int64, err error)
+type InsertWithLastIdHandler func(sql string) (lastInsertId uint64, rowsAffected int64, err error)
 
 type Handler interface {
 	Exec(sql string) (err error)
+	ExecWithRowsAffected(sql string) (rowsAffected int64, err error)
+	InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error)
 	First(sql string, result any) (exists bool, err error)
 	Query(sql string, result any) (err error)
 	Pagination(totalSql string, listSql string, result any) (count int64, err error)
@@ -27,6 +31,19 @@ func NewGormHandler(getDB func() *gorm.DB) GormHandler {
 
 func (h GormHandler) Exec(sql string) (err error) {
 	return h().Exec(sql).Error
+}
+func (h GormHandler) ExecWithRowsAffected(sql string) (rowsAffected int64, err error) {
+	tx := h().Exec(sql)
+	return tx.RowsAffected, tx.Error
+}
+func (h GormHandler) InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
+	tx := h().Raw(sql).Scan(&lastInsertId)
+	if tx.Error != nil {
+		return 0, 0, tx.Error
+	}
+	rowsAffected = tx.RowsAffected
+
+	return lastInsertId, rowsAffected, err
 }
 func (h GormHandler) First(sql string, result any) (exists bool, err error) {
 	err = h().Raw(sql).First(result).Error
