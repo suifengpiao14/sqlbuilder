@@ -365,8 +365,15 @@ func (f *Field) SetBaseInfo(name string, typ SchemaType, title string) *Field {
 	return f
 }
 
+// Comment 设置注释 针对DDL 语义化
 func (f *Field) Comment(comment string) *Field {
 	f.MergeSchema(Schema{Comment: comment})
+	return f
+}
+
+// SetDescription 设置描述 针对api 语义化
+func (f *Field) SetDescription(description string) *Field {
+	f.MergeSchema(Schema{Comment: description})
 	return f
 }
 func (f *Field) SetTag(tag string) *Field {
@@ -638,6 +645,26 @@ func NewField[T int | int64 | uint64 | []int | []int64 | []uint64 | string | []s
 	field.ValueFns.Append(valueFn)
 	ApplyFns(middlewareFns).Apply(field)
 	return field
+}
+
+func NewIntField(value int, name string, title string, maximum uint) (f *Field) {
+	f = NewField(value).SetName(name).SetTitle(title).MergeSchema(Schema{
+		Type: Schema_Type_int,
+	})
+	if maximum > 0 {
+		f.MergeSchema(Schema{Maximum: maximum})
+	}
+	return f
+}
+
+func NewStringField(value string, name string, title string, maxLength int) (f *Field) {
+	f = NewField(value).SetName(name).SetTitle(title).MergeSchema(Schema{
+		Type: Schema_Type_string,
+	})
+	if maxLength > 0 {
+		f.MergeSchema(Schema{MaxLength: maxLength})
+	}
+	return f
 }
 
 var ERROR_VALUE_NIL = errors.New("error value nil")
