@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -162,13 +163,22 @@ const (
 
 type Enums []Enum
 
+func (a Enums) Len() int           { return len(a) }
+func (a Enums) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a Enums) Less(i, j int) bool { return a[i].OrderDesc > a[j].OrderDesc }
+
+func (es *Enums) Sort() *Enums {
+	sort.Sort(es)
+	return es
+}
+
 // append 排重后面再融入优化
-func (es *Enums) append(enums ...Enum) {
+func (es *Enums) Append(enums ...Enum) {
 	exists := false
 	for _, en := range enums {
 		for _, e := range *es {
-			if e.IsEqual(en) {
-				exists = true
+			if e.IsEqual(en.Key) {
+				exists = true //存在忽略
 				break
 			}
 		}
@@ -176,37 +186,23 @@ func (es *Enums) append(enums ...Enum) {
 			*es = append(*es, en)
 		}
 	}
-
 }
-
-// Insert 追加元素,不建议使用,建议用InsertAsFirst,InsertAsSecond
-func (es *Enums) Insert(index int, enums ...Enum) {
-	if *es == nil {
-		*es = make(Enums, 0)
+func (es *Enums) Replace(enums ...Enum) {
+	exists := false
+	for _, en := range enums {
+		for i := 0; i < len(*es); i++ {
+			e := (*es)[i]
+			if e.IsEqual(en) {
+				exists = true
+				en.OrderDesc = e.OrderDesc // 保存原来顺序
+				(*es)[i] = en              //存在替换
+				break
+			}
+		}
+		if !exists {
+			*es = append(*es, en)
+		}
 	}
-	l := len(*es)
-	if l == 0 || index < 0 || l <= index { // 本身没有,直接添加,或者计划添加到结尾,或者指定位置比现有数组长,直接追加
-		*es = append(*es, enums...)
-		return
-	}
-	if index == 0 { // index =0 插入第一个
-		tmp := make(Enums, 0)
-		tmp = append(tmp, enums...)
-		tmp = append(tmp, *es...)
-		*es = tmp
-		return
-	}
-	pre, after := (*es)[:index], (*es)[index:]
-	tmp := make(Enums, 0)
-	tmp = append(tmp, pre...)
-	tmp = append(tmp, enums...)
-	tmp = append(tmp, after...)
-	*es = tmp
-}
-
-// InsertAsFirst 作为第一个元素插入,一般用于将数据导入到whereFn 中
-func (es *Enums) InsertAsFirst(enums ...Enum) {
-	es.Insert(0, enums...)
 }
 
 // RemoveByTag 通过tag 移除部分枚举值，尽量少用(到目前没使用)
@@ -225,11 +221,6 @@ func (es *Enums) RemoveByTag(tags ...string) {
 		}
 	}
 	*es = tmp
-}
-
-// Append 常规添加
-func (es *Enums) Append(enums ...Enum) {
-	es.Insert(-1, enums...)
 }
 
 func (es Enums) Values() (values []any) {
@@ -401,6 +392,7 @@ type Enum struct {
 	Title     string `json:"title"`
 	Tag       string `json:"tag"`
 	IsDefault bool   `json:"isDefault"`
+	OrderDesc int    `json:"order"` // 排序 数字越大，越靠前
 }
 
 const (
@@ -411,7 +403,15 @@ const (
 )
 
 func (e Enum) IsEqual(val any) (ok bool) {
-	ok = strings.EqualFold(cast.ToString(e.Key), cast.ToString(val))
+	switch v := val.(type) {
+	case int:
+		ok = cast.ToInt(e.Key) == v
+		return ok
+	case string:
+		ok = strings.EqualFold(cast.ToString(e.Key), v)
+	default:
+		ok = strings.EqualFold(cast.ToString(e.Key), cast.ToString(e.Key))
+	}
 	return ok
 }
 

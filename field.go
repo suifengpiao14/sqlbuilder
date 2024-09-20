@@ -677,7 +677,7 @@ func (f Field) GetDocName() string {
 	return f.docName
 }
 
-func (f *Field) init(fs ...*Field) {
+func (f *Field) Init(fs ...*Field) *Field {
 	if f.sceneFns != nil {
 
 		initFns := f.sceneFns.GetByScene(SCENE_SQL_INIT) //init 场景每次都运行
@@ -690,6 +690,13 @@ func (f *Field) init(fs ...*Field) {
 			sceneFn.Fn.Apply(f, fs...)
 		}
 	}
+	if f.Schema == nil {
+		f.Schema = &Schema{
+			Enums: make(Enums, 0),
+		}
+	}
+	f.Schema.Enums.Sort()
+	return f
 }
 
 func (f Field) InjectValueFn() Field {
@@ -730,7 +737,7 @@ func (f Field) getValue() (value any, err error) {
 // WhereData 获取Where 值
 func (f Field) WhereData(fs ...*Field) (value any, err error) {
 	f = *f.Copy()
-	f.init(fs...)
+	f.Init(fs...)
 	if len(f.WhereFns) == 0 {
 		return nil, nil
 	}
@@ -843,7 +850,7 @@ func (c Field) formatSingleType(val any) any {
 
 func (f Field) Data(fs ...*Field) (data any, err error) {
 	f = *f.Copy() // 复制一份,不影响其它场景
-	f.init(fs...)
+	f.Init(fs...)
 	val, err := f.GetValue()
 	if IsErrorValueNil(err) {
 		return nil, nil // 忽略空值错误
