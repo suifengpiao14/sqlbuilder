@@ -1298,6 +1298,7 @@ func fieldStructToArray(val reflect.Value,
 	structFieldCustomFn func(val reflect.Value, structField reflect.StructField, fs Fields) Fields,
 	arrayFieldCustomFn func(fs Fields) Fields,
 ) Fields {
+	val = reflect.Indirect(val)
 	fs := Fields{}
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
@@ -1346,6 +1347,10 @@ func fieldStructToArray(val reflect.Value,
 		if arrayFieldCustomFn != nil {
 			subFields = arrayFieldCustomFn(subFields)
 		}
+		fs = append(fs, subFields...)
+	case reflect.Interface:
+		childVal := val.Elem()
+		subFields := fieldStructToArray(childVal, structFieldCustomFn, arrayFieldCustomFn)
 		fs = append(fs, subFields...)
 
 	}
