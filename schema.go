@@ -114,6 +114,7 @@ func (s *Schema) Merge(megred Schema) *Schema {
 	if megred.RegExp != "" {
 		s.RegExp = megred.RegExp
 	}
+
 	if megred.Primary {
 		s.Primary = megred.Primary
 	}
