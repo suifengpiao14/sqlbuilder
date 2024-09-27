@@ -63,7 +63,11 @@ func (sis *SceneFns) Append(sceneFns ...SceneFn) {
 var ApplyFnIncrease ApplyFn = func(f *Field, fs ...*Field) {
 	f.ValueFns.Append(ValueFn{
 		Fn: func(inputValue any) (any, error) {
-			val := fmt.Sprintf("`%s`+1", f.DBName())
+			num := cast.ToInt(inputValue)
+			if num < 1 {
+				num = 1
+			}
+			val := fmt.Sprintf("`%s`+ %d", f.DBName(), num)
 			return goqu.L(val), nil
 		},
 		Layer: Value_Layer_DBFormat,
@@ -162,8 +166,8 @@ func ApplyFnUniqueField(table string, queryFn QueryHandler) ApplyFn {
 				f1.WhereFns.Append(ValueFnForward)
 				f.ValueFns.Append(ValueFn{
 					Fn: func(inputValue any) (any, error) {
-						exitstsParam := NewExistsBuilder(table).AppendFields(f1)
-						exists, err := exitstsParam.Exists(queryFn)
+						exitstsParam := NewExistsBuilder(table).WithHandler(queryFn).AppendFields(f1)
+						exists, err := exitstsParam.Exists()
 						if err != nil {
 							return nil, err
 						}
@@ -203,7 +207,7 @@ func ApplyFnUpdateIfNull(table string, firstHandler FirstHandler) ApplyFn {
 						cpFields[0].SetSelectColumns(f.DBName())
 					}
 					var dbValue any
-					exists, err := NewFirstBuilder(table).AppendFields(cpFields...).First(&dbValue, firstHandler)
+					exists, err := NewFirstBuilder(table).WithHandler(firstHandler).AppendFields(cpFields...).First(&dbValue)
 					if err != nil {
 						return nil, err
 					}

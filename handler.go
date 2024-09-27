@@ -37,11 +37,23 @@ func (h GormHandler) ExecWithRowsAffected(sql string) (rowsAffected int64, err e
 	return tx.RowsAffected, tx.Error
 }
 func (h GormHandler) InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
-	tx := h().Raw(sql).Scan(&lastInsertId)
-	if tx.Error != nil {
-		return 0, 0, tx.Error
-	}
-	rowsAffected = tx.RowsAffected
+	h().Transaction(func(tx *gorm.DB) error {
+		err = tx.Exec(sql).Error
+		if err != nil {
+			return err
+		}
+		rowsAffected = tx.RowsAffected
+		switch tx.Dialector.Name() {
+		case "mysql":
+			err = tx.Raw("SELECT LAST_INSERT_ID()").Scan(&lastInsertId).Error
+			if err != nil {
+				return err
+			}
+		default:
+			err = errors.New("not support last insert id")
+		}
+		return nil
+	})
 
 	return lastInsertId, rowsAffected, err
 }

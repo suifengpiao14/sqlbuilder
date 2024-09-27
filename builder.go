@@ -28,44 +28,44 @@ func NewBuilder(table string, handler Handler) *Builder {
 }
 
 func (b *Builder) Count(fields ...*Field) (count int64, err error) {
-	return NewTotalBuilder(b.table).AppendFields(fields...).Count(b.handler.Count)
+	return NewTotalBuilder(b.table).WithHandler(b.handler.Count).AppendFields(fields...).Count()
 }
 
 func (b *Builder) List(result any, fields ...*Field) (err error) {
-	return NewListBuilder(b.table).AppendFields(fields...).Query(result, b.handler.Query)
+	return NewListBuilder(b.table).WithHandler(b.handler.Query).AppendFields(fields...).Query(result)
 }
 
 func (b *Builder) Pagination(result any, fields ...*Field) (count int64, err error) {
-	return NewPaginationBuilder(b.table).AppendFields(fields...).Pagination(result, b.handler.Pagination)
+	return NewPaginationBuilder(b.table).WithHandler(b.handler.Pagination).AppendFields(fields...).Pagination(result)
 }
 
 func (b *Builder) First(result any, fields ...*Field) (exists bool, err error) {
-	return NewFirstBuilder(b.table).AppendFields(fields...).First(result, b.handler.First)
+	return NewFirstBuilder(b.table).WithHandler(b.handler.First).AppendFields(fields...).First(result)
 }
 func (b *Builder) Insert(fields ...*Field) (err error) {
-	return NewInsertBuilder(b.table).AppendFields(fields...).Exec(b.handler.Exec)
+	return NewInsertBuilder(b.table).WithHandler(b.handler.Exec, nil).AppendFields(fields...).Exec()
 }
 func (b *Builder) InsertWithLastInsertId(fields ...*Field) (lastInsertId uint64, rowsAffected int64, err error) {
-	return NewInsertBuilder(b.table).AppendFields(fields...).InsertWithLastId(b.handler.InsertWithLastIdHandler)
+	return NewInsertBuilder(b.table).WithHandler(nil, b.handler.InsertWithLastIdHandler).AppendFields(fields...).InsertWithLastId()
 }
 func (b *Builder) Update(fields ...*Field) (err error) {
-	return NewUpdateBuilder(b.table).AppendFields(fields...).Exec(b.handler.Exec)
+	return NewUpdateBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected).AppendFields(fields...).Exec()
 }
 func (b *Builder) UpdateWithRowsAffected(fields ...*Field) (rowsAffected int64, err error) {
-	return NewUpdateBuilder(b.table).AppendFields(fields...).ExecWithRowsAffected(b.handler.ExecWithRowsAffected)
+	return NewUpdateBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected).AppendFields(fields...).ExecWithRowsAffected()
 }
 func (b *Builder) Delete(fields ...*Field) (err error) {
-	return NewDeleteBuilder(b.table).AppendFields(fields...).Exec(b.handler.Exec)
+	return NewDeleteBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected).AppendFields(fields...).Exec()
 }
 func (b *Builder) DeleteWithRowsAffected(fields ...*Field) (rowsAffected int64, err error) {
-	return NewDeleteBuilder(b.table).AppendFields(fields...).ExecWithRowsAffected(b.handler.ExecWithRowsAffected)
+	return NewDeleteBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected).AppendFields(fields...).ExecWithRowsAffected()
 }
 
 func (b *Builder) Exists(fields ...*Field) (exists bool, err error) {
-	return NewExistsBuilder(b.table).AppendFields(fields...).Exists(b.handler.Query)
+	return NewExistsBuilder(b.table).WithHandler(b.handler.Query).AppendFields(fields...).Exists()
 }
 func (b *Builder) Set(fields ...*Field) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
-	return NewSetBuilder(b.table).AppendFields(fields...).Set(b.handler.Query, b.handler.InsertWithLastIdHandler, b.handler.ExecWithRowsAffected)
+	return NewSetBuilder(b.table).WithHandler(b.handler.Query, b.handler.InsertWithLastIdHandler, b.handler.ExecWithRowsAffected).AppendFields(fields...).Set()
 }
 
 type Driver string
@@ -184,25 +184,32 @@ func ConcatExpression(expressions ...exp.Expression) Expressions {
 
 // InsertParam 供子类复用,修改数据
 type InsertParam struct {
-	_TableI TableI
-	_Fields Fields
-	_log    LogI
+	_TableI                 TableI
+	_Fields                 Fields
+	_log                    LogI
+	execHandler             ExecHandler
+	insertWithLastIdHandler InsertWithLastIdHandler
 }
 
 func (p *InsertParam) SetLog(log LogI) InsertParam {
 	p._log = log
 	return *p
 }
+func (p *InsertParam) WithHandler(execHandler ExecHandler, insertWithLastIdHandler InsertWithLastIdHandler) *InsertParam {
+	p.execHandler = execHandler
+	p.insertWithLastIdHandler = insertWithLastIdHandler
+	return p
+}
 
-func NewInsertBuilder(tableName string) InsertParam {
-	return InsertParam{
+func NewInsertBuilder(tableName string) *InsertParam {
+	return &InsertParam{
 		_TableI: TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),
 		_log:    DefaultLog,
 	}
 }
 
-func (p InsertParam) AppendFields(fields ...*Field) InsertParam {
+func (p *InsertParam) AppendFields(fields ...*Field) *InsertParam {
 	p._Fields.Append(fields...)
 	return p
 }
@@ -234,41 +241,50 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-func (p InsertParam) Exec(execHandler ExecHandler) (err error) {
+func (p InsertParam) Exec() (err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return err
 	}
-	err = execHandler(sql)
+	err = p.execHandler(sql)
 	return err
 }
-func (p InsertParam) InsertWithLastId(insertWithLastIdHandler InsertWithLastIdHandler) (lastInsertId uint64, rowsAffected int64, err error) {
+func (p InsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64, err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return 0, 0, err
 	}
-	return insertWithLastIdHandler(sql)
+	return p.insertWithLastIdHandler(sql)
 }
 
-type InsertParams struct {
-	rowFields []Fields
-	_TableI   TableI
-	_log      LogI
+type BatchInsertParam struct {
+	rowFields               []Fields
+	_TableI                 TableI
+	_log                    LogI
+	execHandler             ExecHandler
+	insertWithLastIdHandler InsertWithLastIdHandler
 }
 
-func NewInsertsBuilder(tableName string) InsertParams {
-	return InsertParams{
+func NewBatchInsertBuilder(tableName string) *BatchInsertParam {
+	return &BatchInsertParam{
 		_TableI:   TableFn(func() string { return tableName }),
 		rowFields: make([]Fields, 0),
 		_log:      DefaultLog,
 	}
 }
 
-func (p *InsertParams) SetLog(log LogI) InsertParams {
+func (p *BatchInsertParam) SetLog(log LogI) *BatchInsertParam {
 	p._log = log
-	return *p
+	return p
 }
-func (p InsertParams) AppendFields(fields ...Fields) InsertParams {
+
+func (p *BatchInsertParam) WithHandler(execHandler ExecHandler, insertWithLastIdHandler InsertWithLastIdHandler) *BatchInsertParam {
+	p.execHandler = execHandler
+	p.insertWithLastIdHandler = insertWithLastIdHandler
+	return p
+}
+
+func (p BatchInsertParam) AppendFields(fields ...Fields) BatchInsertParam {
 	if p.rowFields == nil {
 		p.rowFields = make([]Fields, 0)
 	}
@@ -276,8 +292,13 @@ func (p InsertParams) AppendFields(fields ...Fields) InsertParams {
 	return p
 }
 
-func (is InsertParams) ToSQL() (sql string, err error) {
+var ERROR_BATCH_INSERT_DATA_IS_NIL = errors.New("batch insert err: data is nil")
+
+func (is BatchInsertParam) ToSQL() (sql string, err error) {
 	data := make([]any, 0)
+	if len(is.rowFields) == 0 {
+		return "", ERROR_BATCH_INSERT_DATA_IS_NIL
+	}
 	for _, fields := range is.rowFields {
 		fs := fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 		fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
@@ -300,27 +321,47 @@ func (is InsertParams) ToSQL() (sql string, err error) {
 	}
 	return sql, nil
 }
+func (p BatchInsertParam) Exec() (err error) {
+	sql, err := p.ToSQL()
+	if err != nil {
+		return err
+	}
+	err = p.execHandler(sql)
+	return err
+}
+func (p BatchInsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64, err error) {
+	sql, err := p.ToSQL()
+	if err != nil {
+		return 0, 0, err
+	}
+	return p.insertWithLastIdHandler(sql)
+}
 
 type DeleteParam struct {
-	_TableI TableI
-	_Fields Fields
-	_log    LogI
+	_TableI                     TableI
+	_Fields                     Fields
+	_log                        LogI
+	execWithRowsAffectedHandler ExecWithRowsAffectedHandler
 }
 
 func (p *DeleteParam) SetLog(log LogI) DeleteParam {
 	p._log = log
 	return *p
 }
+func (p *DeleteParam) WithHandler(execWithRowsAffectedHandler ExecWithRowsAffectedHandler) *DeleteParam {
+	p.execWithRowsAffectedHandler = execWithRowsAffectedHandler
+	return p
+}
 
-func NewDeleteBuilder(tableName string) DeleteParam {
-	return DeleteParam{
+func NewDeleteBuilder(tableName string) *DeleteParam {
+	return &DeleteParam{
 		_TableI: TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),
 		_log:    DefaultLog,
 	}
 }
 
-func (p DeleteParam) AppendFields(fields ...*Field) DeleteParam {
+func (p *DeleteParam) AppendFields(fields ...*Field) *DeleteParam {
 	p._Fields.Append(fields...)
 	return p
 }
@@ -352,43 +393,48 @@ func (p DeleteParam) ToSQL() (sql string, err error) {
 	}
 	return sql, nil
 }
-func (p DeleteParam) Exec(execHandler ExecHandler) (err error) {
+func (p DeleteParam) Exec() (err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return err
 	}
-	err = execHandler(sql)
+	_, err = p.execWithRowsAffectedHandler(sql)
 	return err
 }
-func (p DeleteParam) ExecWithRowsAffected(execWithRowsAffectedHandler ExecWithRowsAffectedHandler) (rowsAffected int64, err error) {
+func (p DeleteParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return rowsAffected, err
 	}
-	rowsAffected, err = execWithRowsAffectedHandler(sql)
+	rowsAffected, err = p.execWithRowsAffectedHandler(sql)
 	return rowsAffected, err
 }
 
 type UpdateParam struct {
-	_TableI TableI
-	_Fields Fields
-	_log    LogI
+	_TableI                     TableI
+	_Fields                     Fields
+	_log                        LogI
+	execWithRowsAffectedHandler ExecWithRowsAffectedHandler
 }
 
 func (p *UpdateParam) SetLog(log LogI) UpdateParam {
 	p._log = log
 	return *p
 }
+func (p *UpdateParam) WithHandler(execWithRowsAffectedHandler ExecWithRowsAffectedHandler) *UpdateParam {
+	p.execWithRowsAffectedHandler = execWithRowsAffectedHandler
+	return p
+}
 
-func NewUpdateBuilder(tableName string) UpdateParam {
-	return UpdateParam{
+func NewUpdateBuilder(tableName string) *UpdateParam {
+	return &UpdateParam{
 		_TableI: TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),
 		_log:    DefaultLog,
 	}
 }
 
-func (p UpdateParam) AppendFields(fields ...*Field) UpdateParam {
+func (p *UpdateParam) AppendFields(fields ...*Field) *UpdateParam {
 	p._Fields.Append(fields...)
 	return p
 }
@@ -416,32 +462,33 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-func (p UpdateParam) Exec(execHandler ExecHandler) (err error) {
+func (p UpdateParam) Exec() (err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return err
 	}
-	err = execHandler(sql)
+	_, err = p.execWithRowsAffectedHandler(sql)
 	return err
 }
-func (p UpdateParam) ExecWithRowsAffected(execWithRowsAffectedHandler ExecWithRowsAffectedHandler) (rowsAffected int64, err error) {
+func (p UpdateParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return 0, err
 	}
-	rowsAffected, err = execWithRowsAffectedHandler(sql)
+	rowsAffected, err = p.execWithRowsAffectedHandler(sql)
 	return rowsAffected, err
 }
 
 type FirstParam struct {
-	_Table  TableI
-	_Fields Fields
-	_log    LogI
+	_Table       TableI
+	_Fields      Fields
+	_log         LogI
+	firstHandler FirstHandler
 }
 
-func (p *FirstParam) SetLog(log LogI) FirstParam {
+func (p *FirstParam) SetLog(log LogI) *FirstParam {
 	p._log = log
-	return *p
+	return p
 }
 
 func (p FirstParam) AppendFields(fields ...*Field) FirstParam {
@@ -449,12 +496,17 @@ func (p FirstParam) AppendFields(fields ...*Field) FirstParam {
 	return p
 }
 
-func NewFirstBuilder(tableName string) FirstParam {
-	return FirstParam{
+func NewFirstBuilder(tableName string) *FirstParam {
+	return &FirstParam{
 		_Table:  TableFn(func() string { return tableName }),
 		_Fields: make(Fields, 0),
 		_log:    DefaultLog,
 	}
+}
+
+func (p *FirstParam) WithHandler(firstHandler FirstHandler) *FirstParam {
+	p.firstHandler = firstHandler
+	return p
 }
 
 func (p FirstParam) ToSQL() (sql string, err error) {
@@ -479,23 +531,28 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-func (p FirstParam) First(result any, firstHandler FirstHandler) (exists bool, err error) {
+func (p FirstParam) First(result any) (exists bool, err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return false, err
 	}
-	return firstHandler(sql, result)
+	return p.firstHandler(sql, result)
 }
 
 type ListParam struct {
-	_Table  TableI
-	_Fields Fields
-	_log    LogI
+	_Table       TableI
+	_Fields      Fields
+	_log         LogI
+	queryHandler QueryHandler
 }
 
 func (p *ListParam) SetLog(log LogI) ListParam {
 	p._log = log
 	return *p
+}
+func (p *ListParam) WithHandler(queryHandler QueryHandler) *ListParam {
+	p.queryHandler = queryHandler
+	return p
 }
 
 func (p ListParam) AppendFields(fields ...*Field) ListParam {
@@ -503,8 +560,8 @@ func (p ListParam) AppendFields(fields ...*Field) ListParam {
 	return p
 }
 
-func NewListBuilder(tableName string) ListParam {
-	return ListParam{
+func NewListBuilder(tableName string) *ListParam {
+	return &ListParam{
 		_Table: TableFn(func() string { return tableName }),
 		_log:   DefaultLog,
 	}
@@ -540,12 +597,12 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-func (p ListParam) Query(result any, queryHandler QueryHandler) (err error) {
+func (p ListParam) Query(result any) (err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return err
 	}
-	return queryHandler(sql, result)
+	return p.queryHandler(sql, result)
 }
 
 type LogI interface {
@@ -567,12 +624,13 @@ func (log EmptyLog) Log(sql string, args ...any) {
 var DefaultLog = ConsoleLog{}
 
 type ExistsParam struct {
-	_Table  TableI
-	_Fields Fields
-	_log    LogI
+	_Table       TableI
+	_Fields      Fields
+	_log         LogI
+	queryHandler QueryHandler
 }
 
-func (p ExistsParam) AppendFields(fields ...*Field) ExistsParam {
+func (p *ExistsParam) AppendFields(fields ...*Field) *ExistsParam {
 	p._Fields.Append(fields...)
 	return p
 }
@@ -581,8 +639,13 @@ func (p *ExistsParam) SetLog(log LogI) ExistsParam {
 	return *p
 }
 
-func NewExistsBuilder(tableName string) ExistsParam {
-	return ExistsParam{
+func (p *ExistsParam) WithHandler(queryHandler QueryHandler) *ExistsParam {
+	p.queryHandler = queryHandler
+	return p
+}
+
+func NewExistsBuilder(tableName string) *ExistsParam {
+	return &ExistsParam{
 		_Table: TableFn(func() string { return tableName }),
 		_log:   DefaultLog,
 	}
@@ -615,13 +678,13 @@ func (p ExistsParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
-func (p ExistsParam) Exists(queryHandler QueryHandler) (exists bool, err error) {
+func (p ExistsParam) Exists() (exists bool, err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return false, err
 	}
 	result := make([]any, 0)
-	err = queryHandler(sql, &result)
+	err = p.queryHandler(sql, &result)
 	if err != nil {
 		return false, err
 	}
@@ -632,23 +695,28 @@ func (p ExistsParam) Exists(queryHandler QueryHandler) (exists bool, err error) 
 }
 
 type TotalParam struct {
-	_Table  TableI
-	_Fields Fields
-	_log    LogI
+	_Table       TableI
+	_Fields      Fields
+	_log         LogI
+	countHandler CountHandler
 }
 
-func NewTotalBuilder(tableName string) TotalParam {
-	return TotalParam{
+func NewTotalBuilder(tableName string) *TotalParam {
+	return &TotalParam{
 		_Table: TableFn(func() string { return tableName }),
 		_log:   DefaultLog,
 	}
 }
-func (p *TotalParam) SetLog(log LogI) TotalParam {
+func (p *TotalParam) SetLog(log LogI) *TotalParam {
 	p._log = log
-	return *p
+	return p
+}
+func (p *TotalParam) WithHandler(countHandler CountHandler) *TotalParam {
+	p.countHandler = countHandler
+	return p
 }
 
-func (p TotalParam) AppendFields(fields ...*Field) TotalParam {
+func (p *TotalParam) AppendFields(fields ...*Field) *TotalParam {
 	p._Fields.Append(fields...)
 	return p
 }
@@ -665,23 +733,24 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
+	if p._log != nil {
+		p._log.Log(sql)
+	}
 	return sql, nil
 }
 
-func (p TotalParam) Count(countHandler CountHandler) (total int64, err error) {
+func (p TotalParam) Count() (total int64, err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return -1, err
 	}
-	if p._log != nil {
-		p._log.Log(sql)
-	}
-	return countHandler(sql)
+	return p.countHandler(sql)
 }
 
 type PaginationParam struct {
-	_Table  TableI
-	_Fields Fields
+	_Table            TableI
+	_Fields           Fields
+	paginationHandler PaginationHandler
 }
 
 func (p PaginationParam) AppendFields(fields ...*Field) PaginationParam {
@@ -689,10 +758,14 @@ func (p PaginationParam) AppendFields(fields ...*Field) PaginationParam {
 	return p
 }
 
-func NewPaginationBuilder(tableName string) PaginationParam {
-	return PaginationParam{
+func NewPaginationBuilder(tableName string) *PaginationParam {
+	return &PaginationParam{
 		_Table: TableFn(func() string { return tableName }),
 	}
+}
+func (p *PaginationParam) WithHandler(paginationHandler PaginationHandler) *PaginationParam {
+	p.paginationHandler = paginationHandler
+	return p
 }
 
 func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
@@ -708,17 +781,20 @@ func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 	return totalSql, listSql, nil
 }
 
-func (p PaginationParam) Pagination(result any, paginationHandler PaginationHandler) (count int64, err error) {
+func (p PaginationParam) Pagination(result any) (count int64, err error) {
 	totalSql, listSql, err := p.ToSQL()
 	if err != nil {
 		return 0, err
 	}
-	return paginationHandler(totalSql, listSql, result)
+	return p.paginationHandler(totalSql, listSql, result)
 }
 
 type SetParam struct {
-	_Table  TableI
-	_Fields Fields
+	_Table                  TableI
+	_Fields                 Fields
+	queryHandler            QueryHandler
+	insertWithLastIdHandler InsertWithLastIdHandler
+	execHandler             ExecWithRowsAffectedHandler
 }
 
 func (p SetParam) AppendFields(fields ...*Field) SetParam {
@@ -726,10 +802,18 @@ func (p SetParam) AppendFields(fields ...*Field) SetParam {
 	return p
 }
 
-func NewSetBuilder(tableName string) SetParam {
-	return SetParam{
+func NewSetBuilder(tableName string) *SetParam {
+	return &SetParam{
 		_Table: TableFn(func() string { return tableName }),
 	}
+}
+
+func (p *SetParam) WithHandler(queryHandler QueryHandler, insertWithLastIdHandler InsertWithLastIdHandler, execHandler ExecWithRowsAffectedHandler) *SetParam {
+	p.queryHandler = queryHandler
+	p.insertWithLastIdHandler = insertWithLastIdHandler
+	p.execHandler = execHandler
+
+	return p
 }
 
 // ToSQL 一次生成 查询、新增、修改 sql,若查询后记录存在,并且需要根据数据库记录值修改数据,则可以重新赋值后生成sql
@@ -750,16 +834,16 @@ func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string,
 	return existsSql, insertSql, updateSql, nil
 }
 
-func (p SetParam) Set(queryHandler QueryHandler, insertWithLastIdHandler InsertWithLastIdHandler, execHandler ExecWithRowsAffectedHandler) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
+func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
 	table := p._Table.Table()
-	exists, err := NewExistsBuilder(table).AppendFields(p._Fields...).Exists(queryHandler)
+	exists, err := NewExistsBuilder(table).AppendFields(p._Fields...).Exists()
 	if err != nil {
 		return false, 0, 0, err
 	}
 	if exists {
-		rowsAffected, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ExecWithRowsAffected(execHandler)
+		rowsAffected, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ExecWithRowsAffected()
 	} else {
-		lastInsertId, rowsAffected, err = NewInsertBuilder(table).AppendFields(p._Fields...).InsertWithLastId(insertWithLastIdHandler)
+		lastInsertId, rowsAffected, err = NewInsertBuilder(table).AppendFields(p._Fields...).InsertWithLastId()
 	}
 	isInsert = !exists
 	return isInsert, lastInsertId, rowsAffected, err

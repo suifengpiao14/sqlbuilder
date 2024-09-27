@@ -371,6 +371,13 @@ func (f *Field) Comment(comment string) *Field {
 	f.MergeSchema(Schema{Comment: comment})
 	return f
 }
+func (f *Field) SetLength(maxLength int) *Field {
+	if f.Schema == nil {
+		f.Schema = &Schema{}
+	}
+	f.Schema.MaxLength = maxLength
+	return f
+}
 
 // SetDescription 设置描述 针对api 语义化
 func (f *Field) SetDescription(description string) *Field {
