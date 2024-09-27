@@ -43,6 +43,9 @@ func (b *Builder) FirstParam() *FirstParam {
 func (b *Builder) InsertParam() *InsertParam {
 	return NewInsertBuilder(b.table).WithHandler(b.handler.Exec, b.handler.InsertWithLastIdHandler)
 }
+func (b *Builder) BatchInsertParam() *BatchInsertParam {
+	return NewBatchInsertBuilder(b.table).WithHandler(b.handler.Exec, b.handler.InsertWithLastIdHandler)
+}
 func (b *Builder) UpdateParam() *UpdateParam {
 	return NewUpdateBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected)
 }
