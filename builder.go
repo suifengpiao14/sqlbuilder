@@ -18,83 +18,87 @@ type Builder struct {
 	table   string
 }
 
-func NewGormBuilder(table string, getDB func() *gorm.DB) *Builder {
+func NewGormBuilder(table string, getDB func() *gorm.DB) Builder {
 	handler := NewGormHandler(getDB)
-	return &Builder{handler: handler, table: table}
+	return Builder{handler: handler, table: table}
 }
 
-func NewBuilder(table string, handler Handler) *Builder {
-	return &Builder{handler: handler, table: table}
+func NewBuilder(table string, handler Handler) Builder { // 因为 WithHandler 需要复制，所以这里统一不返回地址值
+	return Builder{handler: handler, table: table}
 }
 
-func (b *Builder) TotalParam() *TotalParam {
+func (b Builder) WithHandler(handler Handler) Builder { // transaction 时候需要重新设置handler
+	return Builder{table: b.table, handler: handler}
+}
+
+func (b Builder) TotalParam() *TotalParam {
 	return NewTotalBuilder(b.table).WithHandler(b.handler.Count)
 }
-func (b *Builder) ListParam() *ListParam {
+func (b Builder) ListParam() *ListParam {
 	return NewListBuilder(b.table).WithHandler(b.handler.Query)
 }
 
-func (b *Builder) PaginationParam() *PaginationParam {
+func (b Builder) PaginationParam() *PaginationParam {
 	return NewPaginationBuilder(b.table).WithHandler(b.handler.Pagination)
 }
-func (b *Builder) FirstParam() *FirstParam {
+func (b Builder) FirstParam() *FirstParam {
 	return NewFirstBuilder(b.table).WithHandler(b.handler.First)
 }
-func (b *Builder) InsertParam() *InsertParam {
+func (b Builder) InsertParam() *InsertParam {
 	return NewInsertBuilder(b.table).WithHandler(b.handler.Exec, b.handler.InsertWithLastIdHandler)
 }
-func (b *Builder) BatchInsertParam() *BatchInsertParam {
+func (b Builder) BatchInsertParam() *BatchInsertParam {
 	return NewBatchInsertBuilder(b.table).WithHandler(b.handler.Exec, b.handler.InsertWithLastIdHandler)
 }
-func (b *Builder) UpdateParam() *UpdateParam {
+func (b Builder) UpdateParam() *UpdateParam {
 	return NewUpdateBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected)
 }
-func (b *Builder) DeleteParam() *DeleteParam {
+func (b Builder) DeleteParam() *DeleteParam {
 	return NewDeleteBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected)
 }
 
-func (b *Builder) ExistsParam() *ExistsParam {
+func (b Builder) ExistsParam() *ExistsParam {
 	return NewExistsBuilder(b.table).WithHandler(b.handler.Query)
 }
-func (b *Builder) SetParam() *SetParam {
+func (b Builder) SetParam() *SetParam {
 	return NewSetBuilder(b.table).WithHandler(b.handler.Query, b.handler.InsertWithLastIdHandler, b.handler.ExecWithRowsAffected)
 }
 
-func (b *Builder) Count(fields ...*Field) (count int64, err error) {
+func (b Builder) Count(fields ...*Field) (count int64, err error) {
 	return b.TotalParam().AppendFields(fields...).Count()
 }
 
-func (b *Builder) List(result any, fields ...*Field) (err error) {
+func (b Builder) List(result any, fields ...*Field) (err error) {
 	return b.ListParam().AppendFields(fields...).Query(result)
 }
 
-func (b *Builder) Pagination(result any, fields ...*Field) (count int64, err error) {
+func (b Builder) Pagination(result any, fields ...*Field) (count int64, err error) {
 	return b.PaginationParam().AppendFields(fields...).Pagination(result)
 }
 
-func (b *Builder) First(result any, fields ...*Field) (exists bool, err error) {
+func (b Builder) First(result any, fields ...*Field) (exists bool, err error) {
 	return b.FirstParam().AppendFields(fields...).First(result)
 }
 
-func (b *Builder) Insert(fields ...*Field) (err error) {
+func (b Builder) Insert(fields ...*Field) (err error) {
 	return b.InsertParam().AppendFields(fields...).Exec()
 }
-func (b *Builder) BatchInsert(fields ...Fields) (err error) {
+func (b Builder) BatchInsert(fields ...Fields) (err error) {
 	return b.BatchInsertParam().AppendFields(fields...).Exec()
 }
 
-func (b *Builder) Update(fields ...*Field) (err error) {
+func (b Builder) Update(fields ...*Field) (err error) {
 	return b.UpdateParam().AppendFields(fields...).Exec()
 }
 
-func (b *Builder) Delete(fields ...*Field) (err error) {
+func (b Builder) Delete(fields ...*Field) (err error) {
 	return b.DeleteParam().AppendFields(fields...).Exec()
 }
 
-func (b *Builder) Exists(fields ...*Field) (exists bool, err error) {
+func (b Builder) Exists(fields ...*Field) (exists bool, err error) {
 	return b.ExistsParam().AppendFields(fields...).Exists()
 }
-func (b *Builder) Set(fields ...*Field) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
+func (b Builder) Set(fields ...*Field) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
 	return b.SetParam().AppendFields(fields...).Set()
 }
 
