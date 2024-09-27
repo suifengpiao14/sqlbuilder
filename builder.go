@@ -79,6 +79,9 @@ func (b *Builder) First(result any, fields ...*Field) (exists bool, err error) {
 func (b *Builder) Insert(fields ...*Field) (err error) {
 	return b.InsertParam().AppendFields(fields...).Exec()
 }
+func (b *Builder) BatchInsert(fields ...Fields) (err error) {
+	return b.BatchInsertParam().AppendFields(fields...).Exec()
+}
 
 func (b *Builder) Update(fields ...*Field) (err error) {
 	return b.UpdateParam().AppendFields(fields...).Exec()
