@@ -27,45 +27,69 @@ func NewBuilder(table string, handler Handler) *Builder {
 	return &Builder{handler: handler, table: table}
 }
 
+func (b *Builder) TotalParam() *TotalParam {
+	return NewTotalBuilder(b.table).WithHandler(b.handler.Count)
+}
+func (b *Builder) ListParam() *ListParam {
+	return NewListBuilder(b.table).WithHandler(b.handler.Query)
+}
+
+func (b *Builder) PaginationParam() *PaginationParam {
+	return NewPaginationBuilder(b.table).WithHandler(b.handler.Pagination)
+}
+func (b *Builder) FirstParam() *FirstParam {
+	return NewFirstBuilder(b.table).WithHandler(b.handler.First)
+}
+func (b *Builder) InsertParam() *InsertParam {
+	return NewInsertBuilder(b.table).WithHandler(b.handler.Exec, b.handler.InsertWithLastIdHandler)
+}
+func (b *Builder) UpdateParam() *UpdateParam {
+	return NewUpdateBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected)
+}
+func (b *Builder) DeleteParam() *DeleteParam {
+	return NewDeleteBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected)
+}
+
+func (b *Builder) ExistsParam() *ExistsParam {
+	return NewExistsBuilder(b.table).WithHandler(b.handler.Query)
+}
+func (b *Builder) SetParam() *SetParam {
+	return NewSetBuilder(b.table).WithHandler(b.handler.Query, b.handler.InsertWithLastIdHandler, b.handler.ExecWithRowsAffected)
+}
+
 func (b *Builder) Count(fields ...*Field) (count int64, err error) {
-	return NewTotalBuilder(b.table).WithHandler(b.handler.Count).AppendFields(fields...).Count()
+	return b.TotalParam().AppendFields(fields...).Count()
 }
 
 func (b *Builder) List(result any, fields ...*Field) (err error) {
-	return NewListBuilder(b.table).WithHandler(b.handler.Query).AppendFields(fields...).Query(result)
+	return b.ListParam().AppendFields(fields...).Query(result)
 }
 
 func (b *Builder) Pagination(result any, fields ...*Field) (count int64, err error) {
-	return NewPaginationBuilder(b.table).WithHandler(b.handler.Pagination).AppendFields(fields...).Pagination(result)
+	return b.PaginationParam().AppendFields(fields...).Pagination(result)
 }
 
 func (b *Builder) First(result any, fields ...*Field) (exists bool, err error) {
-	return NewFirstBuilder(b.table).WithHandler(b.handler.First).AppendFields(fields...).First(result)
+	return b.FirstParam().AppendFields(fields...).First(result)
 }
+
 func (b *Builder) Insert(fields ...*Field) (err error) {
-	return NewInsertBuilder(b.table).WithHandler(b.handler.Exec, nil).AppendFields(fields...).Exec()
+	return b.InsertParam().AppendFields(fields...).Exec()
 }
-func (b *Builder) InsertWithLastInsertId(fields ...*Field) (lastInsertId uint64, rowsAffected int64, err error) {
-	return NewInsertBuilder(b.table).WithHandler(nil, b.handler.InsertWithLastIdHandler).AppendFields(fields...).InsertWithLastId()
-}
+
 func (b *Builder) Update(fields ...*Field) (err error) {
-	return NewUpdateBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected).AppendFields(fields...).Exec()
+	return b.UpdateParam().AppendFields(fields...).Exec()
 }
-func (b *Builder) UpdateWithRowsAffected(fields ...*Field) (rowsAffected int64, err error) {
-	return NewUpdateBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected).AppendFields(fields...).ExecWithRowsAffected()
-}
+
 func (b *Builder) Delete(fields ...*Field) (err error) {
-	return NewDeleteBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected).AppendFields(fields...).Exec()
-}
-func (b *Builder) DeleteWithRowsAffected(fields ...*Field) (rowsAffected int64, err error) {
-	return NewDeleteBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected).AppendFields(fields...).ExecWithRowsAffected()
+	return b.DeleteParam().AppendFields(fields...).Exec()
 }
 
 func (b *Builder) Exists(fields ...*Field) (exists bool, err error) {
-	return NewExistsBuilder(b.table).WithHandler(b.handler.Query).AppendFields(fields...).Exists()
+	return b.ExistsParam().AppendFields(fields...).Exists()
 }
 func (b *Builder) Set(fields ...*Field) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
-	return NewSetBuilder(b.table).WithHandler(b.handler.Query, b.handler.InsertWithLastIdHandler, b.handler.ExecWithRowsAffected).AppendFields(fields...).Set()
+	return b.SetParam().AppendFields(fields...).Set()
 }
 
 type Driver string
