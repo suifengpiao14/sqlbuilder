@@ -29,6 +29,7 @@ type Schema struct {
 	Unique        bool `json:"unique"`  // 是否为唯一键
 	AutoIncrement bool `json:"autoIncrement"`
 	ShieldUpdate  bool `json:"shieldUpdate"` //屏蔽更新该字段,适合不可更新字段,如tenat,deleted_at
+	ZeroAsEmpty   bool `json:"zeroAsEmpty"`  //0值是否当做空值处理，验证required 时有使用
 }
 
 func (schema Schema) FullComment() string {
@@ -56,6 +57,10 @@ func (schema Schema) SetMinLength(min int) *Schema {
 }
 func (schema Schema) SetMinimum(min int) *Schema {
 	schema.Minimum = min
+	return &schema
+}
+func (schema Schema) SetZeroAsEmpty(zeroAsEmpty bool) *Schema {
+	schema.ZeroAsEmpty = true
 	return &schema
 }
 
@@ -442,7 +447,7 @@ func (schema Schema) Validate(fieldName string, field reflect.Value) error {
 func (schema Schema) validate(fieldName string, field reflect.Value) error {
 	// 验证 required
 	isNotValid := !field.IsValid() // 空值 由nil 过来的值
-	if schema.Required && (isNotValid || isEmptyValue(field)) {
+	if schema.Required && (isNotValid || isEmptyValue(field, schema.ZeroAsEmpty)) {
 		return fmt.Errorf("%s is required", fieldName)
 	}
 	if isNotValid {
@@ -511,7 +516,7 @@ func (schema Schema) validate(fieldName string, field reflect.Value) error {
 	return nil
 }
 
-func isEmptyValue(v reflect.Value) bool {
+func isEmptyValue(v reflect.Value, zeroAsEmpty bool) bool {
 	if !v.IsValid() {
 		return true
 	}
@@ -523,14 +528,20 @@ func isEmptyValue(v reflect.Value) bool {
 		return v.Len() == 0
 	case reflect.Array, reflect.Slice, reflect.Map, reflect.Chan:
 		return v.Len() == 0
-	// case reflect.Bool:
-	// 	return !v.Bool()
-	// case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-	// 	return v.Int() == 0
-	// case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-	// 	return v.Uint() == 0
-	// case reflect.Float32, reflect.Float64:
-	// 	return v.Float() == 0
+		// case reflect.Bool:
+		// 	return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if zeroAsEmpty {
+			return v.Int() == 0
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		if zeroAsEmpty {
+			return v.Uint() == 0
+		}
+	case reflect.Float32, reflect.Float64:
+		if zeroAsEmpty {
+			return v.Float() == 0
+		}
 	case reflect.Interface, reflect.Ptr:
 		return v.IsNil()
 	}
