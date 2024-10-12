@@ -38,7 +38,7 @@ func TestFieldStructToArray(t *testing.T) {
 	out := ErrorOut{
 		Data: PaginationOut{},
 	}
-	respFields := sqlbuilder.FieldStructToArray(out, StructFieldCustom, ArrayFieldCustom)
+	respFields := sqlbuilder.StructToFields(out, StructFieldCustom, ArrayFieldCustom)
 	fmt.Println(respFields)
 }
 
@@ -140,4 +140,11 @@ func getJsonTag(val reflect.StructField) (jsonTag string) {
 		tag = ""
 	}
 	return tag
+}
+
+func TestIsGenericByFieldFn(t *testing.T) {
+	var a sqlbuilder.FieldFn[int]
+	ok := sqlbuilder.IsGenericByFieldFn(reflect.TypeOf(a))
+	fmt.Println(ok)
+
 }

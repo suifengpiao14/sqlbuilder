@@ -619,6 +619,21 @@ func (f *Field) SceneSelect(middlewareFn ApplyFn) *Field {
 
 type FieldFn[T any] func(value T) *Field
 
+func IsGenericByFieldFn(rt reflect.Type) bool {
+	if rt.Kind() != reflect.Func {
+		return false
+	}
+	if rt.NumIn() != 1 {
+		return false
+	}
+	if rt.NumOut() != 1 {
+		return false
+	}
+	returnT := rt.Out(0)
+	canConvert := returnT.ConvertibleTo(reflect.TypeOf((*Field)(nil)))
+	return canConvert
+}
+
 func (fn FieldFn[T]) Apply(value T) *Field {
 	return fn(value)
 }
@@ -711,7 +726,6 @@ func (f *Field) SetDocName(docName string) *Field {
 	f.docName = docName
 	return f
 }
-
 func (f Field) GetDocName() string {
 	if f.docName == "" {
 		f.docName = f.Name
@@ -941,6 +955,16 @@ type FieldsI interface {
 
 type Fields []*Field
 
+func (fs Fields) Fielter(fn func(f Field) bool) (fields Fields) {
+	fields = make(Fields, 0)
+	for _, f := range fs {
+		if fn(*f) {
+			fields = append(fields, f)
+		}
+	}
+	return fields
+}
+
 func (fs Fields) Copy() (fields Fields) {
 	fields = make(Fields, 0)
 	for _, f := range fs {
@@ -949,28 +973,18 @@ func (fs Fields) Copy() (fields Fields) {
 	return fields
 }
 
-type ValidateErrors []error
-
-func (errs ValidateErrors) Error() string {
-	var err error
-	for _, e := range errs {
-		err = errors.Wrap(err, e.Error())
-	}
-	return err.Error()
-}
-
 // Validate 方便前期校验
-func (fs Fields) Validate() (errs ValidateErrors) {
-	errs = make(ValidateErrors, 0)
+func (fs Fields) Validate() (err error) {
+
 	for _, f := range fs {
 		field := f.InjectValueFn()
 		field.ValueFns = field.ValueFns.GetByLayer(Value_Layer_SetValue, Value_Layer_ApiFormat)
-		_, err := field.getValue()
-		if err != nil {
-			errs = append(errs, err)
+		_, e := field.getValue()
+		if e != nil {
+			err = errors.Wrap(err, e.Error())
 		}
 	}
-	return errs
+	return err
 }
 
 func (fs Fields) SetSceneIfEmpty(scene Scene) Fields {
@@ -1295,8 +1309,8 @@ var FieldName2DBColumnName = func(fieldName string) (dbColumnName string) {
 	return dbColumnName
 }
 
-// FieldStructToArray 将结构体结构的fields 转换成 数组类型 结构体格式的feilds 方便编程引用, 数组类型fields 方便当作数据批量处理,常用于生产文档、ddl等场景,支持对象属性、数组类型定制化
-func FieldStructToArray(stru any,
+// StructToFields 将结构体结构的fields 转换成 数组类型 结构体格式的feilds 方便编程引用, 数组类型fields 方便当作数据批量处理,常用于生产文档、ddl等场景,支持对象属性、数组类型定制化
+func StructToFields(stru any,
 	structFieldCustomFn func(val reflect.Value, structField reflect.StructField, fs Fields) Fields,
 	arrayFieldCustomFn func(fs Fields) Fields,
 ) Fields {
@@ -1305,11 +1319,11 @@ func FieldStructToArray(stru any,
 		return fs
 	}
 	val := reflect.Indirect(reflect.ValueOf(stru))
-	fs = fieldStructToArray(val, structFieldCustomFn, arrayFieldCustomFn)
+	fs = structToFields(val, structFieldCustomFn, arrayFieldCustomFn)
 	return fs
 }
 
-func fieldStructToArray(val reflect.Value,
+func structToFields(val reflect.Value,
 	structFieldCustomFn func(val reflect.Value, structField reflect.StructField, fs Fields) Fields,
 	arrayFieldCustomFn func(fs Fields) Fields,
 ) Fields {
@@ -1322,6 +1336,7 @@ func fieldStructToArray(val reflect.Value,
 		return fs
 	}
 	typ := val.Type()
+
 	switch typ.Kind() {
 	// 整型、字符串 等基本类型不处理, 对于使用 FieldsI 接口的,充分应用了这点
 	case reflect.Func:
@@ -1337,14 +1352,25 @@ func fieldStructToArray(val reflect.Value,
 	case reflect.Struct:
 		isImplementedFieldI := typ.Implements(reflect.TypeOf((*FieldsI)(nil)).Elem())
 		if isImplementedFieldI {
-			if fieldsI, ok := val.Interface().(FieldsI); ok {
-				fs = append(fs, fieldsI.Fields()...)
+			hasFieldAttr := false // 判断属性是否包含 *Field类型，如果包含，则 不能调用 Fields() 方法(会循环调用)
+			for i := 0; i < val.NumField(); i++ {
+				attrType := val.Field(i).Type()
+				if IsGenericByFieldFn(attrType) {
+					hasFieldAttr = true
+					break
+				}
+			}
+
+			if !hasFieldAttr {
+				if fieldsI, ok := val.Interface().(FieldsI); ok {
+					fs = append(fs, fieldsI.Fields()...)
+				}
 			}
 		}
 		for i := 0; i < val.NumField(); i++ {
 			field := val.Field(i)
 			attr := typ.Field(i)
-			subFields := fieldStructToArray(field, structFieldCustomFn, arrayFieldCustomFn)
+			subFields := structToFields(field, structFieldCustomFn, arrayFieldCustomFn)
 			if structFieldCustomFn != nil {
 				subFields = structFieldCustomFn(field, attr, subFields)
 			}
@@ -1358,16 +1384,26 @@ func fieldStructToArray(val reflect.Value,
 			childTyp = childTyp.Elem()
 		}
 		childVal := reflect.New(childTyp)
-		subFields := fieldStructToArray(childVal, structFieldCustomFn, arrayFieldCustomFn)
+		subFields := structToFields(childVal, structFieldCustomFn, arrayFieldCustomFn)
 		if arrayFieldCustomFn != nil {
 			subFields = arrayFieldCustomFn(subFields)
 		}
 		fs = append(fs, subFields...)
 	case reflect.Interface:
 		childVal := val.Elem()
-		subFields := fieldStructToArray(childVal, structFieldCustomFn, arrayFieldCustomFn)
+		subFields := structToFields(childVal, structFieldCustomFn, arrayFieldCustomFn)
 		fs = append(fs, subFields...)
 
 	}
-	return fs
+	//去重
+	m := make(map[string]bool)
+	uFs := Fields{}
+	for _, f := range fs {
+		docName := f.GetDocName()
+		if !m[docName] {
+			uFs = append(uFs, f)
+		}
+		m[docName] = true
+	}
+	return uFs
 }
