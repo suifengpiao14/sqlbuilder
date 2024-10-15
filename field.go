@@ -275,8 +275,7 @@ const (
 func (f *Field) Copy() (copyF *Field) {
 	fcp := *f
 	if f.Schema != nil { // schema 为地址引用，需要单独复制
-		schema := *f.Schema
-		fcp.Schema = &schema
+		fcp.Schema = f.Schema.Copy()
 	}
 	return &fcp
 }
@@ -791,8 +790,8 @@ func (f Field) getValue() (value any, err error) {
 }
 
 // WhereData 获取Where 值
-func (f Field) WhereData(fs ...*Field) (value any, err error) {
-	f = *f.Copy()
+func (f1 Field) WhereData(fs ...*Field) (value any, err error) {
+	f := *f1.Copy()
 	f.Init(fs...)
 	if len(f.WhereFns) == 0 {
 		return nil, nil
@@ -904,8 +903,8 @@ func (c Field) formatSingleType(val any) any {
 	return value
 }
 
-func (f Field) Data(fs ...*Field) (data any, err error) {
-	f = *f.Copy() // 复制一份,不影响其它场景
+func (f1 Field) Data(fs ...*Field) (data any, err error) {
+	f := *f1.Copy() // 复制一份,不影响其它场景
 	f.Init(fs...)
 	val, err := f.GetValue()
 	if IsErrorValueNil(err) {

@@ -32,6 +32,13 @@ type Schema struct {
 	ZeroAsEmpty   bool `json:"zeroAsEmpty"`  //0值是否当做空值处理，验证required 时有使用
 }
 
+func (schema *Schema) Copy() *Schema {
+	cp := *schema
+	cp.Enums = make(Enums, 0)
+	cp.Enums = append(cp.Enums, schema.Enums...) // 这里需要重新赋值，才能copy
+
+	return &cp
+}
 func (schema Schema) FullComment() string {
 	if schema.Comment == "" {
 		schema.Comment = schema.Title
