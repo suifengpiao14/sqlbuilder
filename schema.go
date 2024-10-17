@@ -17,6 +17,7 @@ type Schema struct {
 	Required  bool       `json:"required,string"` // 对应数据库的not null
 	Comment   string     `json:"comment"`
 	Type      SchemaType `json:"type"`
+	Format    string     `json:"format"` // db 中时间字段，有时db为string,需要标记为时间格式，所以增加这个字段
 	Default   any        `json:"default"`
 	Enums     Enums      `json:"enums"`
 	MaxLength int        `json:"maxLength"` // 字符串最大长度
@@ -31,6 +32,12 @@ type Schema struct {
 	ShieldUpdate  bool `json:"shieldUpdate"` //屏蔽更新该字段,适合不可更新字段,如tenat,deleted_at
 	ZeroAsEmpty   bool `json:"zeroAsEmpty"`  //0值是否当做空值处理，验证required 时有使用
 }
+
+const (
+	Schema_format_date     = "date"
+	Schema_format_time     = "time"
+	Schema_format_dateTime = "datetime"
+)
 
 func (schema *Schema) Copy() *Schema {
 	cp := *schema
@@ -98,6 +105,9 @@ func (s *Schema) Merge(megred Schema) *Schema {
 	}
 	if megred.Type != "" {
 		s.Type = megred.Type
+	}
+	if megred.Format != "" {
+		s.Format = megred.Format
 	}
 	if megred.Default != "" {
 		s.Default = megred.Default

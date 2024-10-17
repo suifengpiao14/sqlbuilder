@@ -358,6 +358,10 @@ func (f *Field) SetType(typ SchemaType) *Field {
 	f.MergeSchema(Schema{Type: typ})
 	return f
 }
+func (f *Field) SetFormat(format string) *Field {
+	f.MergeSchema(Schema{Format: format})
+	return f
+}
 
 func (f *Field) SetBaseInfo(name string, typ SchemaType, title string) *Field {
 	f.SetName(name).SetType(typ).SetTitle(title)
