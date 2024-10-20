@@ -525,10 +525,13 @@ func (schema Schema) validate(fieldName string, field reflect.Value) error {
 			return err
 		}
 		str := cast.ToString(field.Interface())
-		if !ex.MatchString(str) {
-			err = errors.Errorf("%s RegExp is %s,got:%s", fieldName, schema.RegExp, str)
-			return err
+		if str != "" {
+			if !ex.MatchString(str) {
+				err = errors.Errorf("%s RegExp is %s,got:%s", fieldName, schema.RegExp, str)
+				return err
+			}
 		}
+
 	}
 	return nil
 }
