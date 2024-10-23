@@ -133,6 +133,21 @@ var ApplyFnWhereFindInColumnSet ApplyFn = func(f *Field, fs ...*Field) {
 	})
 }
 
+// ApplyFnValueFnSetIfEmpty 数据库值为空则修改,否则不修改,用于update
+var ApplyFnValueFnSetIfEmpty ApplyFn = func(f *Field, fs ...*Field) {
+	f.ValueFns.Append(ValueFn{
+		Layer: Value_Layer_NotForWhere,
+		Fn: func(inputValue any) (any, error) {
+			if IsNil(inputValue) {
+				return nil, nil
+			}
+			column := goqu.C(f.DBName())
+			expression := goqu.L("if(?,?,?) ", column, column, inputValue)
+			return expression, nil
+		},
+	})
+}
+
 var ApplyFnValueFormatBySchemaType ApplyFn = func(f *Field, fs ...*Field) {
 	f.ValueFns.Append(ValueFn{
 		Fn: func(inputValue any) (any, error) {
@@ -152,21 +167,27 @@ var ApplyFnValueEmpty2Nil ApplyFn = func(f *Field, fs ...*Field) {
 }
 var ERROR_Unique = errors.New("unique error")
 
-// ApplyFnUniqueField 单列唯一索引键,新增场景中间件
-func ApplyFnUniqueField(table string, queryFn QueryHandler) ApplyFn {
+func ApplyFnUnique(queryFn QueryHandler) ApplyFn { // 复合索引，给一列应用该中间件即可
 	return func(f *Field, fs ...*Field) {
 		sceneFnName := "checkexists"
 		sceneFn := SceneFn{
 			Name:  sceneFnName,
 			Scene: SCENE_SQL_INSERT,
 			Fn: func(f *Field, fs ...*Field) {
-				f.SetRequired(true)          // 新增场景 设置必填
-				f1 := f.Copy()               //复制不影响外部,在内部copy 是运行时 copy,确保 builder阶段的设置都能考呗到
-				f1.SceneFnRmove(sceneFnName) // 避免死循环
-				f1.WhereFns.Append(ValueFnForward)
+				allFields := Fields(fs)
+				f1 := f.Copy() //复制不影响外部,在内部copy 是运行时 copy,确保 builder阶段的设置都能考呗到
+				table := f1.GetTable()
+				f1.SetRequired(true) // 新增场景 设置必填
+				uniqueFields := allFields.GetByIndex(f1.GetIndexs().GetUnique()...).Copy()
+				uniqueFields.Replace(f1) //替换成当前 f1 字段
+				uniqueFields.Apply(func(f *Field, fs ...*Field) {
+					f.ShieldUpdate(true)
+					f.SceneFnRmove(sceneFnName) // 避免死循环
+					f.WhereFns.Append(ValueFnForward)
+				})
 				f.ValueFns.Append(ValueFn{
 					Fn: func(inputValue any) (any, error) {
-						exitstsParam := NewExistsBuilder(table).WithHandler(queryFn).AppendFields(f1)
+						exitstsParam := NewExistsBuilder(table).WithHandler(queryFn).AppendFields(uniqueFields...)
 						exists, err := exitstsParam.Exists()
 						if err != nil {
 							return nil, err
@@ -191,6 +212,11 @@ func ApplyFnUniqueField(table string, queryFn QueryHandler) ApplyFn {
 			f.WhereFns.Append(ValueFnEmpty2Nil)
 		})
 	}
+}
+
+// Deprecated ApplyFnUniqueField 单列唯一索引键,新增场景中间件
+func ApplyFnUniqueField(table string, queryFn QueryHandler) ApplyFn {
+	return ApplyFnUnique(queryFn)
 }
 
 func ApplyFnUpdateIfNull(table string, firstHandler FirstHandler) ApplyFn {

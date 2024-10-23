@@ -31,11 +31,12 @@ const (
 	Value_Layer_ApiValidate Layer = "ApiValidate" //验证层
 	Value_Layer_DBValidate  Layer = "DBValidate"  //DB验证层
 	Value_Layer_DBFormat    Layer = "DBFormat"    //格式化层
+	Value_Layer_NotForWhere Layer = "NotForWhere" //不使用到where中(仅用于写数据时使用，用于insert，update的set部分)
 
 )
 
 var (
-	Layer_order = []Layer{Value_Layer_SetValue, Value_Layer_ApiFormat, Value_Layer_ApiValidate, Value_Layer_DBValidate, Value_Layer_DBFormat} // 层序,越靠前越先执行
+	Layer_order = []Layer{Value_Layer_SetValue, Value_Layer_ApiFormat, Value_Layer_ApiValidate, Value_Layer_DBValidate, Value_Layer_DBFormat, Value_Layer_NotForWhere} // 层序,越靠前越先执行
 )
 
 type ValueFnFn func(inputValue any) (any, error)
@@ -236,6 +237,50 @@ type Field struct {
 	docName       string
 	selectColumns []any  // 查询时列
 	fieldName     string //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
+	indexs        Indexs // 索引
+}
+
+type Index struct {
+	Unique bool   `json:"unique"` // 是否唯一索引
+	Name   string `json:"name"`   // 索引名称
+	Order  int    `json:"order"`  // 复合索引时,需要指定顺序,数字小的排前面
+}
+
+func (i *Index) WithOrder(order int) *Index {
+	i.Order = order
+	return i
+}
+
+type Indexs []Index
+
+func (is *Indexs) Append(indexs ...Index) {
+	if *is == nil {
+		*is = make(Indexs, 0)
+	}
+	for _, index := range indexs {
+		if is.HasIndex(index) {
+			continue
+		}
+		*is = append(*is, index)
+	}
+}
+func (is Indexs) HasIndex(index Index) bool {
+	for _, i := range is {
+		if index.Name == i.Name && index.Unique == i.Unique {
+			return true
+		}
+	}
+	return false
+}
+
+func (is Indexs) GetUnique() (uniqueIndex Indexs) {
+	uniqueIndex = make(Indexs, 0)
+	for _, index := range is {
+		if index.Unique {
+			uniqueIndex = append(uniqueIndex, index)
+		}
+	}
+	return uniqueIndex
 }
 
 type Tags []string
@@ -277,6 +322,10 @@ func (f *Field) Copy() (copyF *Field) {
 	if f.Schema != nil { // schema 为地址引用，需要单独复制
 		fcp.Schema = f.Schema.Copy()
 	}
+	tags := f.tags
+	fcp.tags = tags
+	indexs := f.indexs
+	fcp.indexs = indexs
 	return &fcp
 }
 
@@ -284,6 +333,11 @@ const (
 	Tag_createdAt = "createdAt"
 	Tag_updatedAt = "updatedAt"
 )
+
+func (f *Field) AddIndex(indexs ...Index) *Field {
+	f.indexs.Append(indexs...)
+	return f
+}
 
 func (f *Field) SetOrderFn(orderFn OrderFn) *Field {
 	f._OrderFn = orderFn
@@ -293,6 +347,9 @@ func (f *Field) SetOrderFn(orderFn OrderFn) *Field {
 func (f *Field) SetTable(table string) *Field {
 	f.table = table
 	return f
+}
+func (f *Field) GetTable() (table string) {
+	return f.table
 }
 
 func (f *Field) GetScene() (scena Scene) {
@@ -401,6 +458,16 @@ func (f *Field) HastTag(tag string) bool {
 	return f.tags.HastTag(tag)
 }
 
+func (f *Field) HasIndex(index Index) bool {
+	if len(f.indexs) == 0 {
+		return false
+	}
+	return f.indexs.HasIndex(index)
+}
+func (f *Field) GetIndexs() Indexs {
+	return f.indexs
+}
+
 func (f *Field) GetTags() Tags {
 	return f.tags
 }
@@ -494,6 +561,7 @@ func (f *Field) Combine(combinedFields ...*Field) *Field {
 		if len(f.selectColumns) == 0 {
 			f.selectColumns = combined.selectColumns
 		}
+		f.indexs.Append(combined.indexs...)
 		if f.fieldName == "" {
 			f.fieldName = combined.fieldName
 		}
@@ -800,6 +868,14 @@ func (f1 Field) WhereData(fs ...*Field) (value any, err error) {
 	if len(f.WhereFns) == 0 {
 		return nil, nil
 	}
+	valueFns := ValueFns{}
+	for _, vFn := range f.ValueFns {
+		if vFn.Layer == Value_Layer_NotForWhere { // 过滤不应用到where上的数据处理函数
+			continue
+		}
+		valueFns.Append(vFn)
+	}
+	f.ValueFns = valueFns
 	value, err = f.GetValue()
 	if IsErrorValueNil(err) {
 		err = nil // 这里不直接返回，仍然遍历 执行whereFns，方便理解流程（直接返回后，期望的whereFn没有执行，不知道流程在哪里中断了，也没有错误抛出，非常困惑，所以不能直接返回）
@@ -952,6 +1028,14 @@ func (f Field) Order(fs ...*Field) (orderedExpressions []exp.OrderedExpression) 
 	return orderedExpressions
 }
 
+func NotForWhereValueFn(valueFnFn ValueFnFn) ValueFn {
+	return ValueFn{
+		Fn:          valueFnFn,
+		Layer:       Value_Layer_NotForWhere,
+		Description: "当计算where条件时不使用,仅用于insert,update 的 set 部分", // 描述
+	}
+}
+
 type FieldsI interface {
 	Fields() Fields
 }
@@ -1078,12 +1162,50 @@ func (fs Fields) Contains(field Field) (exists bool) {
 	return false
 }
 
+func (fs *Fields) Apply(applyFns ...ApplyFn) *Fields {
+	for i := 0; i < len(*fs); i++ {
+		(*fs)[i] = (*fs)[i].Apply(applyFns...)
+	}
+	return fs
+}
+
 func (fs *Fields) Append(fields ...*Field) *Fields {
 	if *fs == nil {
 		*fs = make(Fields, 0)
 	}
 	*fs = append(*fs, fields...)
 	return fs
+}
+func (fs *Fields) Replace(fields ...*Field) *Fields {
+	if *fs == nil {
+		*fs = make(Fields, 0)
+	}
+	for _, f := range fields {
+		exists := false
+		for i := 0; i < len(*fs); i++ {
+			if (*fs)[i].Name == f.Name {
+				(*fs)[i] = f
+				exists = true
+				break
+
+			}
+		}
+		if !exists {
+			fs.Append(f)
+		}
+	}
+	return fs
+}
+
+func (fs Fields) Remove(fields ...*Field) *Fields {
+	subFs := make(Fields, 0)
+	removeFields := Fields(fields)
+	for i := 0; i < len(fs); i++ {
+		if !removeFields.Contains(*fs[i]) {
+			subFs = append(subFs, fs[i])
+		}
+	}
+	return &subFs
 }
 
 func (fs Fields) WithMiddlewares(middlewares ...ApplyFn) Fields {
@@ -1139,6 +1261,18 @@ func (fs Fields) GetByTag(tag string) (f *Field, ok bool) {
 	}
 	return nil, false
 }
+func (fs Fields) GetByIndex(indexs ...Index) (subFs Fields) {
+	subFs = make(Fields, 0)
+	for i := 0; i < len(fs); i++ {
+		for _, index := range indexs {
+			if fs[i].HasIndex(index) {
+				subFs = append(subFs, fs[i])
+			}
+		}
+	}
+	return subFs
+}
+
 func (fs Fields) GetByFieldName(fieldName string) (*Field, bool) {
 	for i := 0; i < len(fs); i++ {
 		f := fs[i]
