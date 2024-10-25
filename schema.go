@@ -29,7 +29,7 @@ type Schema struct {
 	Primary       bool `json:"primary"` //是否为主键
 	Unique        bool `json:"unique"`  // 是否为唯一键
 	AutoIncrement bool `json:"autoIncrement"`
-	ShieldUpdate  bool `json:"shieldUpdate"` //屏蔽更新该字段,适合不可更新字段,如tenat,deleted_at
+	ShieldUpdate  bool `json:"shieldUpdate"` //Deprecated 可以使用 sqlbuilder.ValueFnShieldForWrite 代替
 	ZeroAsEmpty   bool `json:"zeroAsEmpty"`  //0值是否当做空值处理，验证required 时有使用
 }
 
@@ -657,11 +657,16 @@ func ValueFnDecodeCommaFn(in any) (any, error) {
 }
 
 var ValueFnShield = ValueFn{ // 屏蔽数据
-	Fn: func(in any) (any, error) {
-		return nil, nil
-	},
+	Fn:    ValueFnShieldFn,
 	Layer: Value_Layer_DBFormat,
 }
+
+func ValueFnShieldFn(in any) (any, error) {
+	return nil, nil
+}
+
+// 屏蔽新增、修改 数据
+var ValueFnShieldForData = ValueFnOnlyForData(ValueFnShieldFn)
 
 var ValueFnEmpty2Nil = ValueFn{ // 空字符串改成nil,值改成nil后,sql语句中会忽略该字段,常常用在update,where 字句中
 	Fn: func(in any) (any, error) {

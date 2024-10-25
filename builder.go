@@ -35,37 +35,60 @@ func (b Builder) Handler() (handler Handler) { // 提供给外部使用
 	return b.handler
 }
 
-func (b Builder) TotalParam() *TotalParam {
-	return NewTotalBuilder(b.table).WithHandler(b.handler.Count)
+func (b Builder) TotalParam(fs ...*Field) *TotalParam {
+	p := NewTotalBuilder(b.table).WithHandler(b.handler.Count)
+	p.AppendFields(fs...)
+	return p
+
 }
-func (b Builder) ListParam() *ListParam {
-	return NewListBuilder(b.table).WithHandler(b.handler.Query)
+func (b Builder) ListParam(fs ...*Field) *ListParam {
+	p := NewListBuilder(b.table).WithHandler(b.handler.Query)
+	p.AppendFields(fs...)
+	return p
+
 }
 
-func (b Builder) PaginationParam() *PaginationParam {
-	return NewPaginationBuilder(b.table).WithHandler(b.handler.Pagination)
+func (b Builder) PaginationParam(fs ...*Field) *PaginationParam {
+	p := NewPaginationBuilder(b.table).WithHandler(b.handler.Pagination)
+	p.AppendFields(fs...)
+	return p
 }
-func (b Builder) FirstParam() *FirstParam {
-	return NewFirstBuilder(b.table).WithHandler(b.handler.First)
+func (b Builder) FirstParam(fs ...*Field) *FirstParam {
+	p := NewFirstBuilder(b.table).WithHandler(b.handler.First)
+	p.AppendFields(fs...)
+	return p
 }
-func (b Builder) InsertParam() *InsertParam {
-	return NewInsertBuilder(b.table).WithHandler(b.handler.Exec, b.handler.InsertWithLastIdHandler)
+func (b Builder) InsertParam(fs ...*Field) *InsertParam {
+	p := NewInsertBuilder(b.table).WithHandler(b.handler.Exec, b.handler.InsertWithLastIdHandler)
+	p.AppendFields(fs...)
+	return p
 }
-func (b Builder) BatchInsertParam() *BatchInsertParam {
-	return NewBatchInsertBuilder(b.table).WithHandler(b.handler.Exec, b.handler.InsertWithLastIdHandler)
+func (b Builder) BatchInsertParam(fss ...Fields) *BatchInsertParam {
+	p := NewBatchInsertBuilder(b.table).WithHandler(b.handler.Exec, b.handler.InsertWithLastIdHandler)
+	p.AppendFields(fss...)
+	return p
+
 }
-func (b Builder) UpdateParam() *UpdateParam {
-	return NewUpdateBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected)
+func (b Builder) UpdateParam(fs ...*Field) *UpdateParam {
+	p := NewUpdateBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected)
+	p.AppendFields(fs...)
+	return p
 }
-func (b Builder) DeleteParam() *DeleteParam {
-	return NewDeleteBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected)
+func (b Builder) DeleteParam(fs ...*Field) *DeleteParam {
+	p := NewDeleteBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected)
+	p.AppendFields(fs...)
+	return p
 }
 
-func (b Builder) ExistsParam() *ExistsParam {
-	return NewExistsBuilder(b.table).WithHandler(b.handler.Query)
+func (b Builder) ExistsParam(fs ...*Field) *ExistsParam {
+	p := NewExistsBuilder(b.table).WithHandler(b.handler.Query)
+	p.AppendFields(fs...)
+	return p
 }
-func (b Builder) SetParam() *SetParam {
-	return NewSetBuilder(b.table).WithHandler(b.handler.Query, b.handler.InsertWithLastIdHandler, b.handler.ExecWithRowsAffected)
+func (b Builder) SetParam(fs ...*Field) *SetParam {
+	p := NewSetBuilder(b.table).WithHandler(b.handler.Query, b.handler.InsertWithLastIdHandler, b.handler.ExecWithRowsAffected)
+	p.AppendFields(fs...)
+	return p
 }
 
 func (b Builder) Count(fields ...*Field) (count int64, err error) {
@@ -530,6 +553,16 @@ type FirstParam struct {
 	_Fields      Fields
 	_log         LogI
 	firstHandler FirstHandler
+	builderFns   SelectBuilderFns
+}
+
+func NewFirstBuilder(tableName string, builderFns ...SelectBuilderFn) *FirstParam {
+	return &FirstParam{
+		_Table:     TableFn(func() string { return tableName }),
+		_Fields:    make(Fields, 0),
+		_log:       DefaultLog,
+		builderFns: builderFns,
+	}
 }
 
 func (p *FirstParam) SetLog(log LogI) *FirstParam {
@@ -542,16 +575,15 @@ func (p FirstParam) AppendFields(fields ...*Field) FirstParam {
 	return p
 }
 
-func NewFirstBuilder(tableName string) *FirstParam {
-	return &FirstParam{
-		_Table:  TableFn(func() string { return tableName }),
-		_Fields: make(Fields, 0),
-		_log:    DefaultLog,
-	}
-}
-
 func (p *FirstParam) WithHandler(firstHandler FirstHandler) *FirstParam {
 	p.firstHandler = firstHandler
+	return p
+}
+func (p *FirstParam) WithBuilderFns(builderFns ...SelectBuilderFn) *FirstParam {
+	if len(p.builderFns) == 0 {
+		p.builderFns = SelectBuilderFns{}
+	}
+	p.builderFns = append(p.builderFns, builderFns...)
 	return p
 }
 
@@ -569,6 +601,9 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 		Where(where...).
 		Order(fs.Order()...).
 		Limit(1)
+	if len(p.builderFns) > 0 {
+		p.builderFns.Apply(ds)
+	}
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -587,11 +622,22 @@ func (p FirstParam) First(result any) (exists bool, err error) {
 	return p.firstHandler(sql, result)
 }
 
+type SelectBuilderFn func(ds *goqu.SelectDataset)
+
+type SelectBuilderFns []SelectBuilderFn
+
+func (fns SelectBuilderFns) Apply(ds *goqu.SelectDataset) {
+	for _, fn := range fns {
+		fn(ds)
+	}
+}
+
 type ListParam struct {
 	_Table       TableI
 	_Fields      Fields
 	_log         LogI
 	queryHandler QueryHandler
+	builderFns   SelectBuilderFns
 }
 
 func (p *ListParam) SetLog(log LogI) ListParam {
@@ -602,16 +648,24 @@ func (p *ListParam) WithHandler(queryHandler QueryHandler) *ListParam {
 	p.queryHandler = queryHandler
 	return p
 }
+func (p *ListParam) WithBuilderFns(builderFns ...SelectBuilderFn) *ListParam {
+	if len(p.builderFns) == 0 {
+		p.builderFns = SelectBuilderFns{}
+	}
+	p.builderFns = append(p.builderFns, builderFns...)
+	return p
+}
 
 func (p ListParam) AppendFields(fields ...*Field) ListParam {
 	p._Fields.Append(fields...)
 	return p
 }
 
-func NewListBuilder(tableName string) *ListParam {
+func NewListBuilder(tableName string, builderFns ...SelectBuilderFn) *ListParam {
 	return &ListParam{
-		_Table: TableFn(func() string { return tableName }),
-		_log:   DefaultLog,
+		_Table:     TableFn(func() string { return tableName }),
+		_log:       DefaultLog,
+		builderFns: builderFns,
 	}
 }
 
@@ -636,6 +690,9 @@ func (p ListParam) ToSQL() (sql string, err error) {
 		Order(fs.Order()...)
 	if pageSize > 0 {
 		ds = ds.Offset(uint(ofsset)).Limit(uint(pageSize))
+	}
+	if len(p.builderFns) > 0 {
+		p.builderFns.Apply(ds)
 	}
 	sql, _, err = ds.ToSQL()
 	if err != nil {
@@ -678,6 +735,7 @@ type ExistsParam struct {
 	_Fields      Fields
 	_log         LogI
 	queryHandler QueryHandler
+	builderFns   SelectBuilderFns
 }
 
 func (p *ExistsParam) AppendFields(fields ...*Field) *ExistsParam {
@@ -693,11 +751,19 @@ func (p *ExistsParam) WithHandler(queryHandler QueryHandler) *ExistsParam {
 	p.queryHandler = queryHandler
 	return p
 }
+func (p *ExistsParam) WithBuilderFns(builderFns ...SelectBuilderFn) *ExistsParam {
+	if len(p.builderFns) == 0 {
+		p.builderFns = SelectBuilderFns{}
+	}
+	p.builderFns = append(p.builderFns, builderFns...)
+	return p
+}
 
-func NewExistsBuilder(tableName string) *ExistsParam {
+func NewExistsBuilder(tableName string, builderFns ...SelectBuilderFn) *ExistsParam {
 	return &ExistsParam{
-		_Table: TableFn(func() string { return tableName }),
-		_log:   DefaultLog,
+		_Table:     TableFn(func() string { return tableName }),
+		_log:       DefaultLog,
+		builderFns: builderFns,
 	}
 }
 
@@ -720,6 +786,10 @@ func (p ExistsParam) ToSQL() (sql string, err error) {
 		From(table).
 		Where(where...).
 		Limit(1)
+	if len(p.builderFns) > 0 {
+		p.builderFns.Apply(ds)
+	}
+
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -751,12 +821,14 @@ type TotalParam struct {
 	_Fields      Fields
 	_log         LogI
 	countHandler CountHandler
+	builderFns   SelectBuilderFns
 }
 
-func NewTotalBuilder(tableName string) *TotalParam {
+func NewTotalBuilder(tableName string, builderFns ...SelectBuilderFn) *TotalParam {
 	return &TotalParam{
-		_Table: TableFn(func() string { return tableName }),
-		_log:   DefaultLog,
+		_Table:     TableFn(func() string { return tableName }),
+		_log:       DefaultLog,
+		builderFns: builderFns,
 	}
 }
 func (p *TotalParam) SetLog(log LogI) *TotalParam {
@@ -765,6 +837,14 @@ func (p *TotalParam) SetLog(log LogI) *TotalParam {
 }
 func (p *TotalParam) WithHandler(countHandler CountHandler) *TotalParam {
 	p.countHandler = countHandler
+	return p
+}
+
+func (p *TotalParam) WithBuilderFns(builderFns ...SelectBuilderFn) *TotalParam {
+	if len(p.builderFns) == 0 {
+		p.builderFns = SelectBuilderFns{}
+	}
+	p.builderFns = append(p.builderFns, builderFns...)
 	return p
 }
 
@@ -783,6 +863,9 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 	ds := Dialect.DialectWrapper().From(table).Where(where...).Select(goqu.COUNT(goqu.Star()).As("count"))
+	if len(p.builderFns) > 0 {
+		p.builderFns.Apply(ds)
+	}
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -843,12 +926,21 @@ func (p PaginationParam) Pagination(result any) (count int64, err error) {
 	return p.paginationHandler(totalSql, listSql, result)
 }
 
+type SetPolicy string
+
+const (
+	SetPolicy_only_Insert      SetPolicy = "onlyInsert"       //只新增说明使用最早数据
+	SetPolicy_only_Update      SetPolicy = "onlyUpdate"       //只更新说明不存在时不处理
+	SetPolicy_Insert_or_Update SetPolicy = "insert_or_Update" //不存在新增,存在更新，使用最新数据覆盖
+)
+
 type SetParam struct {
 	_Table                  TableI
 	_Fields                 Fields
 	queryHandler            QueryHandler
 	insertWithLastIdHandler InsertWithLastIdHandler
 	execHandler             ExecWithRowsAffectedHandler
+	setPolicy               SetPolicy // 更新策略,默认根据主键判断是否需要更新
 }
 
 func (p SetParam) AppendFields(fields ...*Field) SetParam {
@@ -860,6 +952,11 @@ func NewSetBuilder(tableName string) *SetParam {
 	return &SetParam{
 		_Table: TableFn(func() string { return tableName }),
 	}
+}
+
+func (p *SetParam) WithPolicy(policy SetPolicy) *SetParam {
+	p.setPolicy = policy
+	return p
 }
 
 func (p *SetParam) WithHandler(queryHandler QueryHandler, insertWithLastIdHandler InsertWithLastIdHandler, execHandler ExecWithRowsAffectedHandler) *SetParam {
@@ -894,12 +991,25 @@ func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64,
 	if err != nil {
 		return false, 0, 0, err
 	}
-	if exists {
-		rowsAffected, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ExecWithRowsAffected()
-	} else {
-		lastInsertId, rowsAffected, err = NewInsertBuilder(table).AppendFields(p._Fields...).InsertWithLastId()
-	}
 	isInsert = !exists
+	switch p.setPolicy {
+	case SetPolicy_only_Insert: // 只新增说明使用最早数据
+		if !exists {
+			lastInsertId, rowsAffected, err = NewInsertBuilder(table).AppendFields(p._Fields...).InsertWithLastId()
+			return isInsert, lastInsertId, rowsAffected, err
+		}
+	case SetPolicy_only_Update: // 只更新说明不存在时不处理
+		if exists {
+			rowsAffected, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ExecWithRowsAffected()
+			return isInsert, lastInsertId, rowsAffected, err
+		}
+	default: // 默认执行 SetPolicy_Insert_or_Update 策略
+		if exists {
+			rowsAffected, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ExecWithRowsAffected()
+		} else {
+			lastInsertId, rowsAffected, err = NewInsertBuilder(table).AppendFields(p._Fields...).InsertWithLastId()
+		}
+	}
 	return isInsert, lastInsertId, rowsAffected, err
 }
 

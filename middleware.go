@@ -135,17 +135,14 @@ var ApplyFnWhereFindInColumnSet ApplyFn = func(f *Field, fs ...*Field) {
 
 // ApplyFnValueFnSetIfEmpty 数据库值为空则修改,否则不修改,用于update
 var ApplyFnValueFnSetIfEmpty ApplyFn = func(f *Field, fs ...*Field) {
-	f.ValueFns.Append(ValueFn{
-		Layer: Value_Layer_NotForWhere,
-		Fn: func(inputValue any) (any, error) {
-			if IsNil(inputValue) {
-				return nil, nil
-			}
-			column := goqu.C(f.DBName())
-			expression := goqu.L("if(?,?,?) ", column, column, inputValue)
-			return expression, nil
-		},
-	})
+	f.ValueFns.Append(ValueFnOnlyForData(func(inputValue any) (any, error) {
+		if IsNil(inputValue) {
+			return nil, nil
+		}
+		column := goqu.C(f.DBName())
+		expression := goqu.L("if(?,?,?) ", column, column, inputValue)
+		return expression, nil
+	}))
 }
 
 var ApplyFnValueFormatBySchemaType ApplyFn = func(f *Field, fs ...*Field) {

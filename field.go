@@ -31,12 +31,12 @@ const (
 	Value_Layer_ApiValidate Layer = "ApiValidate" //验证层
 	Value_Layer_DBValidate  Layer = "DBValidate"  //DB验证层
 	Value_Layer_DBFormat    Layer = "DBFormat"    //格式化层
-	Value_Layer_NotForWhere Layer = "NotForWhere" //不使用到where中(仅用于写数据时使用，用于insert，update的set部分)
+	Value_Layer_OnlyForData Layer = "OnlyForData" //只用于 insert values，update  set 部分，不用于where部分
 
 )
 
 var (
-	Layer_order = []Layer{Value_Layer_SetValue, Value_Layer_ApiFormat, Value_Layer_ApiValidate, Value_Layer_DBValidate, Value_Layer_DBFormat, Value_Layer_NotForWhere} // 层序,越靠前越先执行
+	Layer_order = []Layer{Value_Layer_SetValue, Value_Layer_ApiFormat, Value_Layer_ApiValidate, Value_Layer_DBValidate, Value_Layer_DBFormat, Value_Layer_OnlyForData} // 层序,越靠前越先执行
 )
 
 type ValueFnFn func(inputValue any) (any, error)
@@ -167,6 +167,35 @@ func (fns *ValueFns) ResetSetValueFn(setValueFnFns ...ValueFnFn) {
 
 	*fns = tmp
 }
+
+func (vs ValueFns) Filter(fn func(fn ValueFn) bool) (subFns ValueFns) {
+	for _, v := range vs {
+		if fn(v) {
+			subFns = append(subFns, v)
+		}
+	}
+	return subFns
+}
+
+// _ExcludeOnlyForDataValueFn 排除不适用于where条件的值函数
+func _ExcludeOnlyForDataValueFn(vs ValueFns) (subFns ValueFns) {
+	if len(vs) == 0 {
+		return vs
+	}
+	return vs.Filter(func(fn ValueFn) bool {
+		return !fn.Layer.EqualFold(Value_Layer_OnlyForData)
+	})
+}
+
+// // ExcludeOnlyForWhereValueFn 排除仅用于where条件的值函数
+// func ExcludeOnlyForWhereValueFn(vs ValueFns) (subFns ValueFns) {
+// 	if len(vs) == 0 {
+// 		return vs
+// 	}
+// 	return vs.Filter(func(fn ValueFn) bool {
+// 		return !fn.Layer.EqualFold(Value_Layer_OnlyForWhere)
+// 	})
+// }
 
 // // AppendIfNotFirst 追加到最后,但是不能是第一个,一般用于生成SQL时格式化数据
 // func (fns *ValueFns) AppendIfNotFirst(subFns ...ValueFn) {
@@ -348,6 +377,7 @@ func (f *Field) SetTable(table string) *Field {
 	f.table = table
 	return f
 }
+
 func (f *Field) GetTable() (table string) {
 	return f.table
 }
@@ -531,6 +561,7 @@ func (f *Field) MinBoundaryWhereInsert(minimum int, minLength int) *Field {
 	return f
 }
 
+// Deprecated 字段废弃 使用 ValueFnShieldForWrite 代替
 func (f *Field) ShieldUpdate(shieldUpdate bool) *Field {
 	if f.Schema == nil {
 		f.Schema = &Schema{}
@@ -868,14 +899,9 @@ func (f1 Field) WhereData(fs ...*Field) (value any, err error) {
 	if len(f.WhereFns) == 0 {
 		return nil, nil
 	}
-	valueFns := ValueFns{}
-	for _, vFn := range f.ValueFns {
-		if vFn.Layer == Value_Layer_NotForWhere { // 过滤不应用到where上的数据处理函数
-			continue
-		}
-		valueFns.Append(vFn)
+	if len(f.ValueFns) > 0 {
+		f.ValueFns = _ExcludeOnlyForDataValueFn(f.ValueFns)
 	}
-	f.ValueFns = valueFns
 	value, err = f.GetValue()
 	if IsErrorValueNil(err) {
 		err = nil // 这里不直接返回，仍然遍历 执行whereFns，方便理解流程（直接返回后，期望的whereFn没有执行，不知道流程在哪里中断了，也没有错误抛出，非常困惑，所以不能直接返回）
@@ -986,6 +1012,7 @@ func (c Field) formatSingleType(val any) any {
 func (f1 Field) Data(fs ...*Field) (data any, err error) {
 	f := *f1.Copy() // 复制一份,不影响其它场景
 	f.Init(fs...)
+
 	val, err := f.GetValue()
 	if IsErrorValueNil(err) {
 		return nil, nil // 忽略空值错误
@@ -1028,13 +1055,43 @@ func (f Field) Order(fs ...*Field) (orderedExpressions []exp.OrderedExpression) 
 	return orderedExpressions
 }
 
-func NotForWhereValueFn(valueFnFn ValueFnFn) ValueFn {
+func ValueFnSetValue(valueFnFn ValueFnFn) ValueFn {
 	return ValueFn{
 		Fn:          valueFnFn,
-		Layer:       Value_Layer_NotForWhere,
+		Layer:       Value_Layer_SetValue,
+		Description: "api 设置数据时机执行", // 描述
+	}
+}
+func ValueFnApiFormat(valueFnFn ValueFnFn) ValueFn {
+	return ValueFn{
+		Fn:          valueFnFn,
+		Layer:       Value_Layer_ApiFormat,
+		Description: "api 格式化数据时机执行", // 描述
+	}
+}
+func ValueFnApiValidate(valueFnFn ValueFnFn) ValueFn {
+	return ValueFn{
+		Fn:          valueFnFn,
+		Layer:       Value_Layer_ApiValidate,
+		Description: "api 验证数据时机执行", // 描述
+	}
+}
+
+func ValueFnOnlyForData(valueFnFn ValueFnFn) ValueFn {
+	return ValueFn{
+		Fn:          valueFnFn,
+		Layer:       Value_Layer_OnlyForData,
 		Description: "当计算where条件时不使用,仅用于insert,update 的 set 部分", // 描述
 	}
 }
+
+// func OlyForWhereValueFn(valueFnFn ValueFnFn) ValueFn {
+// 	return ValueFn{
+// 		Fn:          valueFnFn,
+// 		Layer:       Value_Layer_OnlyForWhere,
+// 		Description: "不用于insert,update 写数据部分，仅用于wehre中", // 描述
+// 	}
+// }
 
 type FieldsI interface {
 	Fields() Fields
@@ -1381,6 +1438,12 @@ var GlobalFnFormatTableName = func(tableName string) string {
 	return tableName
 }
 
+func NewBetweenWithoutEmpty[T int | int64 | float64 | string](start T, end T) Between {
+	start1, _ := ValueFnEmpty2Nil.Fn(start)
+	end1, _ := ValueFnEmpty2Nil.Fn(end)
+	return Between{start1, end1}
+}
+
 // Between 介于2者之间(包含上下边界，对于不包含边界情况，可以修改值范围或者直接用表达式),3个元素时为: col1<12<col2 格式
 type Between [3]any
 
@@ -1388,6 +1451,9 @@ func TryConvert2Betwwen(field string, value any) (expressions Expressions, ok bo
 	if between, ok := value.(Between); ok {
 		identifier := goqu.C(field)
 		min, val, max := between[0], between[1], between[2]
+		if min == nil && max != nil && val == nil {
+			return nil, true // 3个元素都为空，返回nil
+		}
 
 		if max != nil {
 			expressions = ConcatExpression(goqu.L("?", val).Between(exp.NewRangeVal(goqu.C(cast.ToString(min)), goqu.C(cast.ToString(max)))))
