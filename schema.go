@@ -615,9 +615,12 @@ var ValueFnForward = ValueFn{
 	Layer: Value_Layer_DBFormat,
 }
 
-// ValueFnFormatArray 格式化数组,只有一个元素时,直接返回当前元素，常用户where in 条件
+// ValueFnFormatArray 格式化数组,只有一个元素时,直接返回当前元素，常用于where in 条件
 var ValueFnFormatArray = ValueFn{
 	Fn: func(in any) (any, error) {
+		if IsNil(in) {
+			return nil, nil
+		}
 		valValue := reflect.Indirect(reflect.ValueOf(in))
 		valType := valValue.Type()
 		switch valType.Kind() {
@@ -634,7 +637,7 @@ var ValueFnFormatArray = ValueFn{
 // ValueFnDecodeComma 参数中,拼接的字符串解码成数组
 var ValueFnDecodeComma = ValueFn{
 	Fn:    ValueFnDecodeCommaFn,
-	Layer: Value_Layer_ApiFormat,
+	Layer: Value_Layer_SetFormat,
 }
 
 func ValueFnDecodeCommaFn(in any) (any, error) {
@@ -679,10 +682,26 @@ var ValueFnEmpty2Nil = ValueFn{ // 空字符串改成nil,值改成nil后,sql语�
 			if val == 0 {
 				return nil, nil
 			}
+		case int64:
+			if val == 0 {
+				return nil, nil
+			}
+		case []string:
+			if len(val) == 0 {
+				return nil, nil
+			}
+		case []int:
+			if len(val) == 0 {
+				return nil, nil
+			}
+		case []int64:
+			if len(val) == 0 {
+				return nil, nil
+			}
 		}
 		return in, nil
 	},
-	Layer: Value_Layer_ApiFormat,
+	Layer: Value_Layer_SetFormat,
 }
 
 var ValueFnGte = ValueFn{
@@ -716,7 +735,7 @@ var ValueFnTrimBlankSpace = ValueFn{
 		}
 		return in, nil
 	},
-	Layer: Value_Layer_ApiFormat,
+	Layer: Value_Layer_SetFormat,
 }
 
 var ValueFnIlike = ValueFn{

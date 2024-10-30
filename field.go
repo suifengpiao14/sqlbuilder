@@ -27,8 +27,9 @@ func (l Layer) IsEmpty() bool {
 
 const (
 	Value_Layer_SetValue    Layer = "SetValue"    //赋值层
-	Value_Layer_ApiFormat   Layer = "ApiFormat"   //解码层
+	Value_Layer_SetFormat   Layer = "setFormat "  //赋值后格式化层，用于重置或者解码等场景
 	Value_Layer_ApiValidate Layer = "ApiValidate" //验证层
+	Value_Layer_ApiFormat   Layer = "ApiFormat"   //解码前格式化层
 	Value_Layer_DBValidate  Layer = "DBValidate"  //DB验证层
 	Value_Layer_DBFormat    Layer = "DBFormat"    //格式化层
 	Value_Layer_OnlyForData Layer = "OnlyForData" //只用于 insert values，update  set 部分，不用于where部分
@@ -36,7 +37,7 @@ const (
 )
 
 var (
-	Layer_order = []Layer{Value_Layer_SetValue, Value_Layer_ApiFormat, Value_Layer_ApiValidate, Value_Layer_DBValidate, Value_Layer_DBFormat, Value_Layer_OnlyForData} // 层序,越靠前越先执行
+	Layer_order = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_DBValidate, Value_Layer_DBFormat, Value_Layer_OnlyForData} // 层序,越靠前越先执行
 )
 
 type ValueFnFn func(inputValue any) (any, error)
@@ -1062,6 +1063,13 @@ func ValueFnSetValue(valueFnFn ValueFnFn) ValueFn {
 		Description: "api 设置数据时机执行", // 描述
 	}
 }
+func ValueFnSetFormat(valueFnFn ValueFnFn) ValueFn {
+	return ValueFn{
+		Fn:          valueFnFn,
+		Layer:       Value_Layer_SetFormat,
+		Description: "设置数据后,验证前执行", // 描述
+	}
+}
 func ValueFnApiFormat(valueFnFn ValueFnFn) ValueFn {
 	return ValueFn{
 		Fn:          valueFnFn,
@@ -1069,6 +1077,15 @@ func ValueFnApiFormat(valueFnFn ValueFnFn) ValueFn {
 		Description: "api 格式化数据时机执行", // 描述
 	}
 }
+
+func ValueFnDBFormat(fn func(in any) (any, error)) ValueFn {
+	return ValueFn{
+		Fn:          fn,
+		Layer:       Value_Layer_DBFormat,
+		Description: "db 格式化数据时机执行", // 描述
+	}
+}
+
 func ValueFnApiValidate(valueFnFn ValueFnFn) ValueFn {
 	return ValueFn{
 		Fn:          valueFnFn,
@@ -1122,7 +1139,7 @@ func (fs Fields) Validate() (err error) {
 
 	for _, f := range fs {
 		field := f.InjectValueFn()
-		field.ValueFns = field.ValueFns.GetByLayer(Value_Layer_SetValue, Value_Layer_ApiFormat)
+		field.ValueFns = field.ValueFns.GetByLayer(Value_Layer_SetValue, Value_Layer_SetFormat)
 		_, e := field.getValue()
 		if e != nil {
 			err = errors.Wrap(err, e.Error())

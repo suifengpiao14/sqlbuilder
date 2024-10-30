@@ -10,8 +10,12 @@ import (
 	_ "github.com/doug-martin/goqu/v9/dialect/sqlite3"
 	"github.com/doug-martin/goqu/v9/exp"
 	"github.com/pkg/errors"
+	_ "gorm.io/driver/mysql"
+	_ "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+type BuilderFn func() Builder
 
 type Builder struct {
 	handler Handler
@@ -49,7 +53,7 @@ func (b Builder) ListParam(fs ...*Field) *ListParam {
 }
 
 func (b Builder) PaginationParam(fs ...*Field) *PaginationParam {
-	p := NewPaginationBuilder(b.table).WithHandler(b.handler.Pagination)
+	p := NewPaginationBuilder(b.table).WithHandler(b.handler.Count, b.handler.Query)
 	p.AppendFields(fs...)
 	return p
 }
@@ -59,12 +63,12 @@ func (b Builder) FirstParam(fs ...*Field) *FirstParam {
 	return p
 }
 func (b Builder) InsertParam(fs ...*Field) *InsertParam {
-	p := NewInsertBuilder(b.table).WithHandler(b.handler.Exec, b.handler.InsertWithLastIdHandler)
+	p := NewInsertBuilder(b.table).WithHandler(b.handler.InsertWithLastIdHandler)
 	p.AppendFields(fs...)
 	return p
 }
 func (b Builder) BatchInsertParam(fss ...Fields) *BatchInsertParam {
-	p := NewBatchInsertBuilder(b.table).WithHandler(b.handler.Exec, b.handler.InsertWithLastIdHandler)
+	p := NewBatchInsertBuilder(b.table).WithHandler(b.handler.InsertWithLastIdHandler)
 	p.AppendFields(fss...)
 	return p
 
@@ -81,12 +85,12 @@ func (b Builder) DeleteParam(fs ...*Field) *DeleteParam {
 }
 
 func (b Builder) ExistsParam(fs ...*Field) *ExistsParam {
-	p := NewExistsBuilder(b.table).WithHandler(b.handler.Query)
+	p := NewExistsBuilder(b.table).WithHandler(b.handler.Exists)
 	p.AppendFields(fs...)
 	return p
 }
 func (b Builder) SetParam(fs ...*Field) *SetParam {
-	p := NewSetBuilder(b.table).WithHandler(b.handler.Query, b.handler.InsertWithLastIdHandler, b.handler.ExecWithRowsAffected)
+	p := NewSetBuilder(b.table).WithHandler(b.handler.Exists, b.handler.InsertWithLastIdHandler, b.handler.ExecWithRowsAffected)
 	p.AppendFields(fs...)
 	return p
 }
@@ -245,10 +249,10 @@ func ConcatExpression(expressions ...exp.Expression) Expressions {
 
 // InsertParam 供子类复用,修改数据
 type InsertParam struct {
-	_TableI                 TableI
-	_Fields                 Fields
-	_log                    LogI
-	execHandler             ExecHandler
+	_TableI TableI
+	_Fields Fields
+	_log    LogI
+	//execHandler             ExecHandler
 	insertWithLastIdHandler InsertWithLastIdHandler
 }
 
@@ -256,8 +260,8 @@ func (p *InsertParam) SetLog(log LogI) InsertParam {
 	p._log = log
 	return *p
 }
-func (p *InsertParam) WithHandler(execHandler ExecHandler, insertWithLastIdHandler InsertWithLastIdHandler) *InsertParam {
-	p.execHandler = execHandler
+func (p *InsertParam) WithHandler(insertWithLastIdHandler InsertWithLastIdHandler) *InsertParam {
+	//p.execHandler = execHandler
 	p.insertWithLastIdHandler = insertWithLastIdHandler
 	return p
 }
@@ -309,7 +313,7 @@ func (p InsertParam) Exec() (err error) {
 	if err != nil {
 		return err
 	}
-	err = p.execHandler(sql)
+	_, _, err = p.insertWithLastIdHandler(sql)
 	return err
 }
 func (p InsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64, err error) {
@@ -321,10 +325,10 @@ func (p InsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64
 }
 
 type BatchInsertParam struct {
-	rowFields               []Fields
-	_TableI                 TableI
-	_log                    LogI
-	execHandler             ExecHandler
+	rowFields []Fields
+	_TableI   TableI
+	_log      LogI
+	//execHandler             ExecHandler
 	insertWithLastIdHandler InsertWithLastIdHandler
 }
 
@@ -341,8 +345,8 @@ func (p *BatchInsertParam) SetLog(log LogI) *BatchInsertParam {
 	return p
 }
 
-func (p *BatchInsertParam) WithHandler(execHandler ExecHandler, insertWithLastIdHandler InsertWithLastIdHandler) *BatchInsertParam {
-	p.execHandler = execHandler
+func (p *BatchInsertParam) WithHandler(insertWithLastIdHandler InsertWithLastIdHandler) *BatchInsertParam {
+	//p.execHandler = execHandler
 	p.insertWithLastIdHandler = insertWithLastIdHandler
 	return p
 }
@@ -391,7 +395,7 @@ func (p BatchInsertParam) Exec() (err error) {
 	if err != nil {
 		return err
 	}
-	err = p.execHandler(sql)
+	_, _, err = p.insertWithLastIdHandler(sql)
 	return err
 }
 func (p BatchInsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64, err error) {
@@ -731,11 +735,11 @@ func (log EmptyLog) Log(sql string, args ...any) {
 var DefaultLog = ConsoleLog{}
 
 type ExistsParam struct {
-	_Table       TableI
-	_Fields      Fields
-	_log         LogI
-	queryHandler QueryHandler
-	builderFns   SelectBuilderFns
+	_Table        TableI
+	_Fields       Fields
+	_log          LogI
+	existsHandler ExistsHandler
+	builderFns    SelectBuilderFns
 }
 
 func (p *ExistsParam) AppendFields(fields ...*Field) *ExistsParam {
@@ -747,10 +751,12 @@ func (p *ExistsParam) SetLog(log LogI) ExistsParam {
 	return *p
 }
 
-func (p *ExistsParam) WithHandler(queryHandler QueryHandler) *ExistsParam {
-	p.queryHandler = queryHandler
+func (p *ExistsParam) WithHandler(existsHandler ExistsHandler) *ExistsParam {
+	p.existsHandler = existsHandler
 	return p
 }
+
+// WithBuilderFns 配置sql构建器
 func (p *ExistsParam) WithBuilderFns(builderFns ...SelectBuilderFn) *ExistsParam {
 	if len(p.builderFns) == 0 {
 		p.builderFns = SelectBuilderFns{}
@@ -805,15 +811,7 @@ func (p ExistsParam) Exists() (exists bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	result := make([]any, 0)
-	err = p.queryHandler(sql, &result)
-	if err != nil {
-		return false, err
-	}
-	if len(result) > 0 {
-		return true, nil
-	}
-	return false, nil
+	return p.existsHandler(sql)
 }
 
 type TotalParam struct {
@@ -885,9 +883,10 @@ func (p TotalParam) Count() (total int64, err error) {
 }
 
 type PaginationParam struct {
-	_Table            TableI
-	_Fields           Fields
-	paginationHandler PaginationHandler
+	_Table       TableI
+	_Fields      Fields
+	countHandler CountHandler
+	queryHandler QueryHandler
 }
 
 func (p PaginationParam) AppendFields(fields ...*Field) PaginationParam {
@@ -900,8 +899,9 @@ func NewPaginationBuilder(tableName string) *PaginationParam {
 		_Table: TableFn(func() string { return tableName }),
 	}
 }
-func (p *PaginationParam) WithHandler(paginationHandler PaginationHandler) *PaginationParam {
-	p.paginationHandler = paginationHandler
+func (p *PaginationParam) WithHandler(countHandler CountHandler, queryHandler QueryHandler) *PaginationParam {
+	p.countHandler = countHandler
+	p.queryHandler = queryHandler
 	return p
 }
 
@@ -916,6 +916,22 @@ func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 		return "", "", err
 	}
 	return totalSql, listSql, nil
+}
+
+func (p PaginationParam) paginationHandler(totalSql string, listSql string, result any) (count int64, err error) {
+	count, err = p.countHandler(totalSql)
+	if err != nil {
+		return 0, err
+	}
+	if count == 0 {
+		return 0, nil
+	}
+
+	err = p.queryHandler(listSql, result)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (p PaginationParam) Pagination(result any) (count int64, err error) {
@@ -935,12 +951,12 @@ const (
 )
 
 type SetParam struct {
-	_Table                  TableI
-	_Fields                 Fields
-	queryHandler            QueryHandler
-	insertWithLastIdHandler InsertWithLastIdHandler
-	execHandler             ExecWithRowsAffectedHandler
-	setPolicy               SetPolicy // 更新策略,默认根据主键判断是否需要更新
+	_Table                      TableI
+	_Fields                     Fields
+	existsHandler               ExistsHandler
+	insertWithLastIdHandler     InsertWithLastIdHandler
+	execWithRowsAffectedHandler ExecWithRowsAffectedHandler
+	setPolicy                   SetPolicy // 更新策略,默认根据主键判断是否需要更新
 }
 
 func (p SetParam) AppendFields(fields ...*Field) SetParam {
@@ -959,10 +975,10 @@ func (p *SetParam) WithPolicy(policy SetPolicy) *SetParam {
 	return p
 }
 
-func (p *SetParam) WithHandler(queryHandler QueryHandler, insertWithLastIdHandler InsertWithLastIdHandler, execHandler ExecWithRowsAffectedHandler) *SetParam {
-	p.queryHandler = queryHandler
+func (p *SetParam) WithHandler(existsHandler ExistsHandler, insertWithLastIdHandler InsertWithLastIdHandler, execWithRowsAffectedHandler ExecWithRowsAffectedHandler) *SetParam {
+	p.existsHandler = existsHandler
 	p.insertWithLastIdHandler = insertWithLastIdHandler
-	p.execHandler = execHandler
+	p.execWithRowsAffectedHandler = execWithRowsAffectedHandler
 
 	return p
 }
@@ -986,8 +1002,11 @@ func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string,
 }
 
 func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
-	table := p._Table.Table()
-	exists, err := NewExistsBuilder(table).AppendFields(p._Fields...).Exists()
+	existsSql, insertSql, updateSql, err := p.ToSQL()
+	if err != nil {
+		return false, 0, 0, err
+	}
+	exists, err := p.existsHandler(existsSql)
 	if err != nil {
 		return false, 0, 0, err
 	}
@@ -995,19 +1014,19 @@ func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64,
 	switch p.setPolicy {
 	case SetPolicy_only_Insert: // 只新增说明使用最早数据
 		if !exists {
-			lastInsertId, rowsAffected, err = NewInsertBuilder(table).AppendFields(p._Fields...).InsertWithLastId()
+			lastInsertId, rowsAffected, err = p.insertWithLastIdHandler(insertSql)
 			return isInsert, lastInsertId, rowsAffected, err
 		}
 	case SetPolicy_only_Update: // 只更新说明不存在时不处理
 		if exists {
-			rowsAffected, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ExecWithRowsAffected()
+			rowsAffected, err = p.execWithRowsAffectedHandler(updateSql)
 			return isInsert, lastInsertId, rowsAffected, err
 		}
 	default: // 默认执行 SetPolicy_Insert_or_Update 策略
 		if exists {
-			rowsAffected, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ExecWithRowsAffected()
+			rowsAffected, err = p.execWithRowsAffectedHandler(updateSql)
 		} else {
-			lastInsertId, rowsAffected, err = NewInsertBuilder(table).AppendFields(p._Fields...).InsertWithLastId()
+			lastInsertId, rowsAffected, err = p.insertWithLastIdHandler(insertSql)
 		}
 	}
 	return isInsert, lastInsertId, rowsAffected, err
