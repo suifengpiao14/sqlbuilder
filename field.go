@@ -562,7 +562,6 @@ func (f *Field) MinBoundaryWhereInsert(minimum int, minLength int) *Field {
 	return f
 }
 
-// Deprecated 字段废弃 使用 ValueFnShieldForWrite 代替
 func (f *Field) ShieldUpdate(shieldUpdate bool) *Field {
 	if f.Schema == nil {
 		f.Schema = &Schema{}

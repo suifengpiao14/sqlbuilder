@@ -29,7 +29,7 @@ type Schema struct {
 	Primary       bool `json:"primary"` //是否为主键
 	Unique        bool `json:"unique"`  // 是否为唯一键
 	AutoIncrement bool `json:"autoIncrement"`
-	ShieldUpdate  bool `json:"shieldUpdate"` //Deprecated 可以使用 sqlbuilder.ValueFnShieldForWrite 代替
+	ShieldUpdate  bool `json:"shieldUpdate"` //这个地方还是保留，虽然可以结合场景和 sqlbuilder.ValueFnShieldForWrite 代替 但是比较麻烦，在set场景时，inert需要写值，update时不需要，所以需要这个字段
 	ZeroAsEmpty   bool `json:"zeroAsEmpty"`  //0值是否当做空值处理，验证required 时有使用
 }
 
