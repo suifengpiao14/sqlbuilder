@@ -541,6 +541,10 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
+	if len(where) == 0 {
+		err = errors.New("update must have where condition")
+		return "", err
+	}
 	ds := Dialect.DialectWrapper().Update(table).Set(data).Where(where...)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
