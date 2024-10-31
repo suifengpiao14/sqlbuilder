@@ -27,7 +27,7 @@ func (l Layer) IsEmpty() bool {
 
 const (
 	Value_Layer_SetValue    Layer = "SetValue"    //赋值层
-	Value_Layer_SetFormat   Layer = "setFormat "  //赋值后格式化层，用于重置或者解码等场景
+	Value_Layer_SetFormat   Layer = "setFormat"   //赋值后格式化层，用于重置或者解码等场景
 	Value_Layer_ApiValidate Layer = "ApiValidate" //验证层
 	Value_Layer_ApiFormat   Layer = "ApiFormat"   //解码前格式化层
 	Value_Layer_DBValidate  Layer = "DBValidate"  //DB验证层
@@ -242,7 +242,7 @@ var OrderFnAsc OrderFn = func(f *Field, fs ...*Field) (orderedExpressions []exp.
 // OrderFieldFn 给定列按指定值顺序排序
 func OrderFieldFn(valueOrder ...any) OrderFn {
 	return func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
-		segment := fmt.Sprintf("FIELD(`%s`, %s)", f.DBName(), strings.Repeat(",?", len(valueOrder)))
+		segment := fmt.Sprintf("FIELD(`%s` %s)", f.DBName(), strings.Repeat(",?", len(valueOrder)))
 		expression := goqu.L(segment, valueOrder...)
 		orderedExpression := exp.NewOrderedExpression(expression, exp.AscDir, exp.NoNullsSortType)
 		orderedExpressions = ConcatOrderedExpression(orderedExpression)
@@ -344,6 +344,8 @@ const (
 const (
 	Field_tag_pageIndex = "pageIndex" // 标记为pageIndex列
 	Field_tag_pageSize  = "pageSize"  //标记为pageSize列
+
+	Field_tag_CanWriteWhenDeleted = "CanWriteWhenDeleted" // 标记为删除场景下，可以更新数据库字段（如操作人 ，Field_name_deletedAt 自带该标签功能）
 )
 
 // 不复制whereFns，ValueFns
@@ -1325,7 +1327,6 @@ func (fs Fields) String() string {
 	b, _ := json.Marshal(m)
 	return string(b)
 }
-
 func (fs Fields) GetByTag(tag string) (f *Field, ok bool) {
 	for i := 0; i < len(fs); i++ {
 		if fs[i].HastTag(tag) {
@@ -1333,6 +1334,18 @@ func (fs Fields) GetByTag(tag string) (f *Field, ok bool) {
 		}
 	}
 	return nil, false
+}
+
+func (fs Fields) GetByTags(tags ...string) (subFs Fields) {
+	subFs = make(Fields, 0)
+	for i := 0; i < len(fs); i++ {
+		for _, tag := range tags {
+			if fs[i].HastTag(tag) {
+				subFs = append(subFs, fs[i])
+			}
+		}
+	}
+	return subFs
 }
 func (fs Fields) GetByIndex(indexs ...Index) (subFs Fields) {
 	subFs = make(Fields, 0)
@@ -1467,7 +1480,7 @@ func TryConvert2Betwwen(field string, value any) (expressions Expressions, ok bo
 	if between, ok := value.(Between); ok {
 		identifier := goqu.C(field)
 		min, val, max := between[0], between[1], between[2]
-		if min == nil && max != nil && val == nil {
+		if min == nil && max == nil && val == nil {
 			return nil, true // 3个元素都为空，返回nil
 		}
 
