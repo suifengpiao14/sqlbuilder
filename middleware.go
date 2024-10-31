@@ -164,7 +164,7 @@ var ApplyFnValueEmpty2Nil ApplyFn = func(f *Field, fs ...*Field) {
 }
 var ERROR_Unique = errors.New("unique error")
 
-func ApplyFnUnique(queryFn QueryHandler) ApplyFn { // 复合索引，给一列应用该中间件即可
+func ApplyFnUnique(existsFn ExistsHandler) ApplyFn { // 复合索引，给一列应用该中间件即可
 	return func(f *Field, fs ...*Field) {
 		sceneFnName := "checkexists"
 		sceneFn := SceneFn{
@@ -184,7 +184,7 @@ func ApplyFnUnique(queryFn QueryHandler) ApplyFn { // 复合索引，给一列�
 				})
 				f.ValueFns.Append(ValueFn{
 					Fn: func(inputValue any) (any, error) {
-						exitstsParam := NewExistsBuilder(table).WithHandler(queryFn).AppendFields(uniqueFields...)
+						exitstsParam := NewExistsBuilder(table).WithHandler(existsFn).AppendFields(uniqueFields...)
 						exists, err := exitstsParam.Exists()
 						if err != nil {
 							return nil, err
@@ -212,8 +212,8 @@ func ApplyFnUnique(queryFn QueryHandler) ApplyFn { // 复合索引，给一列�
 }
 
 // Deprecated ApplyFnUniqueField 单列唯一索引键,新增场景中间件
-func ApplyFnUniqueField(table string, queryFn QueryHandler) ApplyFn {
-	return ApplyFnUnique(queryFn)
+func ApplyFnUniqueField(table string, existsFn ExistsHandler) ApplyFn {
+	return ApplyFnUnique(existsFn)
 }
 
 func ApplyFnUpdateIfNull(table string, firstHandler FirstHandler) ApplyFn {

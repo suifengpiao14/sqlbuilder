@@ -10,8 +10,12 @@ import (
 	_ "github.com/doug-martin/goqu/v9/dialect/sqlite3"
 	"github.com/doug-martin/goqu/v9/exp"
 	"github.com/pkg/errors"
+	_ "gorm.io/driver/mysql"
+	_ "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+type BuilderFn func() Builder
 
 type Builder struct {
 	handler Handler
@@ -36,58 +40,48 @@ func (b Builder) Handler() (handler Handler) { // 提供给外部使用
 }
 
 func (b Builder) TotalParam(fs ...*Field) *TotalParam {
-	p := NewTotalBuilder(b.table).WithHandler(b.handler.Count)
-	p.AppendFields(fs...)
+	p := NewTotalBuilder(b.table).WithHandler(b.handler.Count).AppendFields(fs...)
 	return p
 
 }
 func (b Builder) ListParam(fs ...*Field) *ListParam {
-	p := NewListBuilder(b.table).WithHandler(b.handler.Query)
-	p.AppendFields(fs...)
+	p := NewListBuilder(b.table).WithHandler(b.handler.Query).AppendFields(fs...)
 	return p
 
 }
 
 func (b Builder) PaginationParam(fs ...*Field) *PaginationParam {
-	p := NewPaginationBuilder(b.table).WithHandler(b.handler.Pagination)
-	p.AppendFields(fs...)
+	p := NewPaginationBuilder(b.table).WithHandler(b.handler.Count, b.handler.Query).AppendFields(fs...)
 	return p
 }
 func (b Builder) FirstParam(fs ...*Field) *FirstParam {
-	p := NewFirstBuilder(b.table).WithHandler(b.handler.First)
-	p.AppendFields(fs...)
+	p := NewFirstBuilder(b.table).WithHandler(b.handler.First).AppendFields(fs...)
 	return p
 }
 func (b Builder) InsertParam(fs ...*Field) *InsertParam {
-	p := NewInsertBuilder(b.table).WithHandler(b.handler.Exec, b.handler.InsertWithLastIdHandler)
-	p.AppendFields(fs...)
+	p := NewInsertBuilder(b.table).WithHandler(b.handler.InsertWithLastIdHandler).AppendFields(fs...)
 	return p
 }
 func (b Builder) BatchInsertParam(fss ...Fields) *BatchInsertParam {
-	p := NewBatchInsertBuilder(b.table).WithHandler(b.handler.Exec, b.handler.InsertWithLastIdHandler)
-	p.AppendFields(fss...)
+	p := NewBatchInsertBuilder(b.table).WithHandler(b.handler.InsertWithLastIdHandler).AppendFields(fss...)
 	return p
 
 }
 func (b Builder) UpdateParam(fs ...*Field) *UpdateParam {
-	p := NewUpdateBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected)
-	p.AppendFields(fs...)
+	p := NewUpdateBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected).AppendFields(fs...)
 	return p
 }
 func (b Builder) DeleteParam(fs ...*Field) *DeleteParam {
-	p := NewDeleteBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected)
-	p.AppendFields(fs...)
+	p := NewDeleteBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected).AppendFields(fs...)
 	return p
 }
 
 func (b Builder) ExistsParam(fs ...*Field) *ExistsParam {
-	p := NewExistsBuilder(b.table).WithHandler(b.handler.Query)
-	p.AppendFields(fs...)
+	p := NewExistsBuilder(b.table).WithHandler(b.handler.Exists).AppendFields(fs...)
 	return p
 }
 func (b Builder) SetParam(fs ...*Field) *SetParam {
-	p := NewSetBuilder(b.table).WithHandler(b.handler.Query, b.handler.InsertWithLastIdHandler, b.handler.ExecWithRowsAffected)
-	p.AppendFields(fs...)
+	p := NewSetBuilder(b.table).WithHandler(b.handler.Exists, b.handler.InsertWithLastIdHandler, b.handler.ExecWithRowsAffected).AppendFields(fs...)
 	return p
 }
 
@@ -245,19 +239,25 @@ func ConcatExpression(expressions ...exp.Expression) Expressions {
 
 // InsertParam 供子类复用,修改数据
 type InsertParam struct {
-	_TableI                 TableI
-	_Fields                 Fields
-	_log                    LogI
-	execHandler             ExecHandler
+	_TableI TableI
+	_Fields Fields
+	_log    LogI
+	//execHandler             ExecHandler
 	insertWithLastIdHandler InsertWithLastIdHandler
+	triggerInsertEvent      EventInsertTrigger
+}
+
+func (p *InsertParam) WithTriggerEvent(triggerInsertEvent EventInsertTrigger) *InsertParam {
+	p.triggerInsertEvent = triggerInsertEvent
+	return p
 }
 
 func (p *InsertParam) SetLog(log LogI) InsertParam {
 	p._log = log
 	return *p
 }
-func (p *InsertParam) WithHandler(execHandler ExecHandler, insertWithLastIdHandler InsertWithLastIdHandler) *InsertParam {
-	p.execHandler = execHandler
+func (p *InsertParam) WithHandler(insertWithLastIdHandler InsertWithLastIdHandler) *InsertParam {
+	//p.execHandler = execHandler
 	p.insertWithLastIdHandler = insertWithLastIdHandler
 	return p
 }
@@ -309,7 +309,7 @@ func (p InsertParam) Exec() (err error) {
 	if err != nil {
 		return err
 	}
-	err = p.execHandler(sql)
+	_, _, err = WarpInsertWithEventTrigger(p.insertWithLastIdHandler, p.triggerInsertEvent)(sql)
 	return err
 }
 func (p InsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64, err error) {
@@ -317,15 +317,21 @@ func (p InsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64
 	if err != nil {
 		return 0, 0, err
 	}
-	return p.insertWithLastIdHandler(sql)
+	return WarpInsertWithEventTrigger(p.insertWithLastIdHandler, p.triggerInsertEvent)(sql)
 }
 
 type BatchInsertParam struct {
-	rowFields               []Fields
-	_TableI                 TableI
-	_log                    LogI
-	execHandler             ExecHandler
+	rowFields []Fields
+	_TableI   TableI
+	_log      LogI
+	//execHandler             ExecHandler
 	insertWithLastIdHandler InsertWithLastIdHandler
+	triggerInsertEvent      EventInsertTrigger
+}
+
+func (p *BatchInsertParam) WithTriggerEvent(triggerInsertEvent EventInsertTrigger) *BatchInsertParam {
+	p.triggerInsertEvent = triggerInsertEvent
+	return p
 }
 
 func NewBatchInsertBuilder(tableName string) *BatchInsertParam {
@@ -341,13 +347,13 @@ func (p *BatchInsertParam) SetLog(log LogI) *BatchInsertParam {
 	return p
 }
 
-func (p *BatchInsertParam) WithHandler(execHandler ExecHandler, insertWithLastIdHandler InsertWithLastIdHandler) *BatchInsertParam {
-	p.execHandler = execHandler
+func (p *BatchInsertParam) WithHandler(insertWithLastIdHandler InsertWithLastIdHandler) *BatchInsertParam {
+	//p.execHandler = execHandler
 	p.insertWithLastIdHandler = insertWithLastIdHandler
 	return p
 }
 
-func (p BatchInsertParam) AppendFields(fields ...Fields) BatchInsertParam {
+func (p *BatchInsertParam) AppendFields(fields ...Fields) *BatchInsertParam {
 	if p.rowFields == nil {
 		p.rowFields = make([]Fields, 0)
 	}
@@ -356,6 +362,7 @@ func (p BatchInsertParam) AppendFields(fields ...Fields) BatchInsertParam {
 }
 
 var ERROR_BATCH_INSERT_DATA_IS_NIL = errors.New("batch insert err: data is nil")
+var ERROR_NOT_FOUND = errors.New("not found record")
 
 func (is BatchInsertParam) ToSQL() (sql string, err error) {
 	data := make([]any, 0)
@@ -391,7 +398,7 @@ func (p BatchInsertParam) Exec() (err error) {
 	if err != nil {
 		return err
 	}
-	err = p.execHandler(sql)
+	_, _, err = WarpInsertWithEventTrigger(p.insertWithLastIdHandler, p.triggerInsertEvent)(sql)
 	return err
 }
 func (p BatchInsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64, err error) {
@@ -399,7 +406,7 @@ func (p BatchInsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected 
 	if err != nil {
 		return 0, 0, err
 	}
-	return p.insertWithLastIdHandler(sql)
+	return WarpInsertWithEventTrigger(p.insertWithLastIdHandler, p.triggerInsertEvent)(sql)
 }
 
 type DeleteParam struct {
@@ -407,6 +414,12 @@ type DeleteParam struct {
 	_Fields                     Fields
 	_log                        LogI
 	execWithRowsAffectedHandler ExecWithRowsAffectedHandler
+	triggerDeletedEvent         EventDeletedTrigger
+}
+
+func (p *DeleteParam) WithTriggerEvent(triggerDeletedEvent EventDeletedTrigger) *DeleteParam {
+	p.triggerDeletedEvent = triggerDeletedEvent
+	return p
 }
 
 func (p *DeleteParam) SetLog(log LogI) DeleteParam {
@@ -436,12 +449,14 @@ func (p DeleteParam) ToSQL() (sql string, err error) {
 	table := p._TableI.Table()
 	fs.SetTable(table)
 	fs.SetSceneIfEmpty(SCENE_SQL_DELETE)
-	_, ok := fs.GetByFieldName(Field_name_deletedAt)
+	f, ok := fs.GetByFieldName(Field_name_deletedAt)
 	if !ok {
 		err = errors.Errorf("not found deleted column by fieldName:%s", Field_name_deletedAt)
 		return "", err
 	}
-	data, err := fs.Data()
+	canUpdateFields := fs.GetByTags(Field_tag_CanWriteWhenDeleted)
+	canUpdateFields.Append(f)
+	data, err := canUpdateFields.Data()
 	if err != nil {
 		return "", err
 	}
@@ -465,7 +480,7 @@ func (p DeleteParam) Exec() (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = p.execWithRowsAffectedHandler(sql)
+	_, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, EventUpdateTrigger(p.triggerDeletedEvent))(sql)
 	return err
 }
 func (p DeleteParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
@@ -473,7 +488,7 @@ func (p DeleteParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
 	if err != nil {
 		return rowsAffected, err
 	}
-	rowsAffected, err = p.execWithRowsAffectedHandler(sql)
+	rowsAffected, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, EventUpdateTrigger(p.triggerDeletedEvent))(sql)
 	return rowsAffected, err
 }
 
@@ -482,6 +497,12 @@ type UpdateParam struct {
 	_Fields                     Fields
 	_log                        LogI
 	execWithRowsAffectedHandler ExecWithRowsAffectedHandler
+	triggerUpdatedEvent         EventUpdateTrigger
+}
+
+func (p *UpdateParam) WithTriggerEvent(triggerUpdateEvent EventUpdateTrigger) *UpdateParam {
+	p.triggerUpdatedEvent = triggerUpdateEvent
+	return p
 }
 
 func (p *UpdateParam) SetLog(log LogI) UpdateParam {
@@ -520,6 +541,10 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
+	if len(where) == 0 {
+		err = errors.New("update must have where condition")
+		return "", err
+	}
 	ds := Dialect.DialectWrapper().Update(table).Set(data).Where(where...)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
@@ -536,7 +561,7 @@ func (p UpdateParam) Exec() (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = p.execWithRowsAffectedHandler(sql)
+	_, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, p.triggerUpdatedEvent)(sql)
 	return err
 }
 func (p UpdateParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
@@ -544,7 +569,7 @@ func (p UpdateParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
 	if err != nil {
 		return 0, err
 	}
-	rowsAffected, err = p.execWithRowsAffectedHandler(sql)
+	rowsAffected, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, p.triggerUpdatedEvent)(sql)
 	return rowsAffected, err
 }
 
@@ -570,7 +595,7 @@ func (p *FirstParam) SetLog(log LogI) *FirstParam {
 	return p
 }
 
-func (p FirstParam) AppendFields(fields ...*Field) FirstParam {
+func (p *FirstParam) AppendFields(fields ...*Field) *FirstParam {
 	p._Fields.Append(fields...)
 	return p
 }
@@ -656,7 +681,7 @@ func (p *ListParam) WithBuilderFns(builderFns ...SelectBuilderFn) *ListParam {
 	return p
 }
 
-func (p ListParam) AppendFields(fields ...*Field) ListParam {
+func (p *ListParam) AppendFields(fields ...*Field) *ListParam {
 	p._Fields.Append(fields...)
 	return p
 }
@@ -731,11 +756,12 @@ func (log EmptyLog) Log(sql string, args ...any) {
 var DefaultLog = ConsoleLog{}
 
 type ExistsParam struct {
-	_Table       TableI
-	_Fields      Fields
-	_log         LogI
-	queryHandler QueryHandler
-	builderFns   SelectBuilderFns
+	_Table                   TableI
+	_Fields                  Fields
+	_log                     LogI
+	allowEmptyWhereCondition bool
+	existsHandler            ExistsHandler
+	builderFns               SelectBuilderFns
 }
 
 func (p *ExistsParam) AppendFields(fields ...*Field) *ExistsParam {
@@ -747,10 +773,16 @@ func (p *ExistsParam) SetLog(log LogI) ExistsParam {
 	return *p
 }
 
-func (p *ExistsParam) WithHandler(queryHandler QueryHandler) *ExistsParam {
-	p.queryHandler = queryHandler
+func (p *ExistsParam) WithHandler(existsHandler ExistsHandler) *ExistsParam {
+	p.existsHandler = existsHandler
 	return p
 }
+func (p *ExistsParam) WithAllowEmptyWhereCondition(allowEmptyWhereCondition bool) *ExistsParam {
+	p.allowEmptyWhereCondition = allowEmptyWhereCondition
+	return p
+}
+
+// WithBuilderFns 配置sql构建器
 func (p *ExistsParam) WithBuilderFns(builderFns ...SelectBuilderFn) *ExistsParam {
 	if len(p.builderFns) == 0 {
 		p.builderFns = SelectBuilderFns{}
@@ -797,6 +829,9 @@ func (p ExistsParam) ToSQL() (sql string, err error) {
 	if p._log != nil {
 		p._log.Log(sql)
 	}
+	if len(where) == 0 && !p.allowEmptyWhereCondition { // 默认where 条件不能为空，先写日志，再返回错误，方便用户查看SQL语句
+		return "", errors.Errorf("exists sql must have where condition")
+	}
 	return sql, nil
 }
 
@@ -805,15 +840,7 @@ func (p ExistsParam) Exists() (exists bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	result := make([]any, 0)
-	err = p.queryHandler(sql, &result)
-	if err != nil {
-		return false, err
-	}
-	if len(result) > 0 {
-		return true, nil
-	}
-	return false, nil
+	return p.existsHandler(sql)
 }
 
 type TotalParam struct {
@@ -885,12 +912,13 @@ func (p TotalParam) Count() (total int64, err error) {
 }
 
 type PaginationParam struct {
-	_Table            TableI
-	_Fields           Fields
-	paginationHandler PaginationHandler
+	_Table       TableI
+	_Fields      Fields
+	countHandler CountHandler
+	queryHandler QueryHandler
 }
 
-func (p PaginationParam) AppendFields(fields ...*Field) PaginationParam {
+func (p *PaginationParam) AppendFields(fields ...*Field) *PaginationParam {
 	p._Fields.Append(fields...)
 	return p
 }
@@ -900,8 +928,9 @@ func NewPaginationBuilder(tableName string) *PaginationParam {
 		_Table: TableFn(func() string { return tableName }),
 	}
 }
-func (p *PaginationParam) WithHandler(paginationHandler PaginationHandler) *PaginationParam {
-	p.paginationHandler = paginationHandler
+func (p *PaginationParam) WithHandler(countHandler CountHandler, queryHandler QueryHandler) *PaginationParam {
+	p.countHandler = countHandler
+	p.queryHandler = queryHandler
 	return p
 }
 
@@ -916,6 +945,22 @@ func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 		return "", "", err
 	}
 	return totalSql, listSql, nil
+}
+
+func (p PaginationParam) paginationHandler(totalSql string, listSql string, result any) (count int64, err error) {
+	count, err = p.countHandler(totalSql)
+	if err != nil {
+		return 0, err
+	}
+	if count == 0 {
+		return 0, nil
+	}
+
+	err = p.queryHandler(listSql, result)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (p PaginationParam) Pagination(result any) (count int64, err error) {
@@ -935,15 +980,17 @@ const (
 )
 
 type SetParam struct {
-	_Table                  TableI
-	_Fields                 Fields
-	queryHandler            QueryHandler
-	insertWithLastIdHandler InsertWithLastIdHandler
-	execHandler             ExecWithRowsAffectedHandler
-	setPolicy               SetPolicy // 更新策略,默认根据主键判断是否需要更新
+	_Table                      TableI
+	_Fields                     Fields
+	existsHandler               ExistsHandler
+	insertWithLastIdHandler     InsertWithLastIdHandler
+	execWithRowsAffectedHandler ExecWithRowsAffectedHandler
+	setPolicy                   SetPolicy // 更新策略,默认根据主键判断是否需要更新
+	triggerInsertedEvent        EventInsertTrigger
+	triggerUpdatedEvent         EventUpdateTrigger
 }
 
-func (p SetParam) AppendFields(fields ...*Field) SetParam {
+func (p *SetParam) AppendFields(fields ...*Field) *SetParam {
 	p._Fields.Append(fields...)
 	return p
 }
@@ -959,10 +1006,16 @@ func (p *SetParam) WithPolicy(policy SetPolicy) *SetParam {
 	return p
 }
 
-func (p *SetParam) WithHandler(queryHandler QueryHandler, insertWithLastIdHandler InsertWithLastIdHandler, execHandler ExecWithRowsAffectedHandler) *SetParam {
-	p.queryHandler = queryHandler
+func (p *SetParam) WithTriggerEvent(triggerInsertdEvent EventInsertTrigger, triggerUpdateEvent EventUpdateTrigger) *SetParam {
+	p.triggerInsertedEvent = triggerInsertdEvent
+	p.triggerUpdatedEvent = triggerUpdateEvent
+	return p
+}
+
+func (p *SetParam) WithHandler(existsHandler ExistsHandler, insertWithLastIdHandler InsertWithLastIdHandler, execWithRowsAffectedHandler ExecWithRowsAffectedHandler) *SetParam {
+	p.existsHandler = existsHandler
 	p.insertWithLastIdHandler = insertWithLastIdHandler
-	p.execHandler = execHandler
+	p.execWithRowsAffectedHandler = execWithRowsAffectedHandler
 
 	return p
 }
@@ -986,8 +1039,11 @@ func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string,
 }
 
 func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
-	table := p._Table.Table()
-	exists, err := NewExistsBuilder(table).AppendFields(p._Fields...).Exists()
+	existsSql, insertSql, updateSql, err := p.ToSQL()
+	if err != nil {
+		return false, 0, 0, err
+	}
+	exists, err := p.existsHandler(existsSql)
 	if err != nil {
 		return false, 0, 0, err
 	}
@@ -995,19 +1051,19 @@ func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64,
 	switch p.setPolicy {
 	case SetPolicy_only_Insert: // 只新增说明使用最早数据
 		if !exists {
-			lastInsertId, rowsAffected, err = NewInsertBuilder(table).AppendFields(p._Fields...).InsertWithLastId()
+			lastInsertId, rowsAffected, err = WarpInsertWithEventTrigger(p.insertWithLastIdHandler, p.triggerInsertedEvent)(insertSql)
 			return isInsert, lastInsertId, rowsAffected, err
 		}
 	case SetPolicy_only_Update: // 只更新说明不存在时不处理
 		if exists {
-			rowsAffected, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ExecWithRowsAffected()
+			rowsAffected, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, p.triggerUpdatedEvent)(updateSql)
 			return isInsert, lastInsertId, rowsAffected, err
 		}
 	default: // 默认执行 SetPolicy_Insert_or_Update 策略
 		if exists {
-			rowsAffected, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ExecWithRowsAffected()
+			rowsAffected, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, p.triggerUpdatedEvent)(updateSql)
 		} else {
-			lastInsertId, rowsAffected, err = NewInsertBuilder(table).AppendFields(p._Fields...).InsertWithLastId()
+			lastInsertId, rowsAffected, err = WarpInsertWithEventTrigger(p.insertWithLastIdHandler, p.triggerInsertedEvent)(insertSql)
 		}
 	}
 	return isInsert, lastInsertId, rowsAffected, err

@@ -5,13 +5,51 @@ import (
 	"gorm.io/gorm"
 )
 
+type EventInsertTrigger func(lastInsertId uint64, rowsAffected int64) (err error) // 新增事件触发器
+type EventUpdateTrigger func(rowsAffected int64) (err error)                      // 更新事件触发器
+type EventDeletedTrigger EventUpdateTrigger                                       // 删除事件触发器
+
 type CountHandler func(sql string) (count int64, err error)
-type PaginationHandler func(totalSql string, listSql string, result any) (count int64, err error)
 type QueryHandler func(sql string, result any) (err error)
 type FirstHandler func(sql string, result any) (exists bool, err error)
 type ExecHandler func(sql string) (err error)
+type ExistsHandler func(sql string) (exists bool, err error)
 type ExecWithRowsAffectedHandler func(sql string) (rowsAffected int64, err error)
 type InsertWithLastIdHandler func(sql string) (lastInsertId uint64, rowsAffected int64, err error)
+
+func WarpUpdateWithEventTrigger(updateHander ExecWithRowsAffectedHandler, eventUpdateTrigger EventUpdateTrigger) ExecWithRowsAffectedHandler {
+	return func(sql string) (rowsAffected int64, err error) {
+		rowsAffected, err = updateHander(sql)
+		if err != nil {
+			return
+		}
+
+		if eventUpdateTrigger != nil {
+			err = eventUpdateTrigger(rowsAffected)
+			if err != nil {
+				return rowsAffected, err
+			}
+		}
+		return rowsAffected, nil
+	}
+}
+
+func WarpInsertWithEventTrigger(insertHander InsertWithLastIdHandler, eventInsertTrigger EventInsertTrigger) InsertWithLastIdHandler {
+	return func(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
+		lastInsertId, rowsAffected, err = insertHander(sql)
+		if err != nil {
+			return
+		}
+
+		if eventInsertTrigger != nil {
+			err = eventInsertTrigger(lastInsertId, rowsAffected)
+			if err != nil {
+				return lastInsertId, rowsAffected, err
+			}
+		}
+		return lastInsertId, rowsAffected, nil
+	}
+}
 
 type Handler interface {
 	Exec(sql string) (err error)
@@ -19,13 +57,13 @@ type Handler interface {
 	InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error)
 	First(sql string, result any) (exists bool, err error)
 	Query(sql string, result any) (err error)
-	Pagination(totalSql string, listSql string, result any) (count int64, err error)
 	Count(sql string) (count int64, err error)
+	Exists(sql string) (exists bool, err error)
 }
 
 type GormHandler func() *gorm.DB
 
-func NewGormHandler(getDB func() *gorm.DB) GormHandler {
+func NewGormHandler(getDB func() *gorm.DB) Handler {
 	return GormHandler(getDB)
 }
 
@@ -35,6 +73,16 @@ func (h GormHandler) Exec(sql string) (err error) {
 func (h GormHandler) ExecWithRowsAffected(sql string) (rowsAffected int64, err error) {
 	tx := h().Exec(sql)
 	return tx.RowsAffected, tx.Error
+}
+
+func (h GormHandler) Exists(sql string) (exists bool, err error) {
+	result := make([]any, 0)
+	err = h.Query(sql, &result)
+	if err != nil {
+		return false, err
+	}
+	exists = len(result) > 0
+	return exists, nil
 }
 func (h GormHandler) InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
 	h().Transaction(func(tx *gorm.DB) error {
@@ -77,17 +125,7 @@ func (h GormHandler) First(sql string, result any) (exists bool, err error) {
 func (h GormHandler) Query(sql string, result any) (err error) {
 	return h().Raw(sql).Find(result).Error
 }
-func (h GormHandler) Pagination(totalSql string, listSql string, result any) (count int64, err error) {
-	if err = h().Raw(totalSql).Count(&count).Error; err != nil {
-		return 0, err
-	}
-	if count > 0 {
-		if err = h().Raw(listSql).Find(result).Error; err != nil {
-			return 0, err
-		}
-	}
-	return count, nil
-}
+
 func (h GormHandler) Count(sql string) (count int64, err error) {
 	err = h().Raw(sql).Count(&count).Error
 	return count, err
