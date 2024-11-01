@@ -626,9 +626,7 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 		Where(where...).
 		Order(fs.Order()...).
 		Limit(1)
-	if len(p.builderFns) > 0 {
-		p.builderFns.Apply(ds)
-	}
+	ds = p.builderFns.Apply(ds)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -647,14 +645,15 @@ func (p FirstParam) First(result any) (exists bool, err error) {
 	return p.firstHandler(sql, result)
 }
 
-type SelectBuilderFn func(ds *goqu.SelectDataset)
+type SelectBuilderFn func(ds *goqu.SelectDataset) *goqu.SelectDataset
 
 type SelectBuilderFns []SelectBuilderFn
 
-func (fns SelectBuilderFns) Apply(ds *goqu.SelectDataset) {
+func (fns SelectBuilderFns) Apply(ds *goqu.SelectDataset) *goqu.SelectDataset {
 	for _, fn := range fns {
-		fn(ds)
+		ds = fn(ds)
 	}
+	return ds
 }
 
 type ListParam struct {
@@ -716,9 +715,7 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	if pageSize > 0 {
 		ds = ds.Offset(uint(ofsset)).Limit(uint(pageSize))
 	}
-	if len(p.builderFns) > 0 {
-		p.builderFns.Apply(ds)
-	}
+	ds = p.builderFns.Apply(ds)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -818,9 +815,7 @@ func (p ExistsParam) ToSQL() (sql string, err error) {
 		From(table).
 		Where(where...).
 		Limit(1)
-	if len(p.builderFns) > 0 {
-		p.builderFns.Apply(ds)
-	}
+	ds = p.builderFns.Apply(ds)
 
 	sql, _, err = ds.ToSQL()
 	if err != nil {
@@ -890,9 +885,7 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 	ds := Dialect.DialectWrapper().From(table).Where(where...).Select(goqu.COUNT(goqu.Star()).As("count"))
-	if len(p.builderFns) > 0 {
-		p.builderFns.Apply(ds)
-	}
+	ds = p.builderFns.Apply(ds)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
