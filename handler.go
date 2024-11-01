@@ -51,6 +51,26 @@ func WarpInsertWithEventTrigger(insertHander InsertWithLastIdHandler, eventInser
 	}
 }
 
+// WithHandler 附加特定的执行器，在实现事务操作时使用
+type WithHandler struct {
+	handler Handler
+}
+
+func (h *WithHandler) WithHandler(handler Handler) {
+	h.handler = handler
+}
+
+func (h *WithHandler) Handler() Handler {
+	return h.handler
+}
+
+func (h *WithHandler) HandlerWithDefault(defaultHandler Handler) Handler {
+	if h.handler != nil {
+		return h.handler
+	}
+	return defaultHandler
+}
+
 type Handler interface {
 	Exec(sql string) (err error)
 	ExecWithRowsAffected(sql string) (rowsAffected int64, err error)
