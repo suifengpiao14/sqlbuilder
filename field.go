@@ -222,6 +222,9 @@ func _ExcludeOnlyForDataValueFn(vs ValueFns) (subFns ValueFns) {
 
 var ValueFnWhereLike = ValueFn{
 	Fn: func(val any) (value any, err error) {
+		if val == nil {
+			return val, nil
+		}
 		str := cast.ToString(val)
 		if str == "" {
 			return val, nil
