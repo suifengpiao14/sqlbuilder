@@ -743,7 +743,12 @@ var ValueFnIlike = ValueFn{
 		if IsNil(in) {
 			return nil, nil
 		}
-		return Ilike{"%", cast.ToString(in), "%"}, nil
+		str := cast.ToString(in)
+		if str == "" {
+			return nil, nil
+		}
+
+		return Ilike{"%", str, "%"}, nil
 	},
 	Layer: Value_Layer_DBFormat,
 }
