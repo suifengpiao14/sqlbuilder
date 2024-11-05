@@ -24,7 +24,7 @@ type Builder struct {
 
 func NewGormBuilder(table string, getDB func() *gorm.DB) Builder {
 	handler := NewGormHandler(getDB)
-	return Builder{handler: handler, table: table}
+	return NewBuilder(table, handler)
 }
 
 func NewBuilder(table string, handler Handler) Builder { // 因为 WithHandler 需要复制，所以这里统一不返回地址值
@@ -312,7 +312,13 @@ func (p InsertParam) Exec() (err error) {
 	_, _, err = WarpInsertWithEventTrigger(p.insertWithLastIdHandler, p.triggerInsertEvent)(sql)
 	return err
 }
+
+// Deprecated: use Insert instead
 func (p InsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64, err error) {
+	return p.Insert()
+}
+
+func (p InsertParam) Insert() (lastInsertId uint64, rowsAffected int64, err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return 0, 0, err
@@ -483,13 +489,18 @@ func (p DeleteParam) Exec() (err error) {
 	_, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, EventUpdateTrigger(p.triggerDeletedEvent))(sql)
 	return err
 }
-func (p DeleteParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
+func (p DeleteParam) Delete() (rowsAffected int64, err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return rowsAffected, err
 	}
 	rowsAffected, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, EventUpdateTrigger(p.triggerDeletedEvent))(sql)
 	return rowsAffected, err
+}
+
+// deprecated use Delete instead
+func (p DeleteParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
+	return p.Delete()
 }
 
 type UpdateParam struct {
@@ -564,7 +575,13 @@ func (p UpdateParam) Exec() (err error) {
 	_, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, p.triggerUpdatedEvent)(sql)
 	return err
 }
+
+// Deprecated :已废弃,请使用Update
 func (p UpdateParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
+	return p.Update()
+}
+
+func (p UpdateParam) Update() (rowsAffected int64, err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return 0, err
@@ -726,7 +743,11 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
+// Deprecated: 已废弃,请使用List
 func (p ListParam) Query(result any) (err error) {
+	return p.List(result)
+}
+func (p ListParam) List(result any) (err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
 		return err

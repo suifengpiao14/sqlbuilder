@@ -51,95 +51,162 @@ func WarpInsertWithEventTrigger(insertHander InsertWithLastIdHandler, eventInser
 	}
 }
 
+type CompilerConfig struct {
+	Table       string
+	Handler     Handler
+	FieldsApply ApplyFn
+}
+
+func (c CompilerConfig) WithTableIgnore(table string) CompilerConfig {
+	if c.Table == "" { // 为空时才增加,即优先级低，用于设置默认值
+		c.Table = table
+	}
+	return c
+}
+func (c CompilerConfig) WithHandlerIgnore(handler Handler) CompilerConfig {
+	if c.Handler == nil { // 为空时才增加,即优先级低，用于设置默认值
+		c.Handler = handler
+	}
+	return c
+}
+
+// CopyHandler 常用于传递handler
+func (c CompilerConfig) CopyHandler() CompilerConfig {
+	cp := CompilerConfig{
+		Handler: c.Handler,
+	}
+	return cp
+
+}
+
+// CopyTableHandler 常用于传递handler和table
+func (c CompilerConfig) CopyTableHandler() CompilerConfig {
+	cp := CompilerConfig{
+		Table:   c.Table,
+		Handler: c.Handler,
+	}
+	return cp
+}
+
 // Compiler
 type Compiler struct {
-	handler        Handler
-	defaultHandler Handler
-	fields         Fields
-	batchFields    []Fields
-	tableName      string
-	insertEvent    EventInsertTrigger
-	updateEvent    EventUpdateTrigger
-	deleteEvent    EventDeletedTrigger
+	handler     Handler
+	tableName   string
+	fields      Fields
+	batchFields []Fields
+	insertEvent EventInsertTrigger
+	updateEvent EventUpdateTrigger
+	deleteEvent EventDeletedTrigger
 }
 
-func (h *Compiler) WithHandler(handler Handler) *Compiler {
-	h.handler = handler
+func NewCompiler(cfg CompilerConfig, fs ...*Field) Compiler {
+	c := Compiler{tableName: cfg.Table, handler: cfg.Handler, fields: fs}
+	c = c.Apply(cfg)
+	return c
+}
+
+func (h Compiler) WithHandler(handler Handler) Compiler {
+	if handler != nil { // 增加空判断，方便使用方转入nil情况
+		h.handler = handler
+	}
 	return h
 }
 
-func (h *Compiler) WithDefaultHandler(defaultHandler Handler) *Compiler {
-	h.defaultHandler = defaultHandler
+func (h Compiler) Apply(cfg CompilerConfig) Compiler {
+	if cfg.Table != "" { // 增加空判断，方便使用方转入nil情况
+		h.tableName = cfg.Table
+	}
+	if cfg.Handler != nil { // 增加空判断，方便使用方转入nil情况
+		h.handler = cfg.Handler
+	}
+	if cfg.FieldsApply != nil { // 应用列修改
+		h.fields.Apply(cfg.FieldsApply)
+		for i := range h.batchFields {
+			h.batchFields[i].Apply(cfg.FieldsApply)
+		}
+	}
+
 	return h
 }
-func (h *Compiler) WithFields(fs ...*Field) *Compiler {
+
+func (h Compiler) WithFields(fs ...*Field) Compiler {
 	h.fields = fs
 	return h
 }
-func (h *Compiler) WithBatchFields(batchFs ...Fields) *Compiler {
+func (h Compiler) WithInsertEvent(insertEvent EventInsertTrigger) Compiler {
+	h.insertEvent = insertEvent
+	return h
+}
+func (h Compiler) WithUpdateEvent(updateEvent EventUpdateTrigger) Compiler {
+	h.updateEvent = updateEvent
+	return h
+}
+func (h Compiler) WithDeleteEvent(deleteEvent EventDeletedTrigger) Compiler {
+	h.deleteEvent = deleteEvent
+	return h
+}
+
+func (h Compiler) WithBatchFields(batchFs ...Fields) Compiler {
 	h.batchFields = batchFs
 	return h
 }
-func (h *Compiler) WithTable(table string) *Compiler {
+func (h Compiler) WithTable(table string) Compiler {
 	h.tableName = table
 	return h
 }
 
-func (h *Compiler) Handler() Handler {
+func (h Compiler) Handler() Handler {
 	if h.handler != nil {
 		return h.handler
 	}
-	if h.defaultHandler != nil {
-		return h.defaultHandler
-	}
 	panic(errors.New("handler is nil"))
 }
-func (h *Compiler) Table() (table string) {
+func (h Compiler) Table() (table string) {
 	if h.tableName != "" {
 		return h.tableName
 	}
 	panic(errors.New("table name is nil"))
 }
-func (h *Compiler) Fields() (fs Fields) {
+func (h Compiler) Fields() (fs Fields) {
 	if len(h.fields) > 0 {
 		return h.fields
 	}
 	panic(errors.New("fields is nil"))
 }
-func (h *Compiler) BatchFields() (batchFs []Fields) {
+func (h Compiler) BatchFields() (batchFs []Fields) {
 	if len(h.batchFields) > 0 {
 		return h.batchFields
 	}
 	panic(errors.New("batchFields is nil"))
 }
 
-func (h *Compiler) Insert() *InsertParam {
+func (h Compiler) Insert() *InsertParam {
 	return NewInsertBuilder(h.Table()).WithHandler(h.Handler().InsertWithLastIdHandler).WithTriggerEvent(h.insertEvent).AppendFields(h.Fields()...)
 }
-func (h *Compiler) InsertBatch() *BatchInsertParam {
+func (h Compiler) InsertBatch() *BatchInsertParam {
 	return NewBatchInsertBuilder(h.Table()).WithHandler(h.Handler().InsertWithLastIdHandler).WithTriggerEvent(h.insertEvent).AppendFields(h.BatchFields()...)
 }
 
-func (h *Compiler) Update() *UpdateParam {
+func (h Compiler) Update() *UpdateParam {
 	return NewUpdateBuilder(h.Table()).WithHandler(h.Handler().ExecWithRowsAffected).WithTriggerEvent(h.updateEvent).AppendFields(h.Fields()...)
 }
 
-func (h *Compiler) Delete() *DeleteParam {
+func (h Compiler) Delete() *DeleteParam {
 	return NewDeleteBuilder(h.Table()).WithHandler(h.Handler().ExecWithRowsAffected).WithTriggerEvent(h.deleteEvent).AppendFields(h.Fields()...)
 }
-func (h *Compiler) Exists() *ExistsParam {
+func (h Compiler) Exists() *ExistsParam {
 	return NewExistsBuilder(h.Table()).WithHandler(h.Handler().Exists).AppendFields(h.Fields()...)
 }
-func (h *Compiler) Count() *TotalParam {
+func (h Compiler) Count() *TotalParam {
 	return NewTotalBuilder(h.Table()).WithHandler(h.Handler().Count).AppendFields(h.Fields()...)
 }
-func (h *Compiler) First() *FirstParam {
+func (h Compiler) First() *FirstParam {
 	return NewFirstBuilder(h.Table()).WithHandler(h.Handler().First).AppendFields(h.Fields()...)
 }
-func (h *Compiler) List() *ListParam {
+func (h Compiler) List() *ListParam {
 	return NewListBuilder(h.Table()).WithHandler(h.Handler().Query).AppendFields(h.Fields()...)
 }
-func (h *Compiler) Pagination() *PaginationParam {
+func (h Compiler) Pagination() *PaginationParam {
 	return NewPaginationBuilder(h.Table()).WithHandler(h.Handler().Count, h.Handler().Query).AppendFields(h.Fields()...)
 }
 
