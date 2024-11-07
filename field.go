@@ -1437,16 +1437,6 @@ func IsNil(v any) bool {
 	}
 }
 
-type Neq any
-
-func TryNeq(field string, value any) (expressions Expressions, ok bool) {
-	if val, ok := value.(Neq); ok {
-		identifier := goqu.C(field)
-		return ConcatExpression(identifier.Neq(val)), true
-	}
-	return nil, false
-}
-
 // Ilike 不区分大小写like语句
 type Ilike [3]any
 
@@ -1531,9 +1521,6 @@ func TryParseExpressions(field string, value any) (expressions Expressions, ok b
 	}
 
 	if ex, ok := TryIlike(field, value); ok {
-		return ex, true
-	}
-	if ex, ok := TryNeq(field, value); ok {
 		return ex, true
 	}
 
