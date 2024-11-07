@@ -1533,6 +1533,10 @@ func TryParseExpressions(field string, value any) (expressions Expressions, ok b
 	if ex, ok := TryIlike(field, value); ok {
 		return ex, true
 	}
+	if ex, ok := TryNeq(field, value); ok {
+		return ex, true
+	}
+
 	return nil, false
 }
 func Expression2String(expressions ...goqu.Expression) string {
