@@ -1117,13 +1117,41 @@ func ValueFnOnlyForData(valueFnFn ValueFnFn) ValueFn {
 // 	}
 // }
 
+type FieldFilterFn func(f Field) bool
+
+// FieldFilterExclude 从fields 集合中筛选出和subFileds差集
+func FieldFilterExclude(subFileds ...*Field) FieldFilterFn {
+	return func(f Field) bool {
+		for _, subField := range subFileds {
+			ok := strings.EqualFold(subField.Name, f.Name)
+			if ok {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+// FieldFilterInclude 从fields 集合中筛选出和subFileds交集
+func FieldFilterInclude(subFileds ...*Field) FieldFilterFn {
+	return func(f Field) bool {
+		for _, subField := range subFileds {
+			ok := strings.EqualFold(subField.Name, f.Name)
+			if ok {
+				return true
+			}
+		}
+		return false
+	}
+}
+
 type FieldsI interface {
 	Fields() Fields
 }
 
 type Fields []*Field
 
-func (fs Fields) Fielter(fn func(f Field) bool) (fields Fields) {
+func (fs Fields) Fielter(fn FieldFilterFn) (fields Fields) {
 	fields = make(Fields, 0)
 	for _, f := range fs {
 		if fn(*f) {
