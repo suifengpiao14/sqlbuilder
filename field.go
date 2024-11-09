@@ -1459,6 +1459,14 @@ func (fs Fields) Data() (data any, err error) {
 			}
 		}
 	}
+	isNil := true
+	for range dataMap {
+		isNil = false
+		break
+	}
+	if isNil {
+		return nil, nil
+	}
 	return dataMap, nil
 }
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/suifengpiao14/funcs"
 	"github.com/suifengpiao14/sqlbuilder"
 )
@@ -150,4 +151,14 @@ func TestIsGenericByFieldFn(t *testing.T) {
 	ok := sqlbuilder.IsGenericByFieldFn(reflect.TypeOf(a))
 	fmt.Println(ok)
 
+}
+
+func TestDataIsNil(t *testing.T) {
+	f := sqlbuilder.NewIntField(0, "id", "ID", 0)
+	f.ValueFns.Append(sqlbuilder.ValueFnEmpty2Nil)
+	fs := sqlbuilder.Fields{f}
+	data, err := fs.Data()
+	require.NoError(t, err)
+	isNil := sqlbuilder.IsNil(data)
+	fmt.Println(isNil)
 }
