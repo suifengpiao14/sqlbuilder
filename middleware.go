@@ -68,7 +68,7 @@ var ApplyFnIncrease ApplyFn = func(f *Field, fs ...*Field) {
 }
 
 func ValueFnFnIncrease(f *Field, fs ...*Field) ValueFnFn {
-	return func(inputValue any) (any, error) {
+	return func(inputValue any, f *Field, fs ...*Field) (any, error) {
 		if IsNil(inputValue) {
 			return nil, nil
 		}
@@ -104,7 +104,7 @@ func ApplyFnOrderField(valueOrder ...any) ApplyFn {
 
 var ApplyFnWhereGte ApplyFn = func(f *Field, fs ...*Field) {
 	f.WhereFns.Append(ValueFn{
-		Fn: func(inputValue any) (any, error) {
+		Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
 			if IsNil(inputValue) {
 				return nil, nil
 			}
@@ -117,7 +117,7 @@ var ApplyFnWhereGte ApplyFn = func(f *Field, fs ...*Field) {
 
 var ApplyFnWhereLte ApplyFn = func(f *Field, fs ...*Field) {
 	f.WhereFns.Append(ValueFn{
-		Fn: func(inputValue any) (any, error) {
+		Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
 			if IsNil(inputValue) {
 				return nil, nil
 			}
@@ -131,7 +131,7 @@ var ApplyFnWhereLte ApplyFn = func(f *Field, fs ...*Field) {
 // ApplyFnWhereFindInColumnSet 传入的值在列字段集合内
 var ApplyFnWhereFindInColumnSet ApplyFn = func(f *Field, fs ...*Field) {
 	f.WhereFns.Append(ValueFn{
-		Fn: func(inputValue any) (any, error) {
+		Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
 			if IsNil(inputValue) {
 				return nil, nil
 			}
@@ -146,7 +146,7 @@ var ApplyFnWhereFindInColumnSet ApplyFn = func(f *Field, fs ...*Field) {
 
 // ApplyFnValueFnSetIfEmpty 数据库值为空则修改,否则不修改,用于update
 var ApplyFnValueFnSetIfEmpty ApplyFn = func(f *Field, fs ...*Field) {
-	f.ValueFns.Append(ValueFnOnlyForData(func(inputValue any) (any, error) {
+	f.ValueFns.Append(ValueFnOnlyForData(func(inputValue any, f *Field, fs ...*Field) (any, error) {
 		if IsNil(inputValue) {
 			return nil, nil
 		}
@@ -158,7 +158,7 @@ var ApplyFnValueFnSetIfEmpty ApplyFn = func(f *Field, fs ...*Field) {
 
 var ApplyFnValueFormatBySchemaType ApplyFn = func(f *Field, fs ...*Field) {
 	f.ValueFns.Append(ValueFn{
-		Fn: func(inputValue any) (any, error) {
+		Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
 			value := f.FormatType(inputValue)
 			return value, nil
 		},
@@ -194,7 +194,7 @@ func ApplyFnUnique(existsFn ExistsHandler) ApplyFn { // 复合索引，给一列
 					f.WhereFns.Append(ValueFnForward)
 				})
 				f.ValueFns.Append(ValueFn{
-					Fn: func(inputValue any) (any, error) {
+					Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
 						exitstsParam := NewExistsBuilder(table).WithHandler(existsFn).AppendFields(uniqueFields...)
 						exists, err := exitstsParam.Exists()
 						if err != nil {
@@ -231,7 +231,7 @@ func ApplyFnUpdateIfNull(table string, firstHandler FirstHandler) ApplyFn {
 	return func(f *Field, fs ...*Field) {
 		f.SceneUpdate(func(f *Field, fs ...*Field) {
 			f.ValueFns.Append(ValueFn{
-				Fn: func(inputValue any) (any, error) {
+				Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
 					if IsNil(inputValue) {
 						return inputValue, nil
 					}

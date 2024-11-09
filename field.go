@@ -40,7 +40,7 @@ var (
 	Layer_order = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_DBValidate, Value_Layer_DBFormat, Value_Layer_OnlyForData} // 层序,越靠前越先执行
 )
 
-type ValueFnFn func(inputValue any) (any, error)
+type ValueFnFn func(inputValue any, f *Field, fs ...*Field) (any, error)
 type ValueFn struct {
 	Fn          ValueFnFn
 	Layer       Layer
@@ -79,7 +79,7 @@ func (values ValueFns) HasSetValueLayer() bool {
 	return len(values.GetByLayer(Value_Layer_SetValue)) > 0
 }
 
-func (values ValueFns) Value(val any) (value any, err error) {
+func (values ValueFns) Value(val any, f *Field, fs ...*Field) (value any, err error) {
 	if !values.HasSetValueLayer() {
 		return nil, nil
 	}
@@ -90,7 +90,7 @@ func (values ValueFns) Value(val any) (value any, err error) {
 			if v.IsNil() {
 				continue
 			}
-			value, err = v.Fn(value) //格式化值
+			value, err = v.Fn(value, f, fs...) //格式化值
 			if err != nil {
 				return value, err
 			}
@@ -221,7 +221,7 @@ func _ExcludeOnlyForDataValueFn(vs ValueFns) (subFns ValueFns) {
 // }
 
 var ValueFnWhereLike = ValueFn{
-	Fn: func(val any) (value any, err error) {
+	Fn: func(val any, f *Field, fs ...*Field) (value any, err error) {
 		if val == nil {
 			return val, nil
 		}
@@ -758,11 +758,11 @@ type AttributeI interface {
 }
 
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
-func NewField[T int | int64 | uint64 | []int | []int64 | []uint64 | string | []string | ValueFn | ValueFnFn | func(inputValue any) (any, error)](value T, middlewareFns ...ApplyFn) (field *Field) {
+func NewField[T int | int64 | uint64 | []int | []int64 | []uint64 | string | []string | ValueFn | ValueFnFn | func(inputValue any, f *Field, fs ...*Field) (any, error)](value T, middlewareFns ...ApplyFn) (field *Field) {
 	field = &Field{}
 	var valueFn ValueFn
 	switch v := any(value).(type) {
-	case func(inputValue any) (any, error):
+	case func(inputValue any, f *Field, fs ...*Field) (any, error):
 		valueFn = ValueFn{
 			Fn:    v,
 			Layer: Value_Layer_SetValue,
@@ -779,7 +779,7 @@ func NewField[T int | int64 | uint64 | []int | []int64 | []uint64 | string | []s
 		}
 	default:
 		valueFn = ValueFn{
-			Fn: func(inputValue any) (any, error) {
+			Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
 				return v, nil
 			},
 			Layer: Value_Layer_SetValue,
@@ -820,7 +820,7 @@ func IsErrorValueNil(err error) bool {
 // ValueFnArgEmptyStr2NilExceptFields 将空字符串值转换为nil值时排除的字段,常见的有 deleted_at 字段,空置代表正常
 //var ValueFnArgEmptyStr2NilExceptFields = Fields{}
 
-var GlobalFnValueFns = func(f Field) ValueFns {
+var GlobalFnValueFns = func(f Field, fs ...*Field) ValueFns {
 	return ValueFns{
 		//GlobalValueFnEmptyStr2Nil(f, ValueFnArgEmptyStr2NilExceptFields...), // 将空置转换为nil,代替对数据判断 if v==""{//ignore}  这个函数在全局修改了函数值，出现问题，比较难跟踪，改到每个组件自己处理
 		ValueFnDBSchemaFormatType(f), // 在转换为SQL前,将所有数据类型按照DB类型转换,主要是格式化int和string,提升SQL性能，将数据格式改成DB格式，不影响当期调用链，可以作为全局配置
@@ -869,9 +869,9 @@ func (f *Field) Init(fs ...*Field) *Field {
 	return f
 }
 
-func (f Field) InjectValueFn() Field {
+func (f Field) InjectValueFn(fs ...*Field) Field {
 	f.ValueFns.Append(ValueFn{
-		Fn: func(in any) (any, error) { //插入数据验证
+		Fn: func(in any, f *Field, fs ...*Field) (any, error) { //插入数据验证
 			err := f.Validate(in)
 			if err != nil {
 				return in, err
@@ -884,16 +884,16 @@ func (f Field) InjectValueFn() Field {
 	return f
 }
 
-func (f Field) GetValue() (value any, err error) {
-	f = f.InjectValueFn()
-	return f.getValue()
+func (f Field) GetValue(fs ...*Field) (value any, err error) {
+	f = f.InjectValueFn(fs...)
+	return f.getValue(fs...)
 }
 
-func (f Field) getValue() (value any, err error) {
+func (f Field) getValue(fs ...*Field) (value any, err error) {
 	if f.ValueFns == nil { // 防止空指针
 		return nil, nil
 	}
-	value, err = f.ValueFns.Value(nil)
+	value, err = f.ValueFns.Value(nil, &f, fs...)
 	if err != nil {
 		return value, err
 	}
@@ -925,7 +925,7 @@ func (f1 Field) WhereData(fs ...*Field) (value any, err error) {
 		if fn.IsNil() {
 			continue
 		}
-		value, err = fn.Fn(value) // value 为nil 继续循环，主要考虑调试方便，若中途中断，可能导致调试困难(代码未按照预期运行，不知道哪里中断了)，另外一般调试时，都没有写参数值，方便能快速查看效果
+		value, err = fn.Fn(value, &f, fs...) // value 为nil 继续循环，主要考虑调试方便，若中途中断，可能导致调试困难(代码未按照预期运行，不知道哪里中断了)，另外一般调试时，都没有写参数值，方便能快速查看效果
 		if err != nil {
 			return value, err
 		}
@@ -941,7 +941,7 @@ func FilterNil(in any, valueFn ValueFn) (any, error) {
 	if IsNil(in) {
 		return nil, nil
 	}
-	return valueFn.Fn(in)
+	return valueFn.Fn(in, nil)
 }
 
 // IsEqual 判断名称值是否相等
@@ -1089,7 +1089,7 @@ func ValueFnApiFormat(valueFnFn ValueFnFn) ValueFn {
 	}
 }
 
-func ValueFnDBFormat(fn func(in any) (any, error)) ValueFn {
+func ValueFnDBFormat(fn func(in any, f *Field, fs ...*Field) (any, error)) ValueFn {
 	return ValueFn{
 		Fn:          fn,
 		Layer:       Value_Layer_DBFormat,
@@ -1537,8 +1537,8 @@ var GlobalFnFormatTableName = func(tableName string) string {
 }
 
 func NewBetweenWithoutEmpty[T int | int64 | float64 | string](start T, end T) Between {
-	start1, _ := ValueFnEmpty2Nil.Fn(start)
-	end1, _ := ValueFnEmpty2Nil.Fn(end)
+	start1, _ := ValueFnEmpty2Nil.Fn(start, nil)
+	end1, _ := ValueFnEmpty2Nil.Fn(end, nil)
 	return Between{start1, end1}
 }
 

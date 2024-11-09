@@ -403,7 +403,7 @@ func (es Enums) String() (str string) {
 // NewEnumTitleField 根据enum field 生成title列
 func NewEnumTitleField(key any, enumField *Field) *Field {
 	valueFn := ValueFn{
-		Fn: func(in any) (any, error) {
+		Fn: func(in any, f *Field, fs ...*Field) (any, error) {
 			return enumField.Schema.Enums.Title(key), nil
 		},
 		Layer: Value_Layer_SetValue,
@@ -581,7 +581,7 @@ func contains(slice []string, item string) bool {
 // ValueFnDBSchemaFormat 根据DB类型要求,转换数据类型
 func ValueFnDBSchemaFormatType(field Field) (valueFn ValueFn) {
 	return ValueFn{
-		Fn: func(in any) (any, error) {
+		Fn: func(in any, f *Field, fs ...*Field) (any, error) {
 			value := field.FormatType(in)
 			return value, nil
 		},
@@ -609,7 +609,7 @@ func UniqueueArray[T int | int64 | string](in any) (any, error) {
 }
 
 var ValueFnForward = ValueFn{
-	Fn: func(in any) (any, error) {
+	Fn: func(in any, f *Field, fs ...*Field) (any, error) {
 		return in, nil
 	},
 	Layer: Value_Layer_DBFormat,
@@ -617,7 +617,7 @@ var ValueFnForward = ValueFn{
 
 // ValueFnFormatArray 格式化数组,只有一个元素时,直接返回当前元素，常用于where in 条件
 var ValueFnFormatArray = ValueFn{
-	Fn: func(in any) (any, error) {
+	Fn: func(in any, f *Field, fs ...*Field) (any, error) {
 		if IsNil(in) {
 			return nil, nil
 		}
@@ -640,7 +640,7 @@ var ValueFnDecodeComma = ValueFn{
 	Layer: Value_Layer_SetFormat,
 }
 
-func ValueFnDecodeCommaFn(in any) (any, error) {
+func ValueFnDecodeCommaFn(in any, f *Field, fs ...*Field) (any, error) {
 	if IsNil(in) {
 		return in, nil
 	}
@@ -664,7 +664,7 @@ var ValueFnShield = ValueFn{ // 屏蔽数据
 	Layer: Value_Layer_DBFormat,
 }
 
-func ValueFnShieldFn(in any) (any, error) {
+func ValueFnShieldFn(in any, f *Field, fs ...*Field) (any, error) {
 	return nil, nil
 }
 
@@ -672,7 +672,7 @@ func ValueFnShieldFn(in any) (any, error) {
 var ValueFnShieldForData = ValueFnOnlyForData(ValueFnShieldFn)
 
 var ValueFnEmpty2Nil = ValueFn{ // 空字符串改成nil,值改成nil后,sql语句中会忽略该字段,常常用在update,where 字句中
-	Fn: func(in any) (any, error) {
+	Fn: func(in any, f *Field, fs ...*Field) (any, error) {
 		switch val := in.(type) {
 		case string:
 			if val == "" {
@@ -705,7 +705,7 @@ var ValueFnEmpty2Nil = ValueFn{ // 空字符串改成nil,值改成nil后,sql语�
 }
 
 var ValueFnGte = ValueFn{
-	Fn: func(in any) (value any, err error) {
+	Fn: func(in any, f *Field, fs ...*Field) (value any, err error) {
 		if IsNil(in) {
 			return nil, nil
 		}
@@ -715,7 +715,7 @@ var ValueFnGte = ValueFn{
 }
 
 var ValueFnLte = ValueFn{
-	Fn: func(in any) (value any, err error) {
+	Fn: func(in any, f *Field, fs ...*Field) (value any, err error) {
 		if IsNil(in) {
 			return nil, nil
 		}
@@ -726,7 +726,7 @@ var ValueFnLte = ValueFn{
 
 // ValueFnTrimBlankSpace 删除字符串前后空格
 var ValueFnTrimBlankSpace = ValueFn{
-	Fn: func(in any) (any, error) {
+	Fn: func(in any, f *Field, fs ...*Field) (any, error) {
 		if in == nil {
 			return in, nil
 		}
@@ -739,7 +739,7 @@ var ValueFnTrimBlankSpace = ValueFn{
 }
 
 var ValueFnIlike = ValueFn{
-	Fn: func(in any) (value any, err error) {
+	Fn: func(in any, f *Field, fs ...*Field) (value any, err error) {
 		if IsNil(in) {
 			return nil, nil
 		}
