@@ -1403,6 +1403,17 @@ func (fs Fields) GetByFieldName(fieldName string) (*Field, bool) {
 	return nil, false
 }
 
+// GetByName 通过名称获取field, 也可用户判断指定name是否存在
+func (fs Fields) GetByName(name string) (*Field, bool) {
+	for i := 0; i < len(fs); i++ {
+		f := fs[i]
+		if strings.EqualFold(name, f.Name) {
+			return f, true
+		}
+	}
+	return nil, false
+}
+
 func (fs Fields) DBNames() (dbNames []string, err error) {
 	dbNames = make([]string, 0)
 	for _, f := range fs {
