@@ -1089,6 +1089,31 @@ func ValueFnApiFormat(valueFnFn ValueFnFn) ValueFn {
 	}
 }
 
+const (
+	Tag_validate_At_least_one = "tag_validate_At_least_one"
+)
+
+func ValueFnApiValidateAtLeastOne(TagAtLeastOne string) ValueFn {
+	return ValueFnApiValidate(func(inputValue any, f *Field, fs ...*Field) (any, error) {
+		subFields := Fields(fs).GetByTags(TagAtLeastOne)
+		data, err := subFields.Data()
+		if err != nil {
+			return nil, err
+		}
+		if IsNil(data) {
+			nameArr := make([]string, 0)
+			subFields.Each(func(f *Field) error {
+				nameArr = append(nameArr, f.Name)
+				return nil
+			})
+			err = errors.Errorf("at least one of[%s] required", strings.Join(nameArr, ","))
+			return nil, err
+		}
+
+		return inputValue, nil
+	})
+}
+
 func ValueFnDBFormat(fn func(in any, f *Field, fs ...*Field) (any, error)) ValueFn {
 	return ValueFn{
 		Fn:          fn,
