@@ -693,15 +693,19 @@ func (f *Field) SceneFnRmove(name string) *Field {
 	return f
 }
 func (f *Field) Apply(applyFns ...ApplyFn) *Field {
-	ApplyFns(applyFns).Apply(f)
+	f = f.SceneInit(applyFns...)
 	return f
 }
 
-func (f *Field) SceneInit(middlewareFn ApplyFn) *Field {
-	f.sceneFns.Append(SceneFn{
-		Scene: SCENE_SQL_INIT,
-		Fn:    middlewareFn,
-	})
+func (f *Field) SceneInit(middlewareFns ...ApplyFn) *Field {
+	sceneFns := make([]SceneFn, 0)
+	for _, fn := range middlewareFns {
+		sceneFns = append(sceneFns, SceneFn{
+			Scene: SCENE_SQL_INIT,
+			Fn:    fn,
+		})
+	}
+	f.sceneFns.Append(sceneFns...)
 	return f
 }
 func (f *Field) SceneInsert(middlewareFn ApplyFn) *Field {
@@ -1160,6 +1164,15 @@ func (fs Fields) Fielter(fn FieldFilterFn) (fields Fields) {
 	}
 	return fields
 }
+func (fs Fields) Each(fn func(f *Field) error) error {
+	for _, f := range fs {
+		err := fn(f)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func (fs Fields) Copy() (fields Fields) {
 	fields = make(Fields, 0)
@@ -1173,6 +1186,7 @@ func (fs Fields) Copy() (fields Fields) {
 func (fs Fields) Validate() (err error) {
 
 	for _, f := range fs {
+		f.Init(fs...)
 		field := f.InjectValueFn()
 		field.ValueFns = field.ValueFns.GetByLayer(Value_Layer_SetValue, Value_Layer_SetFormat)
 		_, e := field.getValue()
