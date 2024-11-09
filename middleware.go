@@ -62,12 +62,12 @@ func (sis *SceneFns) Append(sceneFns ...SceneFn) {
 // ApplyFnIncrease 字段值递增中间件
 var ApplyFnIncrease ApplyFn = func(f *Field, fs ...*Field) {
 	f.ValueFns.Append(ValueFn{
-		Fn:    ValueFnFnIncrese(f, fs...),
+		Fn:    ValueFnFnIncrease(f, fs...),
 		Layer: Value_Layer_DBFormat,
 	})
 }
 
-func ValueFnFnIncrese(f *Field, fs ...*Field) ValueFnFn {
+func ValueFnFnIncrease(f *Field, fs ...*Field) ValueFnFn {
 	return func(inputValue any) (any, error) {
 		if IsNil(inputValue) {
 			return nil, nil
