@@ -62,16 +62,27 @@ func (sis *SceneFns) Append(sceneFns ...SceneFn) {
 // ApplyFnIncrease 字段值递增中间件
 var ApplyFnIncrease ApplyFn = func(f *Field, fs ...*Field) {
 	f.ValueFns.Append(ValueFn{
-		Fn: func(inputValue any) (any, error) {
-			num := cast.ToInt(inputValue)
-			if num < 1 {
-				num = 1
-			}
-			val := fmt.Sprintf("`%s`+ %d", f.DBName(), num)
-			return goqu.L(val), nil
-		},
+		Fn:    ValueFnFnIncrese(f, fs...),
 		Layer: Value_Layer_DBFormat,
 	})
+}
+
+func ValueFnFnIncrese(f *Field, fs ...*Field) ValueFnFn {
+	return func(inputValue any) (any, error) {
+		if IsNil(inputValue) {
+			return nil, nil
+		}
+		num := cast.ToInt(inputValue)
+		if num == 0 {
+			return nil, nil
+		}
+		symbol := "+"
+		if num < 0 {
+			symbol = "-"
+		}
+		val := fmt.Sprintf("`%s` %s %d", f.DBName(), symbol, num)
+		return goqu.L(val), nil
+	}
 }
 
 var ApplyFnWhereIlike ApplyFn = func(f *Field, fs ...*Field) {
