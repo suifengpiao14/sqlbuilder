@@ -290,10 +290,10 @@ type Field struct {
 	tags          Tags     // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
 	dbName        string
 	docName       string
-	selectColumns []any  // 查询时列
-	fieldName     string //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
-	indexs        Indexs // 索引
-	applyFns      ApplyFns
+	selectColumns []any    // 查询时列
+	fieldName     string   //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
+	indexs        Indexs   // 索引
+	applyFns      ApplyFns // applyFns 和 SceneFns 中的 Scene_init 区别是: applyFns 是在buider时初始化配置,只执行一次,而 Scene_init 是初始化配置后再执行时,会执行多次 二者有进一步优化的可能
 }
 
 type Index struct {
