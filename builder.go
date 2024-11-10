@@ -284,7 +284,7 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 	table := p._TableI.Table()
 	fs.SetTable(table) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
-	rowData, err := fs.Data()
+	rowData, err := fs.Data(Layer_order...)
 	if err != nil {
 		return "", err
 	}
@@ -380,7 +380,7 @@ func (is BatchInsertParam) ToSQL() (sql string, err error) {
 		fs := fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 		fs.SetTable(table)
 		fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
-		rowData, err := fs.Data()
+		rowData, err := fs.Data(Layer_order...)
 		if err != nil {
 			return "", err
 		}
@@ -462,7 +462,7 @@ func (p DeleteParam) ToSQL() (sql string, err error) {
 	}
 	canUpdateFields := fs.GetByTags(Field_tag_CanWriteWhenDeleted)
 	canUpdateFields.Append(f)
-	data, err := canUpdateFields.Data()
+	data, err := canUpdateFields.Data(Layer_order...)
 	if err != nil {
 		return "", err
 	}
@@ -543,7 +543,7 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	table := p._TableI.Table()
 	fs.SetTable(table)
 	fs.SetSceneIfEmpty(SCENE_SQL_UPDATE)
-	data, err := fs.Data()
+	data, err := fs.Data(Layer_order...)
 	if err != nil {
 		return "", err
 	}
