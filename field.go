@@ -669,7 +669,7 @@ func (f *Field) LogString() string {
 	if f.Schema != nil && f.Schema.Title == "" {
 		title = f.Schema.Title
 	}
-	val, _ := f.GetValue()
+	val, _ := f.GetValue(Layer_order)
 	str := cast.ToString(val)
 	out := fmt.Sprintf("%s(%s)", title, str)
 	return out
@@ -907,16 +907,17 @@ func (f Field) InjectValueFn(fs ...*Field) Field {
 	return f
 }
 
-func (f Field) GetValue(fs ...*Field) (value any, err error) {
+func (f Field) GetValue(layers []Layer, fs ...*Field) (value any, err error) {
 	f = f.InjectValueFn(fs...)
-	return f.getValue(fs...)
+	return f.getValue(layers, fs...)
 }
 
-func (f Field) getValue(fs ...*Field) (value any, err error) {
+func (f Field) getValue(layers []Layer, fs ...*Field) (value any, err error) {
 	if f.ValueFns == nil { // 防止空指针
 		return nil, nil
 	}
-	value, err = f.ValueFns.Value(nil, &f, fs...)
+	valueFns := f.ValueFns.GetByLayer(layers...)
+	value, err = valueFns.Value(nil, &f, fs...)
 	if err != nil {
 		return value, err
 	}
@@ -928,7 +929,7 @@ func (f Field) getValue(fs ...*Field) (value any, err error) {
 }
 
 // WhereData 获取Where 值
-func (f1 Field) WhereData(fs ...*Field) (value any, err error) {
+func (f1 Field) WhereData(layers []Layer, fs ...*Field) (value any, err error) {
 	f := *f1.Copy()
 	f.Init(fs...)
 	if len(f.WhereFns) == 0 {
@@ -937,7 +938,7 @@ func (f1 Field) WhereData(fs ...*Field) (value any, err error) {
 	if len(f.ValueFns) > 0 {
 		f.ValueFns = _ExcludeOnlyForDataValueFn(f.ValueFns)
 	}
-	value, err = f.GetValue(fs...)
+	value, err = f.GetValue(layers, fs...)
 	if IsErrorValueNil(err) {
 		err = nil // 这里不直接返回，仍然遍历 执行whereFns，方便理解流程（直接返回后，期望的whereFn没有执行，不知道流程在哪里中断了，也没有错误抛出，非常困惑，所以不能直接返回）
 	}
@@ -969,11 +970,11 @@ func FilterNil(in any, valueFn ValueFn) (any, error) {
 
 // IsEqual 判断名称值是否相等
 func (f Field) IsEqual(o Field, fs ...*Field) bool {
-	fv, err := f.GetValue(fs...)
+	fv, err := f.GetValue(Layer_order, fs...)
 	if err != nil || IsNil(fv) {
 		return false
 	}
-	ov, err := o.GetValue(fs...)
+	ov, err := o.GetValue(Layer_order, fs...)
 	if err != nil || IsNil(ov) {
 		return false
 	}
@@ -1044,11 +1045,11 @@ func (c Field) formatSingleType(val any) any {
 	return value
 }
 
-func (f1 Field) Data(fs ...*Field) (data any, err error) {
+func (f1 Field) Data(layers []Layer, fs ...*Field) (data any, err error) {
 	f := *f1.Copy() // 复制一份,不影响其它场景
 	f.Init(fs...)
 
-	val, err := f.GetValue(fs...)
+	val, err := f.GetValue(layers, fs...)
 	if IsErrorValueNil(err) {
 		return nil, nil // 忽略空值错误
 	}
@@ -1068,7 +1069,7 @@ func (f1 Field) Data(fs ...*Field) (data any, err error) {
 }
 
 func (f Field) Where(fs ...*Field) (expressions Expressions, err error) {
-	val, err := f.WhereData(fs...)
+	val, err := f.WhereData(Layer_order, fs...)
 	if err != nil {
 		return nil, err
 	}
@@ -1121,7 +1122,7 @@ func ValueFnApiValidateAtLeastOne(TagAtLeastOne string) ValueFn {
 		Name: Tag_validate_At_least_one,
 		Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
 			subFields := Fields(fs).GetByTags(TagAtLeastOne)
-			data, err := subFields.Data()
+			data, err := subFields.Data(Value_Layer_SetValue, Value_Layer_SetFormat)
 			if err != nil {
 				return nil, err
 			}
@@ -1251,10 +1252,12 @@ func (fs Fields) Builder() (fields Fields) {
 func (fs Fields) Validate() (err error) {
 
 	for _, f := range fs {
+		ApplyFns(f.applyFns).Apply(f, fs...)
 		f.Init(fs...)
 		field := f.InjectValueFn()
-		field.ValueFns = field.ValueFns.GetByLayer(Value_Layer_SetValue, Value_Layer_SetFormat)
-		_, e := field.getValue()
+		layers := []Layer{Value_Layer_SetValue, Value_Layer_SetFormat}
+		field.ValueFns = field.ValueFns.GetByLayer()
+		_, e := field.getValue(layers, fs...)
 		if e != nil {
 			err = errors.Wrap(err, e.Error())
 		}
@@ -1329,12 +1332,12 @@ func (fs Fields) Select() (columns []any) {
 
 func (fs Fields) Pagination() (index int, size int) {
 	if pageIndex, ok := fs.GetByTag(Field_tag_pageIndex); ok {
-		val, _ := pageIndex.GetValue(fs...)
+		val, _ := pageIndex.GetValue(Layer_order, fs...)
 		index = cast.ToInt(val)
 
 	}
 	if pageSize, ok := fs.GetByTag(Field_tag_pageSize); ok {
-		val, _ := pageSize.GetValue(fs...)
+		val, _ := pageSize.GetValue(Layer_order, fs...)
 		size = cast.ToInt(val)
 	}
 
@@ -1434,7 +1437,7 @@ func (fs Fields) Json() string {
 func (fs Fields) String() string {
 	m := make(map[string]any)
 	for _, f := range fs {
-		val, _ := f.GetValue(fs...)
+		val, _ := f.GetValue(Layer_order, fs...)
 		m[FieldName2DBColumnName(f.Name)] = val
 	}
 	b, _ := json.Marshal(m)
@@ -1522,10 +1525,10 @@ func (fs Fields) Order() (orderedExpressions []exp.OrderedExpression) {
 	return orderedExpressions
 }
 
-func (fs Fields) Data() (data any, err error) {
+func (fs Fields) Data(layers ...Layer) (data any, err error) {
 	dataMap := make(map[string]any, 0)
 	for _, f := range fs {
-		data, err := f.Data(fs...)
+		data, err := f.Data(layers, fs...)
 		if err != nil {
 			return nil, err
 		}
