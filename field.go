@@ -42,9 +42,14 @@ var (
 
 type ValueFnFn func(inputValue any, f *Field, fs ...*Field) (any, error)
 type ValueFn struct {
+	Name        string
 	Fn          ValueFnFn
 	Layer       Layer
 	Description string // 描述
+}
+
+func (fn ValueFn) IsEqual(v ValueFn) bool {
+	return fn.Name != "" && fn.Name == v.Name && fn.Layer.EqualFold(v.Layer)
 }
 
 func (fn ValueFn) IsNil() bool {
@@ -90,7 +95,13 @@ func (values ValueFns) Value(val any, f *Field, fs ...*Field) (value any, err er
 			if v.IsNil() {
 				continue
 			}
-			value, err = v.Fn(value, f, fs...) //格式化值
+			cf := f.Copy()
+			cf.ValueFns.Remove(v)
+			cfs := Fields(fs).Copy()
+			if scf, exists := cfs.GetByName(f.Name); exists {
+				scf.ValueFns.Remove(v)
+			}
+			value, err = v.Fn(value, cf, cfs...) //格式化值,后面2个参数移除当前的字段,避免循环调用
 			if err != nil {
 				return value, err
 			}
@@ -147,6 +158,17 @@ type ValueFns []ValueFn
 func (fns *ValueFns) Reset(subFns ...ValueFn) {
 	*fns = make(ValueFns, 0)
 	*fns = append(*fns, subFns...)
+}
+
+func (fns *ValueFns) Remove(v ValueFn) {
+	tmp := ValueFns{}
+	for _, fn := range *fns {
+		if fn.IsEqual(v) {
+			continue
+		}
+		tmp = append(tmp, fn)
+	}
+	*fns = tmp
 }
 
 // ResetSetValueFn 重置设置值类型函数
@@ -271,6 +293,7 @@ type Field struct {
 	selectColumns []any  // 查询时列
 	fieldName     string //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
 	indexs        Indexs // 索引
+	applyFns      ApplyFns
 }
 
 type Index struct {
@@ -693,7 +716,7 @@ func (f *Field) SceneFnRmove(name string) *Field {
 	return f
 }
 func (f *Field) Apply(applyFns ...ApplyFn) *Field {
-	f = f.SceneInit(applyFns...)
+	f.applyFns = applyFns
 	return f
 }
 
@@ -914,7 +937,7 @@ func (f1 Field) WhereData(fs ...*Field) (value any, err error) {
 	if len(f.ValueFns) > 0 {
 		f.ValueFns = _ExcludeOnlyForDataValueFn(f.ValueFns)
 	}
-	value, err = f.GetValue()
+	value, err = f.GetValue(fs...)
 	if IsErrorValueNil(err) {
 		err = nil // 这里不直接返回，仍然遍历 执行whereFns，方便理解流程（直接返回后，期望的whereFn没有执行，不知道流程在哪里中断了，也没有错误抛出，非常困惑，所以不能直接返回）
 	}
@@ -945,12 +968,12 @@ func FilterNil(in any, valueFn ValueFn) (any, error) {
 }
 
 // IsEqual 判断名称值是否相等
-func (f Field) IsEqual(o Field) bool {
-	fv, err := f.GetValue()
+func (f Field) IsEqual(o Field, fs ...*Field) bool {
+	fv, err := f.GetValue(fs...)
 	if err != nil || IsNil(fv) {
 		return false
 	}
-	ov, err := o.GetValue()
+	ov, err := o.GetValue(fs...)
 	if err != nil || IsNil(ov) {
 		return false
 	}
@@ -1025,7 +1048,7 @@ func (f1 Field) Data(fs ...*Field) (data any, err error) {
 	f := *f1.Copy() // 复制一份,不影响其它场景
 	f.Init(fs...)
 
-	val, err := f.GetValue()
+	val, err := f.GetValue(fs...)
 	if IsErrorValueNil(err) {
 		return nil, nil // 忽略空值错误
 	}
@@ -1094,24 +1117,29 @@ const (
 )
 
 func ValueFnApiValidateAtLeastOne(TagAtLeastOne string) ValueFn {
-	return ValueFnApiValidate(func(inputValue any, f *Field, fs ...*Field) (any, error) {
-		subFields := Fields(fs).GetByTags(TagAtLeastOne)
-		data, err := subFields.Data()
-		if err != nil {
-			return nil, err
-		}
-		if IsNil(data) {
-			nameArr := make([]string, 0)
-			subFields.Each(func(f *Field) error {
-				nameArr = append(nameArr, f.Name)
-				return nil
-			})
-			err = errors.Errorf("at least one of[%s] required", strings.Join(nameArr, ","))
-			return nil, err
-		}
+	return ValueFn{
+		Name: Tag_validate_At_least_one,
+		Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
+			subFields := Fields(fs).GetByTags(TagAtLeastOne)
+			data, err := subFields.Data()
+			if err != nil {
+				return nil, err
+			}
+			if IsNil(data) {
+				nameArr := make([]string, 0)
+				subFields.Each(func(f *Field) error {
+					nameArr = append(nameArr, f.Name)
+					return nil
+				})
+				err = errors.Errorf("at least one of[%s] required", strings.Join(nameArr, ","))
+				return nil, err
+			}
 
-		return inputValue, nil
-	})
+			return inputValue, nil
+		},
+		Layer:       Value_Layer_ApiValidate,
+		Description: "api 验证数据时机执行", // 描述
+	}
 }
 
 func ValueFnDBFormat(fn func(in any, f *Field, fs ...*Field) (any, error)) ValueFn {
@@ -1207,6 +1235,18 @@ func (fs Fields) Copy() (fields Fields) {
 	return fields
 }
 
+func (fs Fields) Builder() (fields Fields) {
+	fields = make(Fields, 0)
+	for _, f := range fs {
+		fields = append(fields, f.Copy())
+	}
+	for i := range fields {
+		ApplyFns(fields[i].applyFns).Apply(fields[i], fields...) // applyFns 确保只执行一次
+	}
+
+	return fields
+}
+
 // Validate 方便前期校验
 func (fs Fields) Validate() (err error) {
 
@@ -1289,12 +1329,12 @@ func (fs Fields) Select() (columns []any) {
 
 func (fs Fields) Pagination() (index int, size int) {
 	if pageIndex, ok := fs.GetByTag(Field_tag_pageIndex); ok {
-		val, _ := pageIndex.GetValue()
+		val, _ := pageIndex.GetValue(fs...)
 		index = cast.ToInt(val)
 
 	}
 	if pageSize, ok := fs.GetByTag(Field_tag_pageSize); ok {
-		val, _ := pageSize.GetValue()
+		val, _ := pageSize.GetValue(fs...)
 		size = cast.ToInt(val)
 	}
 
@@ -1394,7 +1434,7 @@ func (fs Fields) Json() string {
 func (fs Fields) String() string {
 	m := make(map[string]any)
 	for _, f := range fs {
-		val, _ := f.GetValue()
+		val, _ := f.GetValue(fs...)
 		m[FieldName2DBColumnName(f.Name)] = val
 	}
 	b, _ := json.Marshal(m)

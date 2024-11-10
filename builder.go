@@ -276,7 +276,7 @@ func (p *InsertParam) AppendFields(fields ...*Field) *InsertParam {
 }
 
 func (p InsertParam) ToSQL() (sql string, err error) {
-	fs := p._Fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	if p._TableI == nil {
 		err = errors.Errorf("InsertParam._Table required")
 		return "", err
@@ -377,7 +377,7 @@ func (is BatchInsertParam) ToSQL() (sql string, err error) {
 	}
 	table := is._TableI.Table()
 	for _, fields := range is.rowFields {
-		fs := fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+		fs := fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 		fs.SetTable(table)
 		fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
 		rowData, err := fs.Data()
@@ -451,7 +451,7 @@ func (p *DeleteParam) AppendFields(fields ...*Field) *DeleteParam {
 }
 
 func (p DeleteParam) ToSQL() (sql string, err error) {
-	fs := p._Fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	table := p._TableI.Table()
 	fs.SetTable(table)
 	fs.SetSceneIfEmpty(SCENE_SQL_DELETE)
@@ -539,7 +539,7 @@ func (p *UpdateParam) AppendFields(fields ...*Field) *UpdateParam {
 }
 
 func (p UpdateParam) ToSQL() (sql string, err error) {
-	fs := p._Fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	table := p._TableI.Table()
 	fs.SetTable(table)
 	fs.SetSceneIfEmpty(SCENE_SQL_UPDATE)
@@ -630,7 +630,7 @@ func (p *FirstParam) WithBuilderFns(builderFns ...SelectBuilderFn) *FirstParam {
 }
 
 func (p FirstParam) ToSQL() (sql string, err error) {
-	fs := p._Fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	table := p._Table.Table()
 	fs.SetTable(table)
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
@@ -711,7 +711,7 @@ func NewListBuilder(tableName string, builderFns ...SelectBuilderFn) *ListParam 
 }
 
 func (p ListParam) ToSQL() (sql string, err error) {
-	fs := p._Fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	table := p._Table.Table()
 	fs.SetTable(table)
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
@@ -818,7 +818,7 @@ func NewExistsBuilder(tableName string, builderFns ...SelectBuilderFn) *ExistsPa
 }
 
 func (p ExistsParam) ToSQL() (sql string, err error) {
-	fs := p._Fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	table := p._Table.Table()
 	fs.SetTable(table) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
@@ -897,7 +897,7 @@ func (p *TotalParam) AppendFields(fields ...*Field) *TotalParam {
 }
 
 func (p TotalParam) ToSQL() (sql string, err error) {
-	fs := p._Fields.Copy() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	table := p._Table.Table()
 	fs.SetTable(table) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
