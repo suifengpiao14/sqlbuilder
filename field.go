@@ -39,10 +39,10 @@ const (
 var (
 	//layer_order 确保层序,越靠前越先执行
 	layer_order               = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate, Value_Layer_DBFormat, Value_Layer_OnlyForData} // 层序,越靠前越先执行
-	layer_all                 = layer_order
-	layer_where               = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate, Value_Layer_DBFormat} // where  场景下执行的函数
-	layer_get_value_before_db = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat}                                               // 获取转换成db数据格式之前的原始数据
-	layer_Validate            = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate}                       // 验证数据时执行的函数
+	Layer_all                 = layer_order
+	Layer_where               = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate, Value_Layer_DBFormat} // where  场景下执行的函数
+	Layer_get_value_before_db = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat}                                               // 获取转换成db数据格式之前的原始数据
+	Layer_Validate            = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate}                       // 验证数据时执行的函数
 
 )
 
@@ -676,7 +676,7 @@ func (f *Field) LogString() string {
 	if f.Schema != nil && f.Schema.Title == "" {
 		title = f.Schema.Title
 	}
-	val, _ := f.GetValue(layer_all)
+	val, _ := f.GetValue(Layer_all)
 	str := cast.ToString(val)
 	out := fmt.Sprintf("%s(%s)", title, str)
 	return out
@@ -995,11 +995,11 @@ func FilterNil(in any, valueFn ValueFn) (any, error) {
 
 // IsEqual 判断名称值是否相等
 func (f Field) IsEqual(o Field, fs ...*Field) bool {
-	fv, err := f.GetValue(layer_all, fs...)
+	fv, err := f.GetValue(Layer_all, fs...)
 	if err != nil || IsNil(fv) {
 		return false
 	}
-	ov, err := o.GetValue(layer_all, fs...)
+	ov, err := o.GetValue(Layer_all, fs...)
 	if err != nil || IsNil(ov) {
 		return false
 	}
@@ -1094,7 +1094,7 @@ func (f1 Field) Data(layers []Layer, fs ...*Field) (data any, err error) {
 }
 
 func (f Field) Where(fs ...*Field) (expressions Expressions, err error) {
-	val, err := f.WhereData(layer_where, fs...)
+	val, err := f.WhereData(Layer_where, fs...)
 	if err != nil {
 		return nil, err
 	}
@@ -1273,7 +1273,7 @@ func (fs Fields) Validate() (err error) {
 		f.Init(fs...)
 		field := f.InjectValueFn()
 		field.ValueFns = field.ValueFns.GetByLayer()
-		_, e := field.getValue(layer_Validate, fs...)
+		_, e := field.getValue(Layer_Validate, fs...)
 		if e != nil {
 			err = errors.Wrap(err, e.Error())
 		}
@@ -1348,12 +1348,12 @@ func (fs Fields) Select() (columns []any) {
 
 func (fs Fields) Pagination() (index int, size int) {
 	if pageIndex, ok := fs.GetByTag(Field_tag_pageIndex); ok {
-		val, _ := pageIndex.GetValue(layer_get_value_before_db, fs...)
+		val, _ := pageIndex.GetValue(Layer_get_value_before_db, fs...)
 		index = cast.ToInt(val)
 
 	}
 	if pageSize, ok := fs.GetByTag(Field_tag_pageSize); ok {
-		val, _ := pageSize.GetValue(layer_get_value_before_db, fs...)
+		val, _ := pageSize.GetValue(Layer_get_value_before_db, fs...)
 		size = cast.ToInt(val)
 	}
 
@@ -1362,7 +1362,7 @@ func (fs Fields) Pagination() (index int, size int) {
 
 func (fs Fields) Limit() (limit uint) {
 	if pageSize, ok := fs.GetByTag(Field_tag_update_limit); ok {
-		val, _ := pageSize.GetValue(layer_get_value_before_db, fs...)
+		val, _ := pageSize.GetValue(Layer_get_value_before_db, fs...)
 		limit = cast.ToUint(val)
 	}
 	return limit
@@ -1461,7 +1461,7 @@ func (fs Fields) Json() string {
 func (fs Fields) String() string {
 	m := make(map[string]any)
 	for _, f := range fs {
-		val, _ := f.GetValue(layer_all, fs...)
+		val, _ := f.GetValue(Layer_all, fs...)
 		m[FieldName2DBColumnName(f.Name)] = val
 	}
 	b, _ := json.Marshal(m)
