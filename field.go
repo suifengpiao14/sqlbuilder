@@ -296,10 +296,10 @@ type Field struct {
 	tags          Tags     // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
 	dbName        string
 	docName       string
-	selectColumns []any    // 查询时列
-	fieldName     string   //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
-	indexs        Indexs   // 索引
-	applyFns      ApplyFns // applyFns 和 SceneFns 中的 Scene_init 区别是: applyFns 是在buider时初始化配置,只执行一次,而 Scene_init 是初始化配置后再执行时,会执行多次 二者有进一步优化的可能
+	selectColumns []any  // 查询时列
+	fieldName     string //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
+	indexs        Indexs // 索引
+	//applyFns      ApplyFns // apply 必须当场执行，因为存在apply函数嵌套apply函数,
 }
 
 type Index struct {
@@ -723,7 +723,7 @@ func (f *Field) SceneFnRmove(name string) *Field {
 	return f
 }
 func (f *Field) Apply(applyFns ...ApplyFn) *Field {
-	f.applyFns = applyFns
+	ApplyFns(applyFns).Apply(f)
 	return f
 }
 
@@ -1262,14 +1262,7 @@ func (fs Fields) Copy() (fields Fields) {
 }
 
 func (fs Fields) Builder() (fields Fields) {
-	fields = make(Fields, 0)
-	for _, f := range fs {
-		fields = append(fields, f.Copy())
-	}
-	for i := range fields {
-		ApplyFns(fields[i].applyFns).Apply(fields[i], fields...) // applyFns 确保只执行一次
-	}
-
+	fields = fs.Copy() // 使用复制版本，后续调整部分初始化函数到这里
 	return fields
 }
 
@@ -1277,7 +1270,6 @@ func (fs Fields) Builder() (fields Fields) {
 func (fs Fields) Validate() (err error) {
 
 	for _, f := range fs {
-		ApplyFns(f.applyFns).Apply(f, fs...)
 		f.Init(fs...)
 		field := f.InjectValueFn()
 		field.ValueFns = field.ValueFns.GetByLayer()
