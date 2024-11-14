@@ -214,6 +214,7 @@ const (
 	SCENE_SQL_VIEW     Scene = "view"
 	SCENE_SQL_INCREASE Scene = "increse" // 字段递增
 	SCENE_SQL_DECREASE Scene = "decrese" // 字段递减
+	SCENE_SQL_FINAL    Scene = "final"   // 最终状态(所有场景执行完成后再执行的场景 ,有时需要清除公共库设置的所有场景，只有在这里清除最保险)
 )
 
 type TableI interface {
@@ -284,7 +285,7 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 	table := p._TableI.Table()
 	fs.SetTable(table) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
-	rowData, err := fs.Data(Layer_order...)
+	rowData, err := fs.Data(layer_order...)
 	if err != nil {
 		return "", err
 	}
@@ -380,7 +381,7 @@ func (is BatchInsertParam) ToSQL() (sql string, err error) {
 		fs := fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 		fs.SetTable(table)
 		fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
-		rowData, err := fs.Data(Layer_order...)
+		rowData, err := fs.Data(layer_order...)
 		if err != nil {
 			return "", err
 		}
@@ -462,7 +463,7 @@ func (p DeleteParam) ToSQL() (sql string, err error) {
 	}
 	canUpdateFields := fs.GetByTags(Field_tag_CanWriteWhenDeleted)
 	canUpdateFields.Append(f)
-	data, err := canUpdateFields.Data(Layer_order...)
+	data, err := canUpdateFields.Data(layer_order...)
 	if err != nil {
 		return "", err
 	}
@@ -543,7 +544,7 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	table := p._TableI.Table()
 	fs.SetTable(table)
 	fs.SetSceneIfEmpty(SCENE_SQL_UPDATE)
-	data, err := fs.Data(Layer_order...)
+	data, err := fs.Data(layer_order...)
 	if err != nil {
 		return "", err
 	}
@@ -556,7 +557,13 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 		err = errors.New("update must have where condition")
 		return "", err
 	}
-	ds := Dialect.DialectWrapper().Update(table).Set(data).Where(where...)
+	limit := fs.Limit()
+
+	ds := Dialect.DialectWrapper().Update(table).Set(data).Where(where...).Order(fs.Order()...)
+	if limit > 0 {
+		ds = ds.Limit(limit)
+	}
+
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err

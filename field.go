@@ -37,7 +37,13 @@ const (
 )
 
 var (
-	Layer_order = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate, Value_Layer_DBFormat, Value_Layer_OnlyForData} // 层序,越靠前越先执行
+	//layer_order 确保层序,越靠前越先执行
+	layer_order               = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate, Value_Layer_DBFormat, Value_Layer_OnlyForData} // 层序,越靠前越先执行
+	layer_all                 = layer_order
+	layer_where               = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate, Value_Layer_DBFormat} // where  场景下执行的函数
+	layer_get_value_before_db = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat}                                               // 获取转换成db数据格式之前的原始数据
+	layer_Validate            = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate}                                                                      // 验证数据时执行的函数
+
 )
 
 type ValueFnFn func(inputValue any, f *Field, fs ...*Field) (any, error)
@@ -89,7 +95,7 @@ func (values ValueFns) Value(val any, f *Field, fs ...*Field) (value any, err er
 		return nil, nil
 	}
 	value = val
-	for _, layer := range Layer_order {
+	for _, layer := range layer_order {
 		subValues := values.GetByLayer(layer)
 		for _, v := range subValues {
 			if v.IsNil() {
@@ -368,8 +374,9 @@ const (
 )
 
 const (
-	Field_tag_pageIndex = "pageIndex" // 标记为pageIndex列
-	Field_tag_pageSize  = "pageSize"  //标记为pageSize列
+	Field_tag_pageIndex    = "pageIndex"   // 标记为pageIndex列
+	Field_tag_pageSize     = "pageSize"    //标记为pageSize列
+	Field_tag_update_limit = "updateLimit" // 标记为updateLimit列
 
 	Field_tag_CanWriteWhenDeleted = "CanWriteWhenDeleted" // 标记为删除场景下，可以更新数据库字段（如操作人 ，Field_name_deletedAt 自带该标签功能）
 )
@@ -669,7 +676,7 @@ func (f *Field) LogString() string {
 	if f.Schema != nil && f.Schema.Title == "" {
 		title = f.Schema.Title
 	}
-	val, _ := f.GetValue(Layer_order)
+	val, _ := f.GetValue(layer_all)
 	str := cast.ToString(val)
 	out := fmt.Sprintf("%s(%s)", title, str)
 	return out
@@ -725,6 +732,17 @@ func (f *Field) SceneInit(middlewareFns ...ApplyFn) *Field {
 	for _, fn := range middlewareFns {
 		sceneFns = append(sceneFns, SceneFn{
 			Scene: SCENE_SQL_INIT,
+			Fn:    fn,
+		})
+	}
+	f.sceneFns.Append(sceneFns...)
+	return f
+}
+func (f *Field) SceneFinal(middlewareFns ...ApplyFn) *Field {
+	sceneFns := make([]SceneFn, 0)
+	for _, fn := range middlewareFns {
+		sceneFns = append(sceneFns, SceneFn{
+			Scene: SCENE_SQL_FINAL,
 			Fn:    fn,
 		})
 	}
@@ -882,6 +900,12 @@ func (f *Field) Init(fs ...*Field) *Field {
 		for _, sceneFn := range sceneFns {
 			sceneFn.Fn.Apply(f, fs...)
 		}
+
+		finalFns := f.sceneFns.GetByScene(SCENE_SQL_FINAL) // final 场景每次都执行
+		for _, sceneFn := range finalFns {
+			sceneFn.Fn.Apply(f, fs...)
+		}
+
 	}
 	if f.Schema == nil {
 		f.Schema = &Schema{
@@ -935,9 +959,10 @@ func (f1 Field) WhereData(layers []Layer, fs ...*Field) (value any, err error) {
 	if len(f.WhereFns) == 0 {
 		return nil, nil
 	}
-	if len(f.ValueFns) > 0 {
-		f.ValueFns = _ExcludeOnlyForDataValueFn(f.ValueFns)
-	}
+	// 已经在layers 中过滤了OnlyForData 层，注释观察，后续可删除
+	// if len(f.ValueFns) > 0 {
+	// 	f.ValueFns = _ExcludeOnlyForDataValueFn(f.ValueFns)
+	// }
 	value, err = f.GetValue(layers, fs...)
 	if IsErrorValueNil(err) {
 		err = nil // 这里不直接返回，仍然遍历 执行whereFns，方便理解流程（直接返回后，期望的whereFn没有执行，不知道流程在哪里中断了，也没有错误抛出，非常困惑，所以不能直接返回）
@@ -970,11 +995,11 @@ func FilterNil(in any, valueFn ValueFn) (any, error) {
 
 // IsEqual 判断名称值是否相等
 func (f Field) IsEqual(o Field, fs ...*Field) bool {
-	fv, err := f.GetValue(Layer_order, fs...)
+	fv, err := f.GetValue(layer_all, fs...)
 	if err != nil || IsNil(fv) {
 		return false
 	}
-	ov, err := o.GetValue(Layer_order, fs...)
+	ov, err := o.GetValue(layer_all, fs...)
 	if err != nil || IsNil(ov) {
 		return false
 	}
@@ -1069,7 +1094,7 @@ func (f1 Field) Data(layers []Layer, fs ...*Field) (data any, err error) {
 }
 
 func (f Field) Where(fs ...*Field) (expressions Expressions, err error) {
-	val, err := f.WhereData(Layer_order, fs...)
+	val, err := f.WhereData(layer_where, fs...)
 	if err != nil {
 		return nil, err
 	}
@@ -1332,16 +1357,24 @@ func (fs Fields) Select() (columns []any) {
 
 func (fs Fields) Pagination() (index int, size int) {
 	if pageIndex, ok := fs.GetByTag(Field_tag_pageIndex); ok {
-		val, _ := pageIndex.GetValue(Layer_order, fs...)
+		val, _ := pageIndex.GetValue(layer_get_value_before_db, fs...)
 		index = cast.ToInt(val)
 
 	}
 	if pageSize, ok := fs.GetByTag(Field_tag_pageSize); ok {
-		val, _ := pageSize.GetValue(Layer_order, fs...)
+		val, _ := pageSize.GetValue(layer_get_value_before_db, fs...)
 		size = cast.ToInt(val)
 	}
 
 	return index, size
+}
+
+func (fs Fields) Limit() (limit uint) {
+	if pageSize, ok := fs.GetByTag(Field_tag_update_limit); ok {
+		val, _ := pageSize.GetValue(layer_get_value_before_db, fs...)
+		limit = cast.ToUint(val)
+	}
+	return limit
 }
 
 func (fs Fields) Contains(field Field) (exists bool) {
@@ -1437,7 +1470,7 @@ func (fs Fields) Json() string {
 func (fs Fields) String() string {
 	m := make(map[string]any)
 	for _, f := range fs {
-		val, _ := f.GetValue(Layer_order, fs...)
+		val, _ := f.GetValue(layer_all, fs...)
 		m[FieldName2DBColumnName(f.Name)] = val
 	}
 	b, _ := json.Marshal(m)
