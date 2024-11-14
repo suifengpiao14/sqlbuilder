@@ -207,14 +207,14 @@ func (vs ValueFns) Filter(fn func(fn ValueFn) bool) (subFns ValueFns) {
 }
 
 // _ExcludeOnlyForDataValueFn 排除不适用于where条件的值函数
-func _ExcludeOnlyForDataValueFn(vs ValueFns) (subFns ValueFns) {
-	if len(vs) == 0 {
-		return vs
-	}
-	return vs.Filter(func(fn ValueFn) bool {
-		return !fn.Layer.EqualFold(Value_Layer_OnlyForData)
-	})
-}
+// func _ExcludeOnlyForDataValueFn(vs ValueFns) (subFns ValueFns) {
+// 	if len(vs) == 0 {
+// 		return vs
+// 	}
+// 	return vs.Filter(func(fn ValueFn) bool {
+// 		return !fn.Layer.EqualFold(Value_Layer_OnlyForData)
+// 	})
+// }
 
 // // ExcludeOnlyForWhereValueFn 排除仅用于where条件的值函数
 // func ExcludeOnlyForWhereValueFn(vs ValueFns) (subFns ValueFns) {
