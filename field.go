@@ -42,7 +42,7 @@ var (
 	layer_all                 = layer_order
 	layer_where               = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate, Value_Layer_DBFormat} // where  场景下执行的函数
 	layer_get_value_before_db = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat}                                               // 获取转换成db数据格式之前的原始数据
-	layer_Validate            = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate}                                                                      // 验证数据时执行的函数
+	layer_Validate            = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate}                       // 验证数据时执行的函数
 
 )
 
@@ -1280,9 +1280,8 @@ func (fs Fields) Validate() (err error) {
 		ApplyFns(f.applyFns).Apply(f, fs...)
 		f.Init(fs...)
 		field := f.InjectValueFn()
-		layers := []Layer{Value_Layer_SetValue, Value_Layer_SetFormat}
 		field.ValueFns = field.ValueFns.GetByLayer()
-		_, e := field.getValue(layers, fs...)
+		_, e := field.getValue(layer_Validate, fs...)
 		if e != nil {
 			err = errors.Wrap(err, e.Error())
 		}
