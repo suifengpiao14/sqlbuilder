@@ -210,6 +210,10 @@ func (h Compiler) Pagination() *PaginationParam {
 	return NewPaginationBuilder(h.Table()).WithHandler(h.Handler().Count, h.Handler().Query).AppendFields(h.Fields()...)
 }
 
+func (h Compiler) Set() *SetParam {
+	return NewSetBuilder(h.Table()).WithHandler(h.Handler().Exists, h.Handler().InsertWithLastIdHandler, h.Handler().ExecWithRowsAffected).AppendFields(h.Fields()...)
+}
+
 type Handler interface {
 	Exec(sql string) (err error)
 	ExecWithRowsAffected(sql string) (rowsAffected int64, err error)
