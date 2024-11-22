@@ -100,6 +100,9 @@ type Compiler struct {
 }
 
 func NewCompiler(cfg CompilerConfig, fs ...*Field) Compiler {
+	if len(fs) == 0 {
+		panic(errors.New("sqlbuilder: Compiler need fields"))
+	}
 	c := Compiler{tableName: cfg.Table, handler: cfg.Handler, fields: fs}
 	c = c.Apply(cfg)
 	return c
