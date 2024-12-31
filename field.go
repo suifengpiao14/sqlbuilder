@@ -550,11 +550,11 @@ func (f *Field) SetRequired(required bool) *Field {
 	f.Schema.Required = required // 此处 requied 可以为false,通过MergerSchema 达不到效果
 	return f
 }
-func (f *Field) SetZeroAsEmpty(zeroAsEmpty bool) *Field {
+func (f *Field) SetAllowZero(zeroAsEmpty bool) *Field {
 	if f.Schema == nil {
 		f.Schema = &Schema{}
 	}
-	f.Schema.SetZeroAsEmpty(zeroAsEmpty)
+	f.Schema.SetAllowZero(zeroAsEmpty)
 	return f
 }
 

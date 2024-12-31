@@ -30,7 +30,7 @@ type Schema struct {
 	Unique        bool `json:"unique"`  // 是否为唯一键
 	AutoIncrement bool `json:"autoIncrement"`
 	ShieldUpdate  bool `json:"shieldUpdate"` //这个地方还是保留，虽然可以结合场景和 sqlbuilder.ValueFnShieldForWrite 代替 但是比较麻烦，在set场景时，inert需要写值，update时不需要，所以需要这个字段
-	ZeroAsEmpty   bool `json:"zeroAsEmpty"`  //0值是否当做空值处理，验证required 时有使用
+	AllowZero     bool `json:"zeroAsEmpty"`  //0值是否当做空值处理，验证required 时有使用
 }
 
 const (
@@ -73,8 +73,8 @@ func (schema Schema) SetMinimum(min int) *Schema {
 	schema.Minimum = min
 	return &schema
 }
-func (schema Schema) SetZeroAsEmpty(zeroAsEmpty bool) *Schema {
-	schema.ZeroAsEmpty = true
+func (schema Schema) SetAllowZero(zeroAsEmpty bool) *Schema {
+	schema.AllowZero = true
 	return &schema
 }
 
@@ -464,7 +464,7 @@ func (schema Schema) Validate(fieldName string, field reflect.Value) error {
 func (schema Schema) validate(fieldName string, field reflect.Value) error {
 	// 验证 required
 	isNotValid := !field.IsValid() // 空值 由nil 过来的值
-	if schema.Required && (isNotValid || isEmptyValue(field, schema.ZeroAsEmpty)) {
+	if schema.Required && (isNotValid || isEmptyValue(field, schema.AllowZero)) {
 		return fmt.Errorf("%s is required", fieldName)
 	}
 	if isNotValid {
@@ -536,7 +536,7 @@ func (schema Schema) validate(fieldName string, field reflect.Value) error {
 	return nil
 }
 
-func isEmptyValue(v reflect.Value, zeroAsEmpty bool) bool {
+func isEmptyValue(v reflect.Value, allowZero bool) bool {
 	if !v.IsValid() {
 		return true
 	}
@@ -551,15 +551,15 @@ func isEmptyValue(v reflect.Value, zeroAsEmpty bool) bool {
 		// case reflect.Bool:
 		// 	return !v.Bool()
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if zeroAsEmpty {
+		if !allowZero {
 			return v.Int() == 0
 		}
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		if zeroAsEmpty {
+		if !allowZero {
 			return v.Uint() == 0
 		}
 	case reflect.Float32, reflect.Float64:
-		if zeroAsEmpty {
+		if !allowZero {
 			return v.Float() == 0
 		}
 	case reflect.Interface, reflect.Ptr:
