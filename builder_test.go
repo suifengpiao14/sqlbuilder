@@ -15,7 +15,7 @@ func TestMysqlRealEscapeString(t *testing.T) {
 	})
 
 	t.Run("单引号", func(t *testing.T) {
-		val := `x-data='$tab({"eventName":"hello_world"})'`
+		val := `"\n\t<div x-data='$tab({tab_eventName:\"\",tab_activeTabId:\"\"})' >\n    <div role=\"tablist\" class=\"tabs tabs-bordered \">\n      <div class=\"w-full border-t-2\">\n\t\t<a tab-for=\"\" x-bind=\"bind_tab\" role=\"tab\" class=\"tab px-1\">到店单</a>\n\t\t<a tab-for=\"\" x-bind=\"bind_tab\" role=\"tab\" class=\"tab px-1\">上门单tab</a>\n      </div>\n      <div class=\"w-full \">\n\t\t\t<div x-cloak id=\"\" x-bind=\"bind_tabpanel\" role=\"tabpanel\" class=\"tab-content bg-base-100 border-base-300  w-full\">\n\t\t\t\t\n\t\t\t</div>\n\t\t\t<div x-cloak id=\"\" x-bind=\"bind_tabpanel\" role=\"tabpanel\" class=\"tab-content bg-base-100 border-base-300  w-full\">\n\t\t\t\t\n\t\t\t</div>\n      </div>\n\t</div>\n    </div>\n"`
 		val = sqlbuilder.MysqlEscapeString(val)
 		fmt.Println(val)
 	})
