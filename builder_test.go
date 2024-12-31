@@ -20,4 +20,10 @@ func TestMysqlRealEscapeString(t *testing.T) {
 		fmt.Println(val)
 	})
 
+	t.Run("已经转义", func(t *testing.T) {
+		val := "\n\t<div x-data='$tab({tab_eventName:\"\",tab_activeTabId:\"\"})' >\n    <div role=\"tablist\" class=\"tabs tabs-bordered \">\n      <div class=\"w-full border-t-2\">\n\t\t<a tab-for=\"tab-2-0\" x-bind=\"bind_tab\" role=\"tab\" class=\"tab px-1\">到店单</a>\n\t\t<a tab-for=\"tab-2-1\" x-bind=\"bind_tab\" role=\"tab\" class=\"tab px-1\">上门单</a>\n      </div>\n      <div class=\"w-full \">\n\t\t\t<div x-cloak id=\"tab-2-0\" x-bind=\"bind_tabpanel\" role=\"tabpanel\" class=\"tab-content bg-base-100 border-base-300  w-full\">\n\t\t\t\t到店单 内容\n\t\t\t</div>\n\t\t\t<div x-cloak id=\"tab-2-1\" x-bind=\"bind_tabpanel\" role=\"tabpanel\" class=\"tab-content bg-base-100 border-base-300  w-full\">\n\t\t\t\t上门单 内容\n\t\t\t</div>\n      </div>\n\t</div>\n    </div>\n"
+		val = sqlbuilder.MysqlEscapeString(val)
+		fmt.Println(val)
+	})
+
 }
