@@ -1045,6 +1045,8 @@ func (c Field) FormatType(val any) (value any) {
 		switch c.Schema.Type {
 		case Schema_Type_int:
 			dstTyp = 0
+		default:
+			dstTyp = reflect.Zero(valType.Elem()).Interface()
 		}
 
 		formattedSlice := reflect.MakeSlice(reflect.SliceOf(reflect.TypeOf(dstTyp)), valValue.Len(), valValue.Len())
