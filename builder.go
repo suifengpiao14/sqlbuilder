@@ -148,22 +148,38 @@ const (
 
 type EscapeString func(value string) string
 
-var MysqlEscapeString EscapeString = func(value string) string {
-	var sb strings.Builder
-	for i := 0; i < len(value); i++ {
-		c := value[i]
+var MysqlEscapeString EscapeString = func(val string) string {
+	dest := make([]byte, 0, 2*len(val))
+	var escape byte
+	for i := 0; i < len(val); i++ {
+		c := val[i]
+		escape = 0
 		switch c {
-		case '\\', 0, '\n', '\r', '\'', '"':
-			sb.WriteByte('\\')
-			sb.WriteByte(c)
-		case '\032':
-			sb.WriteByte('\\')
-			sb.WriteByte('Z')
-		default:
-			sb.WriteByte(c)
+		case 0: /* Must be escaped for 'mysql' */
+			escape = '0'
+		case '\n': /* Must be escaped for logs */
+			escape = 'n'
+		case '\r':
+			escape = 'r'
+		case '\\':
+			escape = '\\'
+		case '\'':
+			escape = '\''
+		case '"': /* Better safe than sorry */
+			escape = '"'
+		case '\032': //十进制26,八进制32,十六进制1a, /* This gives problems on Win32 */
+			escape = 'Z'
+		}
+
+		if escape != 0 {
+			dest = append(dest, '\\', escape)
+		} else {
+			dest = append(dest, c)
 		}
 	}
-	return sb.String()
+
+	return string(dest)
+
 }
 var SQLite3EscapeString EscapeString = MysqlEscapeString // 此处暂时使用mysql的
 

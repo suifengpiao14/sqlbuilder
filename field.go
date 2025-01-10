@@ -1086,10 +1086,9 @@ func (f1 Field) Data(layers []Layer, fs ...*Field) (data any, err error) {
 	if f.scene.Is(SCENE_SQL_UPDATE) && f.Schema != nil && f.Schema.ShieldUpdate { // 当前为更新场景，并且设置屏蔽更新，则返回nil
 		return nil, nil
 	}
-	//这里改动不兼容,需要的在传入前手动调用函数处理,不写入底层(有时候目的就是无需转义,往数据库写入原始数据)
-	// if valStr, ok := val.(string); ok {
-	// 	val = Dialect.EscapeString(valStr)
-	// }
+	if valStr, ok := val.(string); ok {
+		val = Dialect.EscapeString(valStr)
+	}
 	data = map[string]any{
 		f.DBName(): val,
 	}
