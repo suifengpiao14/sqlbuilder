@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/doug-martin/goqu/v9"
@@ -50,6 +51,7 @@ type ValueFnFn func(inputValue any, f *Field, fs ...*Field) (any, error)
 type ValueFn struct {
 	Name        string
 	Fn          ValueFnFn
+	Order       int // 执行顺序，越小越先执行
 	Layer       Layer
 	Description string // 描述
 }
@@ -97,6 +99,7 @@ func (values ValueFns) Value(val any, f *Field, fs ...*Field) (value any, err er
 	value = val
 	for _, layer := range layer_order {
 		subValues := values.GetByLayer(layer)
+		subValues.Sort() // 增加排序,确保执行顺序正确
 		for _, v := range subValues {
 			if v.IsNil() {
 				continue
@@ -120,6 +123,12 @@ func (values ValueFns) Value(val any, f *Field, fs ...*Field) (value any, err er
 //type ValueFn func(inputValue any) (any, error) // 函数之所有接收in 入参，有时模型内部加工生成的数据需要存储，需要定制格式化，比如多边形产生的边界框4个点坐标
 
 type ValueFns []ValueFn
+
+func (vFns ValueFns) Sort() {
+	slices.SortStableFunc(vFns, func(a, b ValueFn) int {
+		return a.Order - b.Order
+	})
+}
 
 // // Insert 追加元素,不建议使用,建议用InsertAsFirst,InsertAsSecond
 // func (fns *ValueFns) Insert(index int, subFns ...ValueFn) {
