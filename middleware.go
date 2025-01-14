@@ -173,6 +173,58 @@ var ApplyFnValueFnTrimSpace ApplyFn = func(f *Field, fs ...*Field) {
 var ApplyFnValueEmpty2Nil ApplyFn = func(f *Field, fs ...*Field) {
 	f.ValueFns.Append(ValueFnEmpty2Nil)
 }
+
+func ValueFnMustNotExists(existsFn ExistsHandler) ValueFn {
+	return ValueFn{
+		Fn:    ValueFnFnNotExists(existsFn),
+		Layer: Value_Layer_DBFormat,
+	}
+}
+
+func ValueFnFnNotExists(existsFn ExistsHandler) ValueFnFn {
+	return func(inputValue any, f *Field, fs ...*Field) (any, error) {
+		if IsNil(inputValue) {
+			return nil, nil
+		}
+		exitstsParam := NewExistsBuilder(f.GetTable()).WithHandler(existsFn).AppendFields(f.Copy())
+		exists, err := exitstsParam.Exists()
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			err = errors.WithMessagef(ERROR_COLUMN_VALUE_EXISTS, "column %s value %s exists", f.DBName(), inputValue) // 有时存在，需要返回指定错误，方便业务自主处理错误
+			return nil, err
+		}
+		return inputValue, err
+	}
+}
+
+func ValueFnMustExists(existsFn ExistsHandler) ValueFn {
+	return ValueFn{
+		Fn:    ValueFnFnMustExists(existsFn),
+		Layer: Value_Layer_DBFormat,
+	}
+}
+func ValueFnFnMustExists(existsFn ExistsHandler) ValueFnFn {
+	return func(inputValue any, f *Field, fs ...*Field) (any, error) {
+		if IsNil(inputValue) {
+			return nil, nil
+		}
+		exitstsParam := NewExistsBuilder(f.GetTable()).WithHandler(existsFn).AppendFields(f.Copy())
+		exists, err := exitstsParam.Exists()
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			err = errors.WithMessagef(ERROR_COLUMN_VALUE_NOT_EXISTS, "column %s value %s exists", f.DBName(), inputValue) // 没有时存在，需要返回指定错误，方便业务自主处理错误
+			return nil, err
+		}
+		return inputValue, err
+	}
+}
+
+var ERROR_COLUMN_VALUE_NOT_EXISTS = errors.New("column value not exists")
+var ERROR_COLUMN_VALUE_EXISTS = errors.New("column value exists")
 var ERROR_Unique = errors.New("unique error")
 
 func ApplyFnUnique(existsFn ExistsHandler) ApplyFn { // 复合索引，给一列应用该中间件即可
