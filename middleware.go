@@ -207,6 +207,8 @@ func ApplyFnUnique(existsFn ExistsHandler) ApplyFn { // 复合索引，给一列
 						return inputValue, nil
 					},
 					Layer: Value_Layer_ApiValidate,
+					Order: 1, //schemna 验证完后再执行，避免提前校验导致错误信息不准确
+
 				})
 
 			},
