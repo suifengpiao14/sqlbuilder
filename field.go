@@ -104,12 +104,14 @@ func (values ValueFns) Value(val any, f *Field, fs ...*Field) (value any, err er
 			if v.IsNil() {
 				continue
 			}
+
 			cf := f.Copy()
-			cf.ValueFns.Remove(v)
 			cfs := Fields(fs).Copy()
-			if scf, exists := cfs.GetByName(f.Name); exists {
-				scf.ValueFns.Remove(v)
-			}
+			//此处为了避免循环调用,此处移除当前字段,避免循环调用，但是代码没生效，暂时未解决，暂时注释掉
+			// cf.ValueFns.Remove(v)
+			// if scf, exists := cfs.GetByName(f.Name); exists {
+			// 	scf.ValueFns.Remove(v)
+			// }
 			value, err = v.Fn(value, cf, cfs...) //格式化值,后面2个参数移除当前的字段,避免循环调用
 			if err != nil {
 				return value, err
@@ -1095,9 +1097,10 @@ func (f1 Field) Data(layers []Layer, fs ...*Field) (data any, err error) {
 	if f.scene.Is(SCENE_SQL_UPDATE) && f.Schema != nil && f.Schema.ShieldUpdate { // 当前为更新场景，并且设置屏蔽更新，则返回nil
 		return nil, nil
 	}
-	if valStr, ok := val.(string); ok {
-		val = Dialect.EscapeString(valStr)
-	}
+	// 此处多次实践，发现基本的转义，在sql中已经完成，基本不用再进行转义处理了，除非特殊场景需要手动转义，例如：json序列化内嵌套序列化，情况比较有限，不作为默认处理
+	// if valStr, ok := val.(string); ok {
+	// 	val = Dialect.EscapeString(valStr)
+	// }
 	data = map[string]any{
 		f.DBName(): val,
 	}

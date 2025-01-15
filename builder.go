@@ -146,9 +146,7 @@ const (
 	Driver_sqlite3 Driver = "sqlite3"
 )
 
-type EscapeString func(value string) string
-
-var MysqlEscapeString EscapeString = func(val string) string {
+var MysqlEscapeString = func(val string) string {
 	dest := make([]byte, 0, 2*len(val))
 	var escape byte
 	for i := 0; i < len(val); i++ {
@@ -181,7 +179,7 @@ var MysqlEscapeString EscapeString = func(val string) string {
 	return string(dest)
 
 }
-var SQLite3EscapeString EscapeString = MysqlEscapeString // 此处暂时使用mysql的
+var SQLite3EscapeString = MysqlEscapeString // 此处暂时使用mysql的
 
 type DialectWrapper struct {
 	dialect string
@@ -214,6 +212,11 @@ func NewDialect(dialect string) DialectWrapper {
 var Dialect = NewDialect(Driver_sqlite3.String())
 
 var Dialect_Mysql = NewDialect(Driver_mysql.String())
+
+func EscapeString(s string) (escaped string) {
+	escaped = Dialect.EscapeString(s)
+	return escaped
+}
 
 type Scene string // 迁移场景
 
