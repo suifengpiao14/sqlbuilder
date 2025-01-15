@@ -175,52 +175,57 @@ var ApplyFnValueEmpty2Nil ApplyFn = func(f *Field, fs ...*Field) {
 }
 
 func ValueFnMustNotExists(existsFn ExistsHandler) ValueFn {
-	return ValueFn{
-		Fn:    ValueFnFnNotExists(existsFn),
-		Layer: Value_Layer_DBFormat,
+	var valueFn ValueFn
+	valueFn = ValueFn{
+		Name:  "mustnotexists",
+		Layer: Value_Layer_ApiValidate,
+		Order: 2,
+		Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
+			if IsNil(inputValue) {
+				return nil, nil
+			}
+			cp := f.Copy()
+			cp.ValueFns.Remove(valueFn)
+			exitstsParam := NewExistsBuilder(f.GetTable()).WithHandler(existsFn).AppendFields(cp)
+			exists, err := exitstsParam.Exists()
+			if err != nil {
+				return nil, err
+			}
+			if exists {
+				err = errors.WithMessagef(ERROR_COLUMN_VALUE_EXISTS, "column %s value %s exists", f.DBName(), inputValue) // 有时存在，需要返回指定错误，方便业务自主处理错误
+				return nil, err
+			}
+			return inputValue, err
+		},
 	}
-}
-
-func ValueFnFnNotExists(existsFn ExistsHandler) ValueFnFn {
-	return func(inputValue any, f *Field, fs ...*Field) (any, error) {
-		if IsNil(inputValue) {
-			return nil, nil
-		}
-		exitstsParam := NewExistsBuilder(f.GetTable()).WithHandler(existsFn).AppendFields(f.Copy())
-		exists, err := exitstsParam.Exists()
-		if err != nil {
-			return nil, err
-		}
-		if exists {
-			err = errors.WithMessagef(ERROR_COLUMN_VALUE_EXISTS, "column %s value %s exists", f.DBName(), inputValue) // 有时存在，需要返回指定错误，方便业务自主处理错误
-			return nil, err
-		}
-		return inputValue, err
-	}
+	return valueFn
 }
 
 func ValueFnMustExists(existsFn ExistsHandler) ValueFn {
-	return ValueFn{
-		Fn:    ValueFnFnMustExists(existsFn),
-		Layer: Value_Layer_DBFormat,
+	var valueFn ValueFn
+	valueFn = ValueFn{
+		Name:  "mustexists",
+		Layer: Value_Layer_ApiValidate,
+		Order: 2,
+		Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
+			if IsNil(inputValue) {
+				return nil, nil
+			}
+			cp := f.Copy()
+			cp.ValueFns.Remove(valueFn)
+			exitstsParam := NewExistsBuilder(f.GetTable()).WithHandler(existsFn).AppendFields(cp)
+			exists, err := exitstsParam.Exists()
+			if err != nil {
+				return nil, err
+			}
+			if !exists {
+				err = errors.WithMessagef(ERROR_COLUMN_VALUE_NOT_EXISTS, "column %s value %s exists", f.DBName(), inputValue) // 没有时存在，需要返回指定错误，方便业务自主处理错误
+				return nil, err
+			}
+			return inputValue, err
+		},
 	}
-}
-func ValueFnFnMustExists(existsFn ExistsHandler) ValueFnFn {
-	return func(inputValue any, f *Field, fs ...*Field) (any, error) {
-		if IsNil(inputValue) {
-			return nil, nil
-		}
-		exitstsParam := NewExistsBuilder(f.GetTable()).WithHandler(existsFn).AppendFields(f.Copy())
-		exists, err := exitstsParam.Exists()
-		if err != nil {
-			return nil, err
-		}
-		if !exists {
-			err = errors.WithMessagef(ERROR_COLUMN_VALUE_NOT_EXISTS, "column %s value %s exists", f.DBName(), inputValue) // 没有时存在，需要返回指定错误，方便业务自主处理错误
-			return nil, err
-		}
-		return inputValue, err
-	}
+	return valueFn
 }
 
 var ERROR_COLUMN_VALUE_NOT_EXISTS = errors.New("column value not exists")
