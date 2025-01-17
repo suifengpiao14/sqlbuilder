@@ -316,7 +316,7 @@ type HandlerWrapSingleflight struct {
 	group   *singleflight.Group
 }
 
-func NewHandlerWrapSingleflight(handler Handler) *HandlerWrapSingleflight {
+func NewHandlerWrapSingleflight(handler Handler) Handler {
 	return &HandlerWrapSingleflight{
 		handler: handler,
 		group:   &singleflight.Group{},
