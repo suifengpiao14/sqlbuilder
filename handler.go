@@ -306,6 +306,16 @@ func (h GormHandler) GetDB() *gorm.DB {
 	return h()
 }
 
+func WrapHandler(handler Handler, withCache bool, withSingleflight bool) Handler {
+	if withCache {
+		handler = WithCache(handler)
+	}
+	if withSingleflight {
+		handler = WithSingleflight(handler)
+	}
+	return handler
+}
+
 type _DbExecResult struct {
 	data         any
 	rowsAffected int64
