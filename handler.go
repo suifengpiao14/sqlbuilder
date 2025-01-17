@@ -2,8 +2,10 @@ package sqlbuilder
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/pkg/errors"
+	"github.com/suifengpiao14/cache"
 	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
@@ -311,25 +313,25 @@ type _DbExecResult struct {
 	exists       bool
 }
 
-type HandlerWrapSingleflight struct {
+type _HandlerSingleflight struct {
 	handler Handler
 	group   *singleflight.Group
 }
 
-func NewHandlerWrapSingleflight(handler Handler) Handler {
-	return &HandlerWrapSingleflight{
+func WithSingleflight(handler Handler) Handler {
+	return &_HandlerSingleflight{
 		handler: handler,
 		group:   &singleflight.Group{},
 	}
 }
 
-func (hc HandlerWrapSingleflight) Exec(sql string) (err error) {
+func (hc _HandlerSingleflight) Exec(sql string) (err error) {
 	_, err, _ = hc.group.Do(sql, func() (interface{}, error) {
 		return nil, hc.handler.Exec(sql)
 	})
 	return err
 }
-func (hc HandlerWrapSingleflight) ExecWithRowsAffected(sql string) (rowsAffected int64, err error) {
+func (hc _HandlerSingleflight) ExecWithRowsAffected(sql string) (rowsAffected int64, err error) {
 	dbExecResultAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
 		rowsAffected, err := hc.handler.ExecWithRowsAffected(sql)
 		if err != nil {
@@ -348,7 +350,7 @@ func (hc HandlerWrapSingleflight) ExecWithRowsAffected(sql string) (rowsAffected
 	rowsAffected = dbExecResult.rowsAffected
 	return rowsAffected, nil
 }
-func (hc HandlerWrapSingleflight) InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
+func (hc _HandlerSingleflight) InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
 	dbExecResultAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
 		lastInsertId, rowsAffected, err := hc.handler.InsertWithLastIdHandler(sql)
 		if err != nil {
@@ -368,7 +370,7 @@ func (hc HandlerWrapSingleflight) InsertWithLastIdHandler(sql string) (lastInser
 	rowsAffected = dbExecResult.rowsAffected
 	return lastInsertId, rowsAffected, nil
 }
-func (hc HandlerWrapSingleflight) First(sql string, result any) (exists bool, err error) {
+func (hc _HandlerSingleflight) First(sql string, result any) (exists bool, err error) {
 	rv := reflect.Indirect(reflect.ValueOf(result))
 	dbExecResultAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
 		v := reflect.New(rv.Type()).Interface()
@@ -386,11 +388,11 @@ func (hc HandlerWrapSingleflight) First(sql string, result any) (exists bool, er
 		return false, err
 	}
 	dbExecResult := dbExecResultAny.(_DbExecResult)
-	rv.Set(reflect.Indirect(reflect.ValueOf(dbExecResult.data)))
+	SetReflectValue(rv, reflect.ValueOf(dbExecResult.data))
 	exists = dbExecResult.exists
 	return exists, nil
 }
-func (hc HandlerWrapSingleflight) Query(sql string, result any) (err error) {
+func (hc _HandlerSingleflight) Query(sql string, result any) (err error) {
 	rv := reflect.Indirect(reflect.ValueOf(result))
 	dbExecResultAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
 		v := reflect.New(rv.Type()).Interface()
@@ -407,10 +409,10 @@ func (hc HandlerWrapSingleflight) Query(sql string, result any) (err error) {
 		return err
 	}
 	dbExecResult := dbExecResultAny.(_DbExecResult)
-	rv.Set(reflect.Indirect(reflect.ValueOf(dbExecResult.data)))
+	SetReflectValue(rv, reflect.ValueOf(dbExecResult.data))
 	return nil
 }
-func (hc HandlerWrapSingleflight) Count(sql string) (count int64, err error) {
+func (hc _HandlerSingleflight) Count(sql string) (count int64, err error) {
 	countAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
 		count, err := hc.handler.Count(sql)
 		if err != nil {
@@ -425,7 +427,7 @@ func (hc HandlerWrapSingleflight) Count(sql string) (count int64, err error) {
 	return count, nil
 
 }
-func (hc HandlerWrapSingleflight) Exists(sql string) (exists bool, err error) {
+func (hc _HandlerSingleflight) Exists(sql string) (exists bool, err error) {
 	existsAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
 		exists, err := hc.handler.Exists(sql)
 		if err != nil {
@@ -439,4 +441,97 @@ func (hc HandlerWrapSingleflight) Exists(sql string) (exists bool, err error) {
 	exists = existsAny.(bool)
 	return exists, nil
 
+}
+
+type _HandlerCache struct {
+	handler Handler
+}
+
+func WithCache(handler Handler) Handler {
+	return &_HandlerCache{
+		handler: handler,
+	}
+}
+
+func (hc _HandlerCache) Exec(sql string) (err error) {
+	return hc.handler.Exec(sql)
+}
+func (hc _HandlerCache) ExecWithRowsAffected(sql string) (rowsAffected int64, err error) {
+	return hc.handler.ExecWithRowsAffected(sql)
+}
+func (hc _HandlerCache) InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
+	return hc.handler.InsertWithLastIdHandler(sql)
+}
+func (hc _HandlerCache) First(sql string, result any) (exists bool, err error) {
+	cacheResult := _DbExecResult{}
+	rv := reflect.Indirect(reflect.ValueOf(result))
+	err = cache.Remember(sql, 1*time.Minute, &cacheResult, func() (any, error) {
+		result := reflect.New(rv.Type()).Interface()
+		exists, err := hc.handler.First(sql, result)
+		if err != nil {
+			return nil, err
+		}
+		cacheResult := _DbExecResult{
+			data:   result,
+			exists: exists,
+		}
+		return cacheResult, nil
+	})
+	if err != nil {
+		return false, err
+	}
+	SetReflectValue(rv, reflect.ValueOf(cacheResult.data))
+	exists = cacheResult.exists
+	return exists, nil
+}
+func (hc _HandlerCache) Query(sql string, result any) (err error) {
+	rv := reflect.Indirect(reflect.ValueOf(result))
+	err = cache.Remember(sql, 1*time.Minute, result, func() (any, error) {
+		data := reflect.New(rv.Type()).Interface()
+		err := hc.handler.Query(sql, data)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (hc _HandlerCache) Count(sql string) (count int64, err error) {
+	err = cache.Remember(sql, 1*time.Minute, &count, func() (any, error) {
+		count, err := hc.handler.Count(sql)
+		if err != nil {
+			return 0, err
+		}
+		return count, nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return count,
+		nil
+}
+func (hc _HandlerCache) Exists(sql string) (exists bool, err error) {
+	err = cache.Remember(sql, 1*time.Minute, &exists, func() (any, error) {
+		exists, err := hc.handler.Exists(sql)
+		if err != nil {
+			return false, err
+		}
+		return exists, nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+func SetReflectValue(dst reflect.Value, src reflect.Value) {
+	rdst := reflect.Indirect(dst)
+	rsrc := reflect.Indirect(src)
+	if rsrc.CanConvert(rdst.Type()) {
+		rsrc = rsrc.Convert(rdst.Type())
+	}
+	rdst.Set(rsrc)
 }
