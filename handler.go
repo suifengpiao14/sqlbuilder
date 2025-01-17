@@ -306,7 +306,7 @@ func (h GormHandler) GetDB() *gorm.DB {
 	return h()
 }
 
-func WrapHandler(handler Handler, withCache bool, withSingleflight bool) Handler {
+func WithCacheSingleflightHandler(handler Handler, withCache bool, withSingleflight bool) Handler {
 	if withCache {
 		handler = WithCache(handler)
 	}
