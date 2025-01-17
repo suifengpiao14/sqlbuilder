@@ -389,7 +389,7 @@ func (hc _HandlerSingleflight) First(sql string, result any) (exists bool, err e
 			return nil, err
 		}
 		result := _DbExecResult{
-			data:   result,
+			data:   v,
 			exists: exists,
 		}
 		return result, nil
@@ -411,7 +411,7 @@ func (hc _HandlerSingleflight) Query(sql string, result any) (err error) {
 			return nil, err
 		}
 		result := _DbExecResult{
-			data: result,
+			data: v,
 		}
 		return result, nil
 	})
