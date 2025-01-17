@@ -8,6 +8,7 @@ require (
 	github.com/spf13/cast v1.6.0
 	github.com/stretchr/testify v1.8.4
 	github.com/suifengpiao14/funcs v0.0.18
+	golang.org/x/sync v0.10.0
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/driver/sqlite v1.5.6
 	gorm.io/gorm v1.25.12

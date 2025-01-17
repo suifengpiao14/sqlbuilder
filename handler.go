@@ -1,7 +1,10 @@
 package sqlbuilder
 
 import (
+	"reflect"
+
 	"github.com/pkg/errors"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
@@ -299,4 +302,141 @@ func (h GormHandler) Count(sql string) (count int64, err error) {
 
 func (h GormHandler) GetDB() *gorm.DB {
 	return h()
+}
+
+type _DbExecResult struct {
+	data         any
+	rowsAffected int64
+	lastInsertId uint64
+	exists       bool
+}
+
+type HandlerWrapSingleflight struct {
+	handler Handler
+	group   *singleflight.Group
+}
+
+func NewHandlerWrapSingleflight(handler Handler) *HandlerWrapSingleflight {
+	return &HandlerWrapSingleflight{
+		handler: handler,
+		group:   &singleflight.Group{},
+	}
+}
+
+func (hc HandlerWrapSingleflight) Exec(sql string) (err error) {
+	_, err, _ = hc.group.Do(sql, func() (interface{}, error) {
+		return nil, hc.handler.Exec(sql)
+	})
+	return err
+}
+func (hc HandlerWrapSingleflight) ExecWithRowsAffected(sql string) (rowsAffected int64, err error) {
+	dbExecResultAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
+		rowsAffected, err := hc.handler.ExecWithRowsAffected(sql)
+		if err != nil {
+			return 0, err
+		}
+		result := _DbExecResult{
+			rowsAffected: rowsAffected,
+			lastInsertId: 0,
+		}
+		return result, nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	dbExecResult := dbExecResultAny.(_DbExecResult)
+	rowsAffected = dbExecResult.rowsAffected
+	return rowsAffected, nil
+}
+func (hc HandlerWrapSingleflight) InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
+	dbExecResultAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
+		lastInsertId, rowsAffected, err := hc.handler.InsertWithLastIdHandler(sql)
+		if err != nil {
+			return nil, err
+		}
+		result := _DbExecResult{
+			rowsAffected: rowsAffected,
+			lastInsertId: lastInsertId,
+		}
+		return result, nil
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	dbExecResult := dbExecResultAny.(_DbExecResult)
+	lastInsertId = dbExecResult.lastInsertId
+	rowsAffected = dbExecResult.rowsAffected
+	return lastInsertId, rowsAffected, nil
+}
+func (hc HandlerWrapSingleflight) First(sql string, result any) (exists bool, err error) {
+	rv := reflect.Indirect(reflect.ValueOf(result))
+	dbExecResultAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
+		v := reflect.New(rv.Type()).Interface()
+		exists, err := hc.handler.First(sql, v)
+		if err != nil {
+			return nil, err
+		}
+		result := _DbExecResult{
+			data:   result,
+			exists: exists,
+		}
+		return result, nil
+	})
+	if err != nil {
+		return false, err
+	}
+	dbExecResult := dbExecResultAny.(_DbExecResult)
+	rv.Set(reflect.Indirect(reflect.ValueOf(dbExecResult.data)))
+	exists = dbExecResult.exists
+	return exists, nil
+}
+func (hc HandlerWrapSingleflight) Query(sql string, result any) (err error) {
+	rv := reflect.Indirect(reflect.ValueOf(result))
+	dbExecResultAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
+		v := reflect.New(rv.Type()).Interface()
+		err := hc.handler.Query(sql, v)
+		if err != nil {
+			return nil, err
+		}
+		result := _DbExecResult{
+			data: result,
+		}
+		return result, nil
+	})
+	if err != nil {
+		return err
+	}
+	dbExecResult := dbExecResultAny.(_DbExecResult)
+	rv.Set(reflect.Indirect(reflect.ValueOf(dbExecResult.data)))
+	return nil
+}
+func (hc HandlerWrapSingleflight) Count(sql string) (count int64, err error) {
+	countAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
+		count, err := hc.handler.Count(sql)
+		if err != nil {
+			return 0, err
+		}
+		return count, nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	count = countAny.(int64)
+	return count, nil
+
+}
+func (hc HandlerWrapSingleflight) Exists(sql string) (exists bool, err error) {
+	existsAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
+		exists, err := hc.handler.Exists(sql)
+		if err != nil {
+			return 0, err
+		}
+		return exists, nil
+	})
+	if err != nil {
+		return false, err
+	}
+	exists = existsAny.(bool)
+	return exists, nil
+
 }
