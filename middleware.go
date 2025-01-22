@@ -80,7 +80,7 @@ func ValueFnFnIncrease(f *Field, fs ...*Field) ValueFnFn {
 		if num < 0 {
 			symbol = "-"
 		}
-		val := fmt.Sprintf("`%s` %s %d", f.DBName(), symbol, num)
+		val := fmt.Sprintf("%s %s %d", f.DBName(), symbol, num)
 		return goqu.L(val), nil
 	}
 }
@@ -108,7 +108,7 @@ var ApplyFnWhereGte ApplyFn = func(f *Field, fs ...*Field) {
 			if IsNil(inputValue) {
 				return nil, nil
 			}
-			ex := goqu.C(f.DBName()).Gte(inputValue)
+			ex := goqu.I(f.DBName()).Gte(inputValue)
 			return ex, nil
 		},
 		Layer: Value_Layer_DBFormat,
@@ -121,7 +121,7 @@ var ApplyFnWhereLte ApplyFn = func(f *Field, fs ...*Field) {
 			if IsNil(inputValue) {
 				return nil, nil
 			}
-			ex := goqu.C(f.DBName()).Lte(inputValue)
+			ex := goqu.I(f.DBName()).Lte(inputValue)
 			return ex, nil
 		},
 		Layer: Value_Layer_DBFormat,
@@ -136,7 +136,7 @@ var ApplyFnWhereFindInColumnSet ApplyFn = func(f *Field, fs ...*Field) {
 				return nil, nil
 			}
 			val := cast.ToString(inputValue)
-			column := goqu.C(f.DBName())
+			column := goqu.I(f.DBName())
 			expression := goqu.L("FIND_IN_SET(?,?)", val, column)
 			return expression, nil
 		},
@@ -150,7 +150,7 @@ var ApplyFnValueFnSetIfEmpty ApplyFn = func(f *Field, fs ...*Field) {
 		if IsNil(inputValue) {
 			return nil, nil
 		}
-		column := goqu.C(f.DBName())
+		column := goqu.I(f.DBName())
 		expression := goqu.L("if(?,?,?) ", column, column, inputValue)
 		return expression, nil
 	}))

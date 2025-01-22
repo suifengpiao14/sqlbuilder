@@ -738,6 +738,20 @@ var ValueFnTrimBlankSpace = ValueFn{
 	Layer: Value_Layer_SetFormat,
 }
 
+var MergeDefaultValue = ValueFn{
+	Fn: func(in any, f *Field, fs ...*Field) (any, error) {
+		if IsNil(in) {
+			if f.Schema != nil {
+				return f.Schema.Default, nil
+			}
+			return in, nil
+		}
+		return in, nil
+	},
+	Layer: Value_Layer_SetFormat,
+	Order: 99,
+}
+
 var ValueFnIlike = ValueFn{
 	Fn: func(in any, f *Field, fs ...*Field) (value any, err error) {
 		if IsNil(in) {

@@ -275,16 +275,16 @@ var ValueFnWhereLike = ValueFn{
 }
 
 var OrderFnDesc OrderFn = func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
-	return ConcatOrderedExpression(goqu.C(f.DBName()).Desc())
+	return ConcatOrderedExpression(goqu.I(f.DBName()).Desc())
 }
 var OrderFnAsc OrderFn = func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
-	return ConcatOrderedExpression(goqu.C(f.DBName()).Asc())
+	return ConcatOrderedExpression(goqu.I(f.DBName()).Asc())
 }
 
 // OrderFieldFn 给定列按指定值顺序排序
 func OrderFieldFn(valueOrder ...any) OrderFn {
 	return func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
-		segment := fmt.Sprintf("FIELD(`%s` %s)", f.DBName(), strings.Repeat(",?", len(valueOrder)))
+		segment := fmt.Sprintf("FIELD(%s %s)", f.DBName(), strings.Repeat(",?", len(valueOrder))) // 此处 f.DBName() 可能返回 table.column 格式，所以不加 ``
 		expression := goqu.L(segment, valueOrder...)
 		orderedExpression := exp.NewOrderedExpression(expression, exp.AscDir, exp.NoNullsSortType)
 		orderedExpressions = ConcatOrderedExpression(orderedExpression)
@@ -877,6 +877,7 @@ var GlobalFnValueFns = func(f Field, fs ...*Field) ValueFns {
 		//GlobalValueFnEmptyStr2Nil(f, ValueFnArgEmptyStr2NilExceptFields...), // 将空置转换为nil,代替对数据判断 if v==""{//ignore}  这个函数在全局修改了函数值，出现问题，比较难跟踪，改到每个组件自己处理
 		ValueFnDBSchemaFormatType(f), // 在转换为SQL前,将所有数据类型按照DB类型转换,主要是格式化int和string,提升SQL性能，将数据格式改成DB格式，不影响当期调用链，可以作为全局配置
 		ValueFnTrimBlankSpace,
+		MergeDefaultValue,
 		//todo 统一实现数据库字段前缀处理
 		//todo 统一实现代码字段驼峰形转数据库字段蛇形
 		//todo 统一实现数据库字段替换,方便数据库字段更名
@@ -1610,7 +1611,7 @@ type Neq struct { // type Neq any  在 iLike, ok := value.(Ilike); ok恒等于tr
 
 func TryNeq(field string, value any) (expressions Expressions, ok bool) {
 	if val, ok := value.(Neq); ok {
-		identifier := goqu.C(field)
+		identifier := goqu.I(field)
 		return ConcatExpression(identifier.Neq(val)), true
 	}
 	return nil, false
@@ -1621,7 +1622,7 @@ type Ilike [3]any
 
 func TryIlike(field string, value any) (expressions Expressions, ok bool) {
 	if iLike, ok := value.(Ilike); ok {
-		identifier := goqu.C(field)
+		identifier := goqu.I(field)
 		strArr := make([]string, 0)
 		for _, arg := range iLike {
 			strArr = append(strArr, cast.ToString(arg))
@@ -1653,7 +1654,7 @@ type Between [3]any
 
 func TryConvert2Betwwen(field string, value any) (expressions Expressions, ok bool) {
 	if between, ok := value.(Between); ok {
-		identifier := goqu.C(field)
+		identifier := goqu.I(field)
 		min, val, max := between[0], between[1], between[2]
 		if min == nil && max == nil && val == nil {
 			return nil, true // 3个元素都为空，返回nil

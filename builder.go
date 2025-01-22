@@ -956,6 +956,7 @@ type PaginationParam struct {
 	_Fields      Fields
 	countHandler CountHandler
 	queryHandler QueryHandler
+	builderFns   SelectBuilderFns
 }
 
 func (p *PaginationParam) AppendFields(fields ...*Field) *PaginationParam {
@@ -974,13 +975,21 @@ func (p *PaginationParam) WithHandler(countHandler CountHandler, queryHandler Qu
 	return p
 }
 
+func (p *PaginationParam) WithBuilderFns(builderFns ...SelectBuilderFn) *PaginationParam {
+	if len(p.builderFns) == 0 {
+		p.builderFns = SelectBuilderFns{}
+	}
+	p.builderFns = append(p.builderFns, builderFns...)
+	return p
+}
+
 func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 	table := p._Table.Table()
-	totalSql, err = NewTotalBuilder(table).AppendFields(p._Fields...).ToSQL()
+	totalSql, err = NewTotalBuilder(table).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).ToSQL()
 	if err != nil {
 		return "", "", err
 	}
-	listSql, err = NewListBuilder(table).AppendFields(p._Fields...).ToSQL()
+	listSql, err = NewListBuilder(table).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).ToSQL()
 	if err != nil {
 		return "", "", err
 	}
@@ -1008,6 +1017,13 @@ func (p PaginationParam) Pagination(result any) (count int64, err error) {
 	if err != nil {
 		return 0, err
 	}
+
+	index, size := p._Fields.Pagination()
+	if index == 0 && size == 0 {
+		err = errors.Errorf("pagination size required,got sql:%s", listSql)
+		return 0, err
+	}
+
 	return p.paginationHandler(totalSql, listSql, result)
 }
 
