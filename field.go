@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"slices"
+	"sort"
 	"strings"
 
 	"github.com/doug-martin/goqu/v9"
@@ -127,8 +127,8 @@ func (values ValueFns) Value(val any, f *Field, fs ...*Field) (value any, err er
 type ValueFns []ValueFn
 
 func (vFns ValueFns) Sort() {
-	slices.SortStableFunc(vFns, func(a, b ValueFn) int {
-		return a.Order - b.Order
+	sort.SliceStable(vFns, func(i, j int) bool {
+		return vFns[i].Order < vFns[j].Order
 	})
 }
 

@@ -162,3 +162,22 @@ func TestDataIsNil(t *testing.T) {
 	isNil := sqlbuilder.IsNil(data)
 	fmt.Println(isNil)
 }
+
+func TestValueFns(t *testing.T) {
+	valueFns := sqlbuilder.ValueFns{
+		sqlbuilder.ValueFn{
+			Name:  "second",
+			Order: 2,
+		},
+		sqlbuilder.ValueFn{
+			Name:  "third",
+			Order: 3,
+		},
+		sqlbuilder.ValueFn{
+			Name:  "first",
+			Order: 1,
+		},
+	}
+	valueFns.Sort()
+	require.Equal(t, valueFns[0].Name, "first")
+}
