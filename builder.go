@@ -688,6 +688,17 @@ func (p FirstParam) First(result any) (exists bool, err error) {
 	return p.firstHandler(sql, result)
 }
 
+func (p FirstParam) FirstMustExists(result any) (err error) {
+	exists, err := p.First(result)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return errors.New("record not found")
+	}
+	return nil
+}
+
 type SelectBuilderFn func(ds *goqu.SelectDataset) *goqu.SelectDataset
 
 type SelectBuilderFns []SelectBuilderFn
