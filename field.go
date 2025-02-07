@@ -1649,7 +1649,8 @@ func NewBetweenWithoutEmpty[T int | int64 | float64 | string](start T, end T) Be
 	return Between{start1, end1}
 }
 
-// Between 介于2者之间(包含上下边界，对于不包含边界情况，可以修改值范围或者直接用表达式),3个元素时为: col1<12<col2 格式
+// Between 介于2者之间(包含上下边界，对于不包含边界情况，可以修改值范围或者直接用表达式),3个元素时为: col1<12<col2 格式,2个元素时为: 12<=col1<=14,1个元素看在数组中的位置
+
 type Between [3]any
 
 func TryConvert2Betwwen(field string, value any) (expressions Expressions, ok bool) {

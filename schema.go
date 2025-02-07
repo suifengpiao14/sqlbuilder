@@ -644,7 +644,10 @@ func ValueFnDecodeCommaFn(in any, f *Field, fs ...*Field) (any, error) {
 	if IsNil(in) {
 		return in, nil
 	}
-	s := cast.ToString(in)
+	s, ok := in.(string)
+	if !ok {
+		return in, nil
+	}
 	if !strings.Contains(s, ",") {
 		return in, nil
 	}
@@ -722,6 +725,18 @@ var ValueFnLte = ValueFn{
 		return Between{nil, in}, nil
 	},
 	Layer: Value_Layer_DBFormat,
+}
+
+func ValueFnBetween(left any, right any) ValueFn {
+	return ValueFn{
+		Fn: func(in any, f *Field, fs ...*Field) (value any, err error) {
+			if IsNil(in) {
+				return nil, nil
+			}
+			return Between{left, in, right}, nil
+		},
+		Layer: Value_Layer_DBFormat,
+	}
 }
 
 // ValueFnTrimBlankSpace 删除字符串前后空格
