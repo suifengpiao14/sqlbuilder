@@ -219,7 +219,7 @@ func (h Compiler) Pagination() *PaginationParam {
 }
 
 func (h Compiler) Set() *SetParam {
-	return NewSetBuilder(h.Table()).WithHandler(h.Handler().Exists, h.Handler().InsertWithLastIdHandler, h.Handler().ExecWithRowsAffected).AppendFields(h.Fields()...)
+	return NewSetBuilder(h.Table()).WithHandler(h.Handler()).AppendFields(h.Fields()...)
 }
 
 type Handler interface {
@@ -230,12 +230,18 @@ type Handler interface {
 	Query(sql string, result any) (err error)
 	Count(sql string) (count int64, err error)
 	Exists(sql string) (exists bool, err error)
+	IndirectHandler() Handler // 获取间接handler，有时候需要绕过各种中间件，获取原始handler，比如 set 操作判断是否存在时，要绕过缓存中间件
+
 }
 
 type GormHandler func() *gorm.DB
 
 func NewGormHandler(getDB func() *gorm.DB) Handler {
 	return GormHandler(getDB)
+}
+
+func (h GormHandler) IndirectHandler() Handler {
+	return h
 }
 
 func (h GormHandler) Exec(sql string) (err error) {
@@ -333,6 +339,10 @@ func WithSingleflight(handler Handler) Handler {
 		handler: handler,
 		group:   &singleflight.Group{},
 	}
+}
+
+func (hc _HandlerSingleflight) IndirectHandler() Handler {
+	return hc
 }
 
 func (hc _HandlerSingleflight) Exec(sql string) (err error) {
@@ -465,6 +475,9 @@ func WithCache(handler Handler) Handler {
 
 var Cache_sql_duration time.Duration = 1 * time.Minute
 
+func (hc _HandlerCache) IndirectHandler() Handler {
+	return hc.handler
+}
 func (hc _HandlerCache) Exec(sql string) (err error) {
 	return hc.handler.Exec(sql)
 }

@@ -81,7 +81,7 @@ func (b Builder) ExistsParam(fs ...*Field) *ExistsParam {
 	return p
 }
 func (b Builder) SetParam(fs ...*Field) *SetParam {
-	p := NewSetBuilder(b.table).WithHandler(b.handler.Exists, b.handler.InsertWithLastIdHandler, b.handler.ExecWithRowsAffected).AppendFields(fs...)
+	p := NewSetBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
 	return p
 }
 
@@ -1047,14 +1047,12 @@ const (
 )
 
 type SetParam struct {
-	_Table                      TableI
-	_Fields                     Fields
-	existsHandler               ExistsHandler
-	insertWithLastIdHandler     InsertWithLastIdHandler
-	execWithRowsAffectedHandler ExecWithRowsAffectedHandler
-	setPolicy                   SetPolicy // 更新策略,默认根据主键判断是否需要更新
-	triggerInsertedEvent        EventInsertTrigger
-	triggerUpdatedEvent         EventUpdateTrigger
+	_Table               TableI
+	_Fields              Fields
+	handler              Handler
+	setPolicy            SetPolicy // 更新策略,默认根据主键判断是否需要更新
+	triggerInsertedEvent EventInsertTrigger
+	triggerUpdatedEvent  EventUpdateTrigger
 }
 
 func (p *SetParam) AppendFields(fields ...*Field) *SetParam {
@@ -1079,10 +1077,8 @@ func (p *SetParam) WithTriggerEvent(triggerInsertdEvent EventInsertTrigger, trig
 	return p
 }
 
-func (p *SetParam) WithHandler(existsHandler ExistsHandler, insertWithLastIdHandler InsertWithLastIdHandler, execWithRowsAffectedHandler ExecWithRowsAffectedHandler) *SetParam {
-	p.existsHandler = existsHandler
-	p.insertWithLastIdHandler = insertWithLastIdHandler
-	p.execWithRowsAffectedHandler = execWithRowsAffectedHandler
+func (p *SetParam) WithHandler(handler Handler) *SetParam {
+	p.handler = handler
 
 	return p
 }
@@ -1110,7 +1106,12 @@ func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64,
 	if err != nil {
 		return false, 0, 0, err
 	}
-	exists, err := p.existsHandler(existsSql)
+
+	existsHandler := p.handler.IndirectHandler().Exists
+	insertWithLastIdHandler := p.handler.InsertWithLastIdHandler
+	execWithRowsAffectedHandler := p.handler.ExecWithRowsAffected
+
+	exists, err := existsHandler(existsSql)
 	if err != nil {
 		return false, 0, 0, err
 	}
@@ -1118,19 +1119,19 @@ func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64,
 	switch p.setPolicy {
 	case SetPolicy_only_Insert: // 只新增说明使用最早数据
 		if !exists {
-			lastInsertId, rowsAffected, err = WarpInsertWithEventTrigger(p.insertWithLastIdHandler, p.triggerInsertedEvent)(insertSql)
+			lastInsertId, rowsAffected, err = WarpInsertWithEventTrigger(insertWithLastIdHandler, p.triggerInsertedEvent)(insertSql)
 			return isInsert, lastInsertId, rowsAffected, err
 		}
 	case SetPolicy_only_Update: // 只更新说明不存在时不处理
 		if exists {
-			rowsAffected, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, p.triggerUpdatedEvent)(updateSql)
+			rowsAffected, err = WarpUpdateWithEventTrigger(execWithRowsAffectedHandler, p.triggerUpdatedEvent)(updateSql)
 			return isInsert, lastInsertId, rowsAffected, err
 		}
 	default: // 默认执行 SetPolicy_Insert_or_Update 策略
 		if exists {
-			rowsAffected, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, p.triggerUpdatedEvent)(updateSql)
+			rowsAffected, err = WarpUpdateWithEventTrigger(execWithRowsAffectedHandler, p.triggerUpdatedEvent)(updateSql)
 		} else {
-			lastInsertId, rowsAffected, err = WarpInsertWithEventTrigger(p.insertWithLastIdHandler, p.triggerInsertedEvent)(insertSql)
+			lastInsertId, rowsAffected, err = WarpInsertWithEventTrigger(insertWithLastIdHandler, p.triggerInsertedEvent)(insertSql)
 		}
 	}
 	return isInsert, lastInsertId, rowsAffected, err
