@@ -463,6 +463,8 @@ func WithCache(handler Handler) Handler {
 	}
 }
 
+var Cache_sql_duration time.Duration = 1 * time.Minute
+
 func (hc _HandlerCache) Exec(sql string) (err error) {
 	return hc.handler.Exec(sql)
 }
@@ -475,7 +477,7 @@ func (hc _HandlerCache) InsertWithLastIdHandler(sql string) (lastInsertId uint64
 func (hc _HandlerCache) First(sql string, result any) (exists bool, err error) {
 	cacheResult := _DbExecResult{}
 	rv := reflect.Indirect(reflect.ValueOf(result))
-	err = cache.Remember(sql, 1*time.Minute, &cacheResult, func() (any, error) {
+	err = cache.Remember(sql, Cache_sql_duration, &cacheResult, func() (any, error) {
 		result := reflect.New(rv.Type()).Interface()
 		exists, err := hc.handler.First(sql, result)
 		if err != nil {
@@ -496,7 +498,7 @@ func (hc _HandlerCache) First(sql string, result any) (exists bool, err error) {
 }
 func (hc _HandlerCache) Query(sql string, result any) (err error) {
 	rv := reflect.Indirect(reflect.ValueOf(result))
-	err = cache.Remember(sql, 1*time.Minute, result, func() (any, error) {
+	err = cache.Remember(sql, Cache_sql_duration, result, func() (any, error) {
 		data := reflect.New(rv.Type()).Interface()
 		err := hc.handler.Query(sql, data)
 		if err != nil {
@@ -510,7 +512,7 @@ func (hc _HandlerCache) Query(sql string, result any) (err error) {
 	return nil
 }
 func (hc _HandlerCache) Count(sql string) (count int64, err error) {
-	err = cache.Remember(sql, 1*time.Minute, &count, func() (any, error) {
+	err = cache.Remember(sql, Cache_sql_duration, &count, func() (any, error) {
 		count, err := hc.handler.Count(sql)
 		if err != nil {
 			return 0, err
@@ -524,7 +526,7 @@ func (hc _HandlerCache) Count(sql string) (count int64, err error) {
 		nil
 }
 func (hc _HandlerCache) Exists(sql string) (exists bool, err error) {
-	err = cache.Remember(sql, 1*time.Minute, &exists, func() (any, error) {
+	err = cache.Remember(sql, Cache_sql_duration, &exists, func() (any, error) {
 		exists, err := hc.handler.Exists(sql)
 		if err != nil {
 			return false, err
