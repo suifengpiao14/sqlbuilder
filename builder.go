@@ -1107,7 +1107,7 @@ func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64,
 		return false, 0, 0, err
 	}
 
-	existsHandler := WithSingleflightDoOnce(p.handler.IndirectHandler()).Exists // 屏蔽缓存中间件，同时防止并发问题
+	existsHandler := WithSingleflightDoOnce(p.handler.IndirectHandler()).Exists // 屏蔽缓存中间件，同时防止单实例并发问题
 	insertWithLastIdHandler := p.handler.InsertWithLastIdHandler
 	execWithRowsAffectedHandler := p.handler.ExecWithRowsAffected
 
