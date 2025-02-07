@@ -329,6 +329,25 @@ type _DbExecResult struct {
 	exists       bool
 }
 
+func IndirectHandler(h Handler) Handler {
+	//todo 此处暂时没有考虑 h 传入地址情况，暂时不考虑，后续再优化
+	indirectHandler := h
+	maxLoop := 10
+	for {
+		maxLoop--
+		subIndirectHandler := indirectHandler.IndirectHandler()
+		if reflect.TypeOf(indirectHandler) != reflect.TypeOf(subIndirectHandler) {
+			indirectHandler = subIndirectHandler
+		} else {
+			return indirectHandler
+		}
+		if maxLoop <= 0 {
+			err := errors.New("too many indirect handler")
+			panic(err)
+		}
+	}
+}
+
 type _HandlerSingleflight struct {
 	handler Handler
 	group   *singleflight.Group
@@ -342,7 +361,7 @@ func WithSingleflight(handler Handler) Handler {
 }
 
 func (hc _HandlerSingleflight) IndirectHandler() Handler {
-	return hc
+	return IndirectHandler(hc.handler)
 }
 
 func (hc _HandlerSingleflight) Exec(sql string) (err error) {
@@ -476,7 +495,7 @@ func WithCache(handler Handler) Handler {
 var Cache_sql_duration time.Duration = 1 * time.Minute
 
 func (hc _HandlerCache) IndirectHandler() Handler {
-	return hc.handler
+	return IndirectHandler(hc.handler)
 }
 func (hc _HandlerCache) Exec(sql string) (err error) {
 	return hc.handler.Exec(sql)
@@ -559,4 +578,60 @@ func SetReflectValue(dst reflect.Value, src reflect.Value) {
 		rsrc = rsrc.Convert(rdst.Type())
 	}
 	rdst.Set(rsrc)
+}
+
+//_HandlerSingleflightDoOnce 单例执行一次，防止并发问题,目前用于Set 中的exists 查询，所以只实现 exists 查询
+
+type _HandlerSingleflightDoOnce struct {
+	handler Handler
+	group   *singleflight.Group
+}
+
+func WithSingleflightDoOnce(handler Handler) Handler {
+	return &_HandlerSingleflightDoOnce{
+		handler: handler,
+		group:   &singleflight.Group{},
+	}
+}
+
+func (hc _HandlerSingleflightDoOnce) IndirectHandler() Handler {
+	return IndirectHandler(hc.handler)
+}
+
+func (hc _HandlerSingleflightDoOnce) Exec(sql string) (err error) {
+	return hc.handler.Exec(sql)
+}
+func (hc _HandlerSingleflightDoOnce) ExecWithRowsAffected(sql string) (rowsAffected int64, err error) {
+	return hc.handler.ExecWithRowsAffected(sql)
+}
+func (hc _HandlerSingleflightDoOnce) InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
+	return hc.handler.InsertWithLastIdHandler(sql)
+}
+func (hc _HandlerSingleflightDoOnce) First(sql string, result any) (exists bool, err error) {
+	return hc.handler.First(sql, result)
+}
+func (hc _HandlerSingleflightDoOnce) Query(sql string, result any) (err error) {
+	return hc.handler.Query(sql, result)
+}
+func (hc _HandlerSingleflightDoOnce) Count(sql string) (count int64, err error) {
+	return hc.handler.Count(sql)
+
+}
+func (hc _HandlerSingleflightDoOnce) Exists(sql string) (exists bool, err error) {
+	existsAny, err, shared := hc.group.Do(sql, func() (interface{}, error) {
+		exists, err := hc.handler.Exists(sql)
+		if err != nil {
+			return 0, err
+		}
+		return exists, nil
+	})
+	if err != nil {
+		return false, err
+	}
+	if shared {
+		err = errors.Errorf("the value has already been shared once")
+		return false, err
+	}
+	exists = existsAny.(bool)
+	return exists, nil
 }
