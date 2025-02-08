@@ -99,9 +99,6 @@ type Compiler struct {
 	tableName   string
 	fields      Fields
 	batchFields []Fields
-	// insertEvent EventInsertTrigger
-	// updateEvent EventUpdateTrigger
-	// deleteEvent EventDeletedTrigger
 }
 
 func NewCompiler(cfg CompilerConfig, fs ...*Field) Compiler {
@@ -141,19 +138,6 @@ func (h Compiler) WithFields(fs ...*Field) Compiler {
 	h.fields = fs
 	return h
 }
-
-/* func (h Compiler) WithInsertEvent(insertEvent EventInsertTrigger) Compiler {
-	h.insertEvent = insertEvent
-	return h
-}
-func (h Compiler) WithUpdateEvent(updateEvent EventUpdateTrigger) Compiler {
-	h.updateEvent = updateEvent
-	return h
-}
-func (h Compiler) WithDeleteEvent(deleteEvent EventDeletedTrigger) Compiler {
-	h.deleteEvent = deleteEvent
-	return h
-} */
 
 func (h Compiler) WithBatchFields(batchFs ...Fields) Compiler {
 	h.batchFields = batchFs
