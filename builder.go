@@ -59,20 +59,20 @@ func (b Builder) FirstParam(fs ...*Field) *FirstParam {
 	return p
 }
 func (b Builder) InsertParam(fs ...*Field) *InsertParam {
-	p := NewInsertBuilder(b.table).WithHandler(b.handler.InsertWithLastIdHandler).AppendFields(fs...)
+	p := NewInsertBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
 	return p
 }
 func (b Builder) BatchInsertParam(fss ...Fields) *BatchInsertParam {
-	p := NewBatchInsertBuilder(b.table).WithHandler(b.handler.InsertWithLastIdHandler).AppendFields(fss...)
+	p := NewBatchInsertBuilder(b.table).WithHandler(b.handler).AppendFields(fss...)
 	return p
 
 }
 func (b Builder) UpdateParam(fs ...*Field) *UpdateParam {
-	p := NewUpdateBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected).AppendFields(fs...)
+	p := NewUpdateBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
 	return p
 }
 func (b Builder) DeleteParam(fs ...*Field) *DeleteParam {
-	p := NewDeleteBuilder(b.table).WithHandler(b.handler.ExecWithRowsAffected).AppendFields(fs...)
+	p := NewDeleteBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
 	return p
 }
 
@@ -263,22 +263,30 @@ type InsertParam struct {
 	_Fields Fields
 	_log    LogI
 	//execHandler             ExecHandler
-	insertWithLastIdHandler InsertWithLastIdHandler
-	triggerInsertEvent      EventInsertTrigger
+	handler             Handler
+	_triggerInsertEvent EventInsertTrigger
 }
 
 func (p *InsertParam) WithTriggerEvent(triggerInsertEvent EventInsertTrigger) *InsertParam {
-	p.triggerInsertEvent = triggerInsertEvent
+	p._triggerInsertEvent = triggerInsertEvent
 	return p
+}
+func (p *InsertParam) getEventHandler() (triggerInsertEvent EventInsertTrigger) {
+	triggerInsertEvent = p._triggerInsertEvent
+	if triggerInsertEvent == nil {
+		triggerInsertEvent = func(lastInsertId uint64, rowsAffected int64) (err error) { return }
+	}
+	return triggerInsertEvent
 }
 
 func (p *InsertParam) SetLog(log LogI) InsertParam {
 	p._log = log
 	return *p
 }
-func (p *InsertParam) WithHandler(insertWithLastIdHandler InsertWithLastIdHandler) *InsertParam {
+
+func (p *InsertParam) WithHandler(handler Handler) *InsertParam {
 	//p.execHandler = execHandler
-	p.insertWithLastIdHandler = insertWithLastIdHandler
+	p.handler = handler
 	return p
 }
 
@@ -329,7 +337,10 @@ func (p InsertParam) Exec() (err error) {
 	if err != nil {
 		return err
 	}
-	_, _, err = WarpInsertWithEventTrigger(p.insertWithLastIdHandler, p.triggerInsertEvent)(sql)
+	withEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
+		p.getEventHandler()(event.LastInsertId, event.RowsAffected)
+	})
+	_, _, err = withEventHandler.InsertWithLastId(sql)
 	return err
 }
 
@@ -343,7 +354,10 @@ func (p InsertParam) Insert() (lastInsertId uint64, rowsAffected int64, err erro
 	if err != nil {
 		return 0, 0, err
 	}
-	return WarpInsertWithEventTrigger(p.insertWithLastIdHandler, p.triggerInsertEvent)(sql)
+	withEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
+		p.getEventHandler()(event.LastInsertId, event.RowsAffected)
+	})
+	return withEventHandler.InsertWithLastId(sql)
 }
 
 type BatchInsertParam struct {
@@ -351,13 +365,20 @@ type BatchInsertParam struct {
 	_TableI   TableI
 	_log      LogI
 	//execHandler             ExecHandler
-	insertWithLastIdHandler InsertWithLastIdHandler
-	triggerInsertEvent      EventInsertTrigger
+	handler             Handler
+	_triggerInsertEvent EventInsertTrigger
 }
 
 func (p *BatchInsertParam) WithTriggerEvent(triggerInsertEvent EventInsertTrigger) *BatchInsertParam {
-	p.triggerInsertEvent = triggerInsertEvent
+	p._triggerInsertEvent = triggerInsertEvent
 	return p
+}
+func (p *BatchInsertParam) getEventHandler() (triggerInsertEvent EventInsertTrigger) {
+	triggerInsertEvent = p._triggerInsertEvent
+	if triggerInsertEvent == nil {
+		triggerInsertEvent = func(lastInsertId uint64, rowsAffected int64) (err error) { return }
+	}
+	return triggerInsertEvent
 }
 
 func NewBatchInsertBuilder(tableName string) *BatchInsertParam {
@@ -373,9 +394,8 @@ func (p *BatchInsertParam) SetLog(log LogI) *BatchInsertParam {
 	return p
 }
 
-func (p *BatchInsertParam) WithHandler(insertWithLastIdHandler InsertWithLastIdHandler) *BatchInsertParam {
-	//p.execHandler = execHandler
-	p.insertWithLastIdHandler = insertWithLastIdHandler
+func (p *BatchInsertParam) WithHandler(handler Handler) *BatchInsertParam {
+	p.handler = handler
 	return p
 }
 
@@ -424,7 +444,11 @@ func (p BatchInsertParam) Exec() (err error) {
 	if err != nil {
 		return err
 	}
-	_, _, err = WarpInsertWithEventTrigger(p.insertWithLastIdHandler, p.triggerInsertEvent)(sql)
+
+	withEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
+		p.getEventHandler()(event.LastInsertId, event.RowsAffected)
+	})
+	_, _, err = withEventHandler.InsertWithLastId(sql)
 	return err
 }
 func (p BatchInsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64, err error) {
@@ -432,28 +456,38 @@ func (p BatchInsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected 
 	if err != nil {
 		return 0, 0, err
 	}
-	return WarpInsertWithEventTrigger(p.insertWithLastIdHandler, p.triggerInsertEvent)(sql)
+	withEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
+		p.getEventHandler()(event.LastInsertId, event.RowsAffected)
+	})
+	return withEventHandler.InsertWithLastId(sql)
 }
 
 type DeleteParam struct {
-	_TableI                     TableI
-	_Fields                     Fields
-	_log                        LogI
-	execWithRowsAffectedHandler ExecWithRowsAffectedHandler
-	triggerDeletedEvent         EventDeletedTrigger
+	_TableI              TableI
+	_Fields              Fields
+	_log                 LogI
+	handler              Handler
+	_triggerDeletedEvent EventDeletedTrigger
 }
 
 func (p *DeleteParam) WithTriggerEvent(triggerDeletedEvent EventDeletedTrigger) *DeleteParam {
-	p.triggerDeletedEvent = triggerDeletedEvent
+	p._triggerDeletedEvent = triggerDeletedEvent
 	return p
+}
+func (p *DeleteParam) getEventHandler() (triggerDeletedEvent EventDeletedTrigger) {
+	triggerDeletedEvent = p._triggerDeletedEvent
+	if triggerDeletedEvent == nil {
+		triggerDeletedEvent = func(rowsAffected int64) (err error) { return }
+	}
+	return triggerDeletedEvent
 }
 
 func (p *DeleteParam) SetLog(log LogI) DeleteParam {
 	p._log = log
 	return *p
 }
-func (p *DeleteParam) WithHandler(execWithRowsAffectedHandler ExecWithRowsAffectedHandler) *DeleteParam {
-	p.execWithRowsAffectedHandler = execWithRowsAffectedHandler
+func (p *DeleteParam) WithHandler(handler Handler) *DeleteParam {
+	p.handler = handler
 	return p
 }
 
@@ -506,7 +540,10 @@ func (p DeleteParam) Exec() (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, EventUpdateTrigger(p.triggerDeletedEvent))(sql)
+	withEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
+		p.getEventHandler()(event.RowsAffected)
+	})
+	_, err = withEventHandler.ExecWithRowsAffected(sql)
 	return err
 }
 func (p DeleteParam) Delete() (rowsAffected int64, err error) {
@@ -514,7 +551,10 @@ func (p DeleteParam) Delete() (rowsAffected int64, err error) {
 	if err != nil {
 		return rowsAffected, err
 	}
-	rowsAffected, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, EventUpdateTrigger(p.triggerDeletedEvent))(sql)
+	withEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
+		p.getEventHandler()(event.RowsAffected)
+	})
+	rowsAffected, err = withEventHandler.ExecWithRowsAffected(sql)
 	return rowsAffected, err
 }
 
@@ -524,24 +564,31 @@ func (p DeleteParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
 }
 
 type UpdateParam struct {
-	_TableI                     TableI
-	_Fields                     Fields
-	_log                        LogI
-	execWithRowsAffectedHandler ExecWithRowsAffectedHandler
-	triggerUpdatedEvent         EventUpdateTrigger
+	_TableI              TableI
+	_Fields              Fields
+	_log                 LogI
+	handler              Handler
+	_triggerUpdatedEvent EventUpdateTrigger
 }
 
 func (p *UpdateParam) WithTriggerEvent(triggerUpdateEvent EventUpdateTrigger) *UpdateParam {
-	p.triggerUpdatedEvent = triggerUpdateEvent
+	p._triggerUpdatedEvent = triggerUpdateEvent
 	return p
+}
+func (p *UpdateParam) getEventHandler() (triggerUpdateEvent EventUpdateTrigger) {
+	triggerUpdateEvent = p._triggerUpdatedEvent
+	if triggerUpdateEvent == nil {
+		triggerUpdateEvent = func(rowsAffected int64) (err error) { return nil }
+	}
+	return triggerUpdateEvent
 }
 
 func (p *UpdateParam) SetLog(log LogI) UpdateParam {
 	p._log = log
 	return *p
 }
-func (p *UpdateParam) WithHandler(execWithRowsAffectedHandler ExecWithRowsAffectedHandler) *UpdateParam {
-	p.execWithRowsAffectedHandler = execWithRowsAffectedHandler
+func (p *UpdateParam) WithHandler(handler Handler) *UpdateParam {
+	p.handler = handler
 	return p
 }
 
@@ -598,7 +645,10 @@ func (p UpdateParam) Exec() (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, p.triggerUpdatedEvent)(sql)
+	withEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
+		p.getEventHandler()(event.RowsAffected)
+	})
+	_, err = withEventHandler.ExecWithRowsAffected(sql)
 	return err
 }
 
@@ -612,7 +662,10 @@ func (p UpdateParam) Update() (rowsAffected int64, err error) {
 	if err != nil {
 		return 0, err
 	}
-	rowsAffected, err = WarpUpdateWithEventTrigger(p.execWithRowsAffectedHandler, p.triggerUpdatedEvent)(sql)
+	withEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
+		p.getEventHandler()(event.RowsAffected)
+	})
+	rowsAffected, err = withEventHandler.ExecWithRowsAffected(sql)
 	return rowsAffected, err
 }
 
@@ -1047,12 +1100,12 @@ const (
 )
 
 type SetParam struct {
-	_Table               TableI
-	_Fields              Fields
-	handler              Handler
-	setPolicy            SetPolicy // 更新策略,默认根据主键判断是否需要更新
-	triggerInsertedEvent EventInsertTrigger
-	triggerUpdatedEvent  EventUpdateTrigger
+	_Table                TableI
+	_Fields               Fields
+	handler               Handler
+	setPolicy             SetPolicy // 更新策略,默认根据主键判断是否需要更新
+	_triggerInsertedEvent EventInsertTrigger
+	_triggerUpdatedEvent  EventUpdateTrigger
 }
 
 func (p *SetParam) AppendFields(fields ...*Field) *SetParam {
@@ -1072,9 +1125,21 @@ func (p *SetParam) WithPolicy(policy SetPolicy) *SetParam {
 }
 
 func (p *SetParam) WithTriggerEvent(triggerInsertdEvent EventInsertTrigger, triggerUpdateEvent EventUpdateTrigger) *SetParam {
-	p.triggerInsertedEvent = triggerInsertdEvent
-	p.triggerUpdatedEvent = triggerUpdateEvent
+	p._triggerInsertedEvent = triggerInsertdEvent
+	p._triggerUpdatedEvent = triggerUpdateEvent
 	return p
+}
+
+func (p *SetParam) getEventHandler() (triggerInsertdEvent EventInsertTrigger, triggerUpdateEvent EventUpdateTrigger) {
+	triggerInsertdEvent = p._triggerInsertedEvent
+	if triggerInsertdEvent == nil {
+		triggerInsertdEvent = func(lastInsertId uint64, rowsAffected int64) (err error) { return nil }
+	}
+	triggerUpdateEvent = p._triggerUpdatedEvent
+	if triggerUpdateEvent == nil {
+		triggerUpdateEvent = func(rowsAffected int64) (err error) { return nil }
+	}
+	return triggerInsertdEvent, triggerUpdateEvent
 }
 
 func (p *SetParam) WithHandler(handler Handler) *SetParam {
@@ -1107,9 +1172,16 @@ func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64,
 		return false, 0, 0, err
 	}
 
-	existsHandler := WithSingleflightDoOnce(p.handler.IndirectHandler()).Exists // 屏蔽缓存中间件，同时防止单实例并发问题
-	insertWithLastIdHandler := p.handler.InsertWithLastIdHandler
-	execWithRowsAffectedHandler := p.handler.ExecWithRowsAffected
+	existsHandler := WithSingleflightDoOnce(p.handler.OriginalHandler()).Exists // 屏蔽缓存中间件，同时防止单实例并发问题
+	// insertWithLastIdHandler := p.handler.InsertWithLastIdHandler
+	// execWithRowsAffectedHandler := p.handler.ExecWithRowsAffected
+	triggerInsertdEvent, triggerUpdateEvent := p.getEventHandler()
+	withInsertEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
+		triggerInsertdEvent(event.LastInsertId, event.RowsAffected)
+	})
+	withUpdateEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
+		triggerUpdateEvent(event.RowsAffected)
+	})
 
 	exists, err := existsHandler(existsSql)
 	if err != nil {
@@ -1119,19 +1191,19 @@ func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64,
 	switch p.setPolicy {
 	case SetPolicy_only_Insert: // 只新增说明使用最早数据
 		if !exists {
-			lastInsertId, rowsAffected, err = WarpInsertWithEventTrigger(insertWithLastIdHandler, p.triggerInsertedEvent)(insertSql)
+			lastInsertId, rowsAffected, err = withInsertEventHandler.InsertWithLastId(insertSql)
 			return isInsert, lastInsertId, rowsAffected, err
 		}
 	case SetPolicy_only_Update: // 只更新说明不存在时不处理
 		if exists {
-			rowsAffected, err = WarpUpdateWithEventTrigger(execWithRowsAffectedHandler, p.triggerUpdatedEvent)(updateSql)
+			rowsAffected, err = withUpdateEventHandler.ExecWithRowsAffected(updateSql)
 			return isInsert, lastInsertId, rowsAffected, err
 		}
 	default: // 默认执行 SetPolicy_Insert_or_Update 策略
 		if exists {
-			rowsAffected, err = WarpUpdateWithEventTrigger(execWithRowsAffectedHandler, p.triggerUpdatedEvent)(updateSql)
+			rowsAffected, err = withUpdateEventHandler.ExecWithRowsAffected(updateSql)
 		} else {
-			lastInsertId, rowsAffected, err = WarpInsertWithEventTrigger(insertWithLastIdHandler, p.triggerInsertedEvent)(insertSql)
+			lastInsertId, rowsAffected, err = withInsertEventHandler.InsertWithLastId(insertSql)
 		}
 	}
 	return isInsert, lastInsertId, rowsAffected, err

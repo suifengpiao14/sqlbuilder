@@ -22,39 +22,39 @@ type ExistsHandler func(sql string) (exists bool, err error)
 type ExecWithRowsAffectedHandler func(sql string) (rowsAffected int64, err error)
 type InsertWithLastIdHandler func(sql string) (lastInsertId uint64, rowsAffected int64, err error)
 
-func WarpUpdateWithEventTrigger(updateHander ExecWithRowsAffectedHandler, eventUpdateTrigger EventUpdateTrigger) ExecWithRowsAffectedHandler {
-	return func(sql string) (rowsAffected int64, err error) {
-		rowsAffected, err = updateHander(sql)
-		if err != nil {
-			return
-		}
+// func WarpUpdateWithEventTrigger(updateHander ExecWithRowsAffectedHandler, eventUpdateTrigger EventUpdateTrigger) ExecWithRowsAffectedHandler {
+// 	return func(sql string) (rowsAffected int64, err error) {
+// 		rowsAffected, err = updateHander(sql)
+// 		if err != nil {
+// 			return
+// 		}
 
-		if eventUpdateTrigger != nil {
-			err = eventUpdateTrigger(rowsAffected)
-			if err != nil {
-				return rowsAffected, err
-			}
-		}
-		return rowsAffected, nil
-	}
-}
+// 		if eventUpdateTrigger != nil {
+// 			err = eventUpdateTrigger(rowsAffected)
+// 			if err != nil {
+// 				return rowsAffected, err
+// 			}
+// 		}
+// 		return rowsAffected, nil
+// 	}
+// }
 
-func WarpInsertWithEventTrigger(insertHander InsertWithLastIdHandler, eventInsertTrigger EventInsertTrigger) InsertWithLastIdHandler {
-	return func(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
-		lastInsertId, rowsAffected, err = insertHander(sql)
-		if err != nil {
-			return
-		}
+// func WarpInsertWithEventTrigger(insertHander InsertWithLastIdHandler, eventInsertTrigger EventInsertTrigger) InsertWithLastIdHandler {
+// 	return func(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
+// 		lastInsertId, rowsAffected, err = insertHander(sql)
+// 		if err != nil {
+// 			return
+// 		}
 
-		if eventInsertTrigger != nil {
-			err = eventInsertTrigger(lastInsertId, rowsAffected)
-			if err != nil {
-				return lastInsertId, rowsAffected, err
-			}
-		}
-		return lastInsertId, rowsAffected, nil
-	}
-}
+// 		if eventInsertTrigger != nil {
+// 			err = eventInsertTrigger(lastInsertId, rowsAffected)
+// 			if err != nil {
+// 				return lastInsertId, rowsAffected, err
+// 			}
+// 		}
+// 		return lastInsertId, rowsAffected, nil
+// 	}
+// }
 
 type CompilerConfig struct {
 	Table       string
@@ -99,9 +99,9 @@ type Compiler struct {
 	tableName   string
 	fields      Fields
 	batchFields []Fields
-	insertEvent EventInsertTrigger
-	updateEvent EventUpdateTrigger
-	deleteEvent EventDeletedTrigger
+	// insertEvent EventInsertTrigger
+	// updateEvent EventUpdateTrigger
+	// deleteEvent EventDeletedTrigger
 }
 
 func NewCompiler(cfg CompilerConfig, fs ...*Field) Compiler {
@@ -141,7 +141,8 @@ func (h Compiler) WithFields(fs ...*Field) Compiler {
 	h.fields = fs
 	return h
 }
-func (h Compiler) WithInsertEvent(insertEvent EventInsertTrigger) Compiler {
+
+/* func (h Compiler) WithInsertEvent(insertEvent EventInsertTrigger) Compiler {
 	h.insertEvent = insertEvent
 	return h
 }
@@ -152,7 +153,7 @@ func (h Compiler) WithUpdateEvent(updateEvent EventUpdateTrigger) Compiler {
 func (h Compiler) WithDeleteEvent(deleteEvent EventDeletedTrigger) Compiler {
 	h.deleteEvent = deleteEvent
 	return h
-}
+} */
 
 func (h Compiler) WithBatchFields(batchFs ...Fields) Compiler {
 	h.batchFields = batchFs
@@ -189,18 +190,22 @@ func (h Compiler) BatchFields() (batchFs []Fields) {
 }
 
 func (h Compiler) Insert() *InsertParam {
-	return NewInsertBuilder(h.Table()).WithHandler(h.Handler().InsertWithLastIdHandler).WithTriggerEvent(h.insertEvent).AppendFields(h.Fields()...)
+	//return NewInsertBuilder(h.Table()).WithHandler(h.Handler().InsertWithLastIdHandler).WithTriggerEvent(h.insertEvent).AppendFields(h.Fields()...)
+	return NewInsertBuilder(h.Table()).WithHandler(h.Handler()).AppendFields(h.Fields()...)
 }
 func (h Compiler) InsertBatch() *BatchInsertParam {
-	return NewBatchInsertBuilder(h.Table()).WithHandler(h.Handler().InsertWithLastIdHandler).WithTriggerEvent(h.insertEvent).AppendFields(h.BatchFields()...)
+	//return NewBatchInsertBuilder(h.Table()).WithHandler(h.Handler().InsertWithLastIdHandler).WithTriggerEvent(h.insertEvent).AppendFields(h.BatchFields()...)
+	return NewBatchInsertBuilder(h.Table()).WithHandler(h.Handler()).AppendFields(h.BatchFields()...)
 }
 
 func (h Compiler) Update() *UpdateParam {
-	return NewUpdateBuilder(h.Table()).WithHandler(h.Handler().ExecWithRowsAffected).WithTriggerEvent(h.updateEvent).AppendFields(h.Fields()...)
+	//return NewUpdateBuilder(h.Table()).WithHandler(h.Handler().ExecWithRowsAffected).WithTriggerEvent(h.updateEvent).AppendFields(h.Fields()...)
+	return NewUpdateBuilder(h.Table()).WithHandler(h.Handler()).AppendFields(h.Fields()...)
 }
 
 func (h Compiler) Delete() *DeleteParam {
-	return NewDeleteBuilder(h.Table()).WithHandler(h.Handler().ExecWithRowsAffected).WithTriggerEvent(h.deleteEvent).AppendFields(h.Fields()...)
+	//return NewDeleteBuilder(h.Table()).WithHandler(h.Handler().ExecWithRowsAffected).WithTriggerEvent(h.deleteEvent).AppendFields(h.Fields()...)
+	return NewDeleteBuilder(h.Table()).WithHandler(h.Handler()).AppendFields(h.Fields()...)
 }
 func (h Compiler) Exists() *ExistsParam {
 	return NewExistsBuilder(h.Table()).WithHandler(h.Handler().Exists).AppendFields(h.Fields()...)
@@ -225,12 +230,13 @@ func (h Compiler) Set() *SetParam {
 type Handler interface {
 	Exec(sql string) (err error)
 	ExecWithRowsAffected(sql string) (rowsAffected int64, err error)
-	InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error)
+	InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error)
 	First(sql string, result any) (exists bool, err error)
 	Query(sql string, result any) (err error)
 	Count(sql string) (count int64, err error)
 	Exists(sql string) (exists bool, err error)
-	IndirectHandler() Handler // 获取间接handler，有时候需要绕过各种中间件，获取原始handler，比如 set 操作判断是否存在时，要绕过缓存中间件
+	OriginalHandler() Handler // 获取原始handler，有时候需要绕过各种中间件，获取原始handler，比如 set 操作判断是否存在时，要绕过缓存中间件
+	IsOriginalHandler() bool  // 是否是原始handler，比如gorm的handler就是原始handler, 其它 增加缓存、事件、单实例等都不是原始handler. 增加该接口后，非原始handler，可以多次嵌套，这在事件中间件中非常有用，使得事件handler 可以设置统一处理器，也可以单独设置(需要时再包裹一次就行)
 
 }
 
@@ -240,8 +246,11 @@ func NewGormHandler(getDB func() *gorm.DB) Handler {
 	return GormHandler(getDB)
 }
 
-func (h GormHandler) IndirectHandler() Handler {
+func (h GormHandler) OriginalHandler() Handler {
 	return h
+}
+func (h GormHandler) IsOriginalHandler() bool {
+	return true
 }
 
 func (h GormHandler) Exec(sql string) (err error) {
@@ -261,7 +270,7 @@ func (h GormHandler) Exists(sql string) (exists bool, err error) {
 	exists = len(result) > 0
 	return exists, nil
 }
-func (h GormHandler) InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
+func (h GormHandler) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
 	h().Transaction(func(tx *gorm.DB) error {
 		err = tx.Exec(sql).Error
 		if err != nil {
@@ -329,20 +338,18 @@ type _DbExecResult struct {
 	exists       bool
 }
 
-func IndirectHandler(h Handler) Handler {
-	//todo 此处暂时没有考虑 h 传入地址情况，暂时不考虑，后续再优化
-	indirectHandler := h
-	maxLoop := 10
+func GetOriginalHandler(h Handler) Handler {
+	originalHandler := h
+	maxLoop := 1000 // 防止无限循环，理论上不应该出现这种情况，如果出现，说明代码有问题
+
 	for {
 		maxLoop--
-		subIndirectHandler := indirectHandler.IndirectHandler()
-		if reflect.TypeOf(indirectHandler) != reflect.TypeOf(subIndirectHandler) {
-			indirectHandler = subIndirectHandler
-		} else {
-			return indirectHandler
+		if originalHandler.IsOriginalHandler() {
+			return originalHandler
 		}
+		originalHandler = originalHandler.OriginalHandler()
 		if maxLoop <= 0 {
-			err := errors.New("too many indirect handler")
+			err := errors.New("too many loop for GetOriginalHandler")
 			panic(err)
 		}
 	}
@@ -354,14 +361,17 @@ type _HandlerSingleflight struct {
 }
 
 func WithSingleflight(handler Handler) Handler {
-	return &_HandlerSingleflight{
+	return _HandlerSingleflight{
 		handler: handler,
 		group:   &singleflight.Group{},
 	}
 }
 
-func (hc _HandlerSingleflight) IndirectHandler() Handler {
-	return IndirectHandler(hc.handler)
+func (hc _HandlerSingleflight) OriginalHandler() Handler {
+	return GetOriginalHandler(hc.handler)
+}
+func (hc _HandlerSingleflight) IsOriginalHandler() bool {
+	return false
 }
 
 func (hc _HandlerSingleflight) Exec(sql string) (err error) {
@@ -389,9 +399,9 @@ func (hc _HandlerSingleflight) ExecWithRowsAffected(sql string) (rowsAffected in
 	rowsAffected = dbExecResult.rowsAffected
 	return rowsAffected, nil
 }
-func (hc _HandlerSingleflight) InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
+func (hc _HandlerSingleflight) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
 	dbExecResultAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
-		lastInsertId, rowsAffected, err := hc.handler.InsertWithLastIdHandler(sql)
+		lastInsertId, rowsAffected, err := hc.handler.InsertWithLastId(sql)
 		if err != nil {
 			return nil, err
 		}
@@ -487,24 +497,29 @@ type _HandlerCache struct {
 }
 
 func WithCache(handler Handler) Handler {
-	return &_HandlerCache{
+	return _HandlerCache{
 		handler: handler,
 	}
 }
 
 var Cache_sql_duration time.Duration = 1 * time.Minute
 
-func (hc _HandlerCache) IndirectHandler() Handler {
-	return IndirectHandler(hc.handler)
+func (hc _HandlerCache) OriginalHandler() Handler {
+	return GetOriginalHandler(hc.handler)
 }
+
+func (hc _HandlerCache) IsOriginalHandler() bool {
+	return false
+}
+
 func (hc _HandlerCache) Exec(sql string) (err error) {
 	return hc.handler.Exec(sql)
 }
 func (hc _HandlerCache) ExecWithRowsAffected(sql string) (rowsAffected int64, err error) {
 	return hc.handler.ExecWithRowsAffected(sql)
 }
-func (hc _HandlerCache) InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
-	return hc.handler.InsertWithLastIdHandler(sql)
+func (hc _HandlerCache) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
+	return hc.handler.InsertWithLastId(sql)
 }
 func (hc _HandlerCache) First(sql string, result any) (exists bool, err error) {
 	cacheResult := _DbExecResult{}
@@ -588,14 +603,17 @@ type _HandlerSingleflightDoOnce struct {
 }
 
 func WithSingleflightDoOnce(handler Handler) Handler {
-	return &_HandlerSingleflightDoOnce{
+	return _HandlerSingleflightDoOnce{
 		handler: handler,
 		group:   &singleflight.Group{},
 	}
 }
 
-func (hc _HandlerSingleflightDoOnce) IndirectHandler() Handler {
-	return IndirectHandler(hc.handler)
+func (hc _HandlerSingleflightDoOnce) OriginalHandler() Handler {
+	return GetOriginalHandler(hc.handler)
+}
+func (hc _HandlerSingleflightDoOnce) IsOriginalHandler() bool {
+	return false
 }
 
 func (hc _HandlerSingleflightDoOnce) Exec(sql string) (err error) {
@@ -604,8 +622,8 @@ func (hc _HandlerSingleflightDoOnce) Exec(sql string) (err error) {
 func (hc _HandlerSingleflightDoOnce) ExecWithRowsAffected(sql string) (rowsAffected int64, err error) {
 	return hc.handler.ExecWithRowsAffected(sql)
 }
-func (hc _HandlerSingleflightDoOnce) InsertWithLastIdHandler(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
-	return hc.handler.InsertWithLastIdHandler(sql)
+func (hc _HandlerSingleflightDoOnce) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
+	return hc.handler.InsertWithLastId(sql)
 }
 func (hc _HandlerSingleflightDoOnce) First(sql string, result any) (exists bool, err error) {
 	return hc.handler.First(sql, result)
@@ -634,4 +652,105 @@ func (hc _HandlerSingleflightDoOnce) Exists(sql string) (exists bool, err error)
 	}
 	exists = existsAny.(bool)
 	return exists, nil
+}
+
+const (
+	Event_Operation_Insert = "insert"
+	Event_Operation_Update = "update"
+	Event_Operation_Delete = "delete"
+)
+
+type Direction string
+
+type Event struct {
+	Operation    string // 操作类型
+	LastInsertId uint64
+	RowsAffected int64
+	SQL          string
+}
+
+type EventASyncHandler func(event *Event)
+
+// _HandlerTriggerAsyncEvent 只触发数据库层面的事件,主要用于数据冗余同步更新,区分不了数据库层面更新、业务层面为delete场景，如果需要触发业务层面的事件,请监听更上层事件
+type _HandlerTriggerAsyncEvent struct {
+	handler               Handler
+	_eventAsyncDispatcher EventASyncHandler
+}
+
+func WithTriggerAsyncEvent(handler Handler, eventHandler EventASyncHandler) Handler {
+	return _HandlerTriggerAsyncEvent{
+		handler:               handler,
+		_eventAsyncDispatcher: eventHandler,
+	}
+}
+
+// getEventLeaveDispatcher 执行SQL后触发事件,不关心结果
+func (hc _HandlerTriggerAsyncEvent) getEventLeaveDispatcher() EventASyncHandler {
+	if hc._eventAsyncDispatcher != nil {
+		return hc._eventAsyncDispatcher
+	}
+	return func(event *Event) {}
+}
+
+func (hc _HandlerTriggerAsyncEvent) OriginalHandler() Handler {
+	return GetOriginalHandler(hc.handler)
+}
+func (hc _HandlerTriggerAsyncEvent) IsOriginalHandler() bool {
+	return false
+}
+func (hc _HandlerTriggerAsyncEvent) Exec(sql string) (err error) {
+	err = hc.handler.Exec(sql)
+	if err != nil {
+		return err
+	}
+	event := &Event{
+		Operation: Event_Operation_Update,
+		SQL:       sql,
+	}
+	go hc.getEventLeaveDispatcher()(event)
+	return nil
+}
+
+func (hc _HandlerTriggerAsyncEvent) ExecWithRowsAffected(sql string) (rowsAffected int64, err error) {
+	rowsAffected, err = hc.handler.ExecWithRowsAffected(sql)
+	if err != nil {
+		return
+	}
+	event := &Event{
+		Operation:    Event_Operation_Update,
+		RowsAffected: rowsAffected,
+		SQL:          sql,
+	}
+	go hc.getEventLeaveDispatcher()(event)
+
+	return rowsAffected, nil
+}
+
+func (hc _HandlerTriggerAsyncEvent) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
+	lastInsertId, rowsAffected, err = hc.handler.InsertWithLastId(sql)
+	if err != nil {
+		return 0, 0, err
+	}
+	event := &Event{
+		Operation:    Event_Operation_Insert,
+		LastInsertId: lastInsertId,
+		RowsAffected: rowsAffected,
+		SQL:          sql,
+	}
+	go hc.getEventLeaveDispatcher()(event)
+
+	return lastInsertId, rowsAffected, nil
+}
+func (hc _HandlerTriggerAsyncEvent) First(sql string, result any) (exists bool, err error) {
+	return hc.handler.First(sql, result)
+}
+func (hc _HandlerTriggerAsyncEvent) Query(sql string, result any) (err error) {
+	return hc.handler.Query(sql, result)
+}
+func (hc _HandlerTriggerAsyncEvent) Count(sql string) (count int64, err error) {
+	return hc.handler.Count(sql)
+
+}
+func (hc _HandlerTriggerAsyncEvent) Exists(sql string) (exists bool, err error) {
+	return hc.handler.Exists(sql)
 }

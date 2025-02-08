@@ -10,6 +10,6 @@ import (
 func TestIndirectHandler(t *testing.T) {
 	gormHandler := sqlbuilder.NewGormHandler(nil)
 	oHandler := sqlbuilder.WithCacheSingleflightHandler(gormHandler, true, true)
-	iHandler := oHandler.IndirectHandler()
+	iHandler := oHandler.OriginalHandler()
 	require.IsType(t, gormHandler, iHandler)
 }
