@@ -102,9 +102,9 @@ type Compiler struct {
 }
 
 func NewCompiler(cfg CompilerConfig, fs ...*Field) Compiler {
-	if len(fs) == 0 {
-		panic(errors.New("sqlbuilder: Compiler need fields"))
-	}
+	/* 	if len(fs) == 0 {
+		panic(errors.New("sqlbuilder: Compiler need fields"))// 有的场景确实不需要字段，比如列表查询时，无筛选条件
+	} */
 	c := Compiler{tableName: cfg.Table, handler: cfg.Handler, fields: fs}
 	c = c.Apply(cfg)
 	return c
