@@ -782,6 +782,13 @@ func (f *Field) SceneSelect(middlewareFn ApplyFn) *Field {
 	})
 	return f
 }
+func (f *Field) SceneExists(middlewareFn ApplyFn) *Field {
+	f.sceneFns.Append(SceneFn{
+		Scene: SCENE_SQL_EXISTS,
+		Fn:    middlewareFn,
+	})
+	return f
+}
 
 type FieldFn[T any] func(value T) *Field
 

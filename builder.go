@@ -230,6 +230,7 @@ const (
 	SCENE_SQL_UPDATE   Scene = "update"
 	SCENE_SQL_DELETE   Scene = "delete"
 	SCENE_SQL_SELECT   Scene = "select"
+	SCENE_SQL_EXISTS   Scene = "exists"
 	SCENE_SQL_VIEW     Scene = "view"
 	SCENE_SQL_INCREASE Scene = "increse" // 字段递增
 	SCENE_SQL_DECREASE Scene = "decrese" // 字段递减
@@ -910,16 +911,12 @@ func NewExistsBuilder(tableName string, builderFns ...SelectBuilderFn) *ExistsPa
 func (p ExistsParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	table := p._Table.Table()
-	fs.SetTable(table) // 将表名设置到字段中,方便在ValueFn 中使用table变量
-	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
+	fs.SetTable(table)                   // 将表名设置到字段中,方便在ValueFn 中使用table变量
+	fs.SetSceneIfEmpty(SCENE_SQL_EXISTS) // 存在场景，和SCENE_SQL_SELECT场景不一样，在set中，这个exists 必须实时查询数据，另外部分查询条件也和查询数据场景不一致，所以独立分开处理
+
 	where, err := fs.Where()
 	if err != nil {
 		return "", err
-	}
-	pageIndex, pageSize := fs.Pagination()
-	ofsset := pageIndex * pageSize
-	if ofsset < 0 {
-		ofsset = 0
 	}
 
 	ds := Dialect.DialectWrapper().Select(goqu.L("1").As("exists")).
