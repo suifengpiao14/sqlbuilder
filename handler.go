@@ -315,11 +315,12 @@ func WithCacheSingleflightHandler(handler Handler, withCache bool, withSinglefli
 	return handler
 }
 
+// _DbExecResult 数据库执行结果，支持json序列化
 type _DbExecResult struct {
-	data         any
-	rowsAffected int64
-	lastInsertId uint64
-	exists       bool
+	Data         any    `json:"data"`
+	RowsAffected int64  `json:"rowsAffected"`
+	LastInsertId uint64 `json:"lastInsertId"`
+	Exists       bool   `json:"exists"`
 }
 
 func GetOriginalHandler(h Handler) Handler {
@@ -371,8 +372,8 @@ func (hc _HandlerSingleflight) ExecWithRowsAffected(sql string) (rowsAffected in
 			return 0, err
 		}
 		result := _DbExecResult{
-			rowsAffected: rowsAffected,
-			lastInsertId: 0,
+			RowsAffected: rowsAffected,
+			LastInsertId: 0,
 		}
 		return result, nil
 	})
@@ -380,7 +381,7 @@ func (hc _HandlerSingleflight) ExecWithRowsAffected(sql string) (rowsAffected in
 		return 0, err
 	}
 	dbExecResult := dbExecResultAny.(_DbExecResult)
-	rowsAffected = dbExecResult.rowsAffected
+	rowsAffected = dbExecResult.RowsAffected
 	return rowsAffected, nil
 }
 func (hc _HandlerSingleflight) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
@@ -390,8 +391,8 @@ func (hc _HandlerSingleflight) InsertWithLastId(sql string) (lastInsertId uint64
 			return nil, err
 		}
 		result := _DbExecResult{
-			rowsAffected: rowsAffected,
-			lastInsertId: lastInsertId,
+			RowsAffected: rowsAffected,
+			LastInsertId: lastInsertId,
 		}
 		return result, nil
 	})
@@ -399,8 +400,8 @@ func (hc _HandlerSingleflight) InsertWithLastId(sql string) (lastInsertId uint64
 		return 0, 0, err
 	}
 	dbExecResult := dbExecResultAny.(_DbExecResult)
-	lastInsertId = dbExecResult.lastInsertId
-	rowsAffected = dbExecResult.rowsAffected
+	lastInsertId = dbExecResult.LastInsertId
+	rowsAffected = dbExecResult.RowsAffected
 	return lastInsertId, rowsAffected, nil
 }
 func (hc _HandlerSingleflight) First(sql string, result any) (exists bool, err error) {
@@ -412,8 +413,8 @@ func (hc _HandlerSingleflight) First(sql string, result any) (exists bool, err e
 			return nil, err
 		}
 		result := _DbExecResult{
-			data:   v,
-			exists: exists,
+			Data:   v,
+			Exists: exists,
 		}
 		return result, nil
 	})
@@ -421,8 +422,8 @@ func (hc _HandlerSingleflight) First(sql string, result any) (exists bool, err e
 		return false, err
 	}
 	dbExecResult := dbExecResultAny.(_DbExecResult)
-	SetReflectValue(rv, reflect.ValueOf(dbExecResult.data))
-	exists = dbExecResult.exists
+	SetReflectValue(rv, reflect.ValueOf(dbExecResult.Data))
+	exists = dbExecResult.Exists
 	return exists, nil
 }
 func (hc _HandlerSingleflight) Query(sql string, result any) (err error) {
@@ -434,7 +435,7 @@ func (hc _HandlerSingleflight) Query(sql string, result any) (err error) {
 			return nil, err
 		}
 		result := _DbExecResult{
-			data: v,
+			Data: v,
 		}
 		return result, nil
 	})
@@ -442,7 +443,7 @@ func (hc _HandlerSingleflight) Query(sql string, result any) (err error) {
 		return err
 	}
 	dbExecResult := dbExecResultAny.(_DbExecResult)
-	SetReflectValue(rv, reflect.ValueOf(dbExecResult.data))
+	SetReflectValue(rv, reflect.ValueOf(dbExecResult.Data))
 	return nil
 }
 func (hc _HandlerSingleflight) Count(sql string) (count int64, err error) {
@@ -506,7 +507,9 @@ func (hc _HandlerCache) InsertWithLastId(sql string) (lastInsertId uint64, rowsA
 	return hc.handler.InsertWithLastId(sql)
 }
 func (hc _HandlerCache) First(sql string, result any) (exists bool, err error) {
-	cacheResult := _DbExecResult{}
+	cacheResult := _DbExecResult{
+		Data: result, //此处必须将类型传入，否则 json 反序列化时，类型不对
+	}
 	rv := reflect.Indirect(reflect.ValueOf(result))
 	err = cache.Remember(sql, Cache_sql_duration, &cacheResult, func() (any, error) {
 		result := reflect.New(rv.Type()).Interface()
@@ -515,16 +518,16 @@ func (hc _HandlerCache) First(sql string, result any) (exists bool, err error) {
 			return nil, err
 		}
 		cacheResult := _DbExecResult{
-			data:   result,
-			exists: exists,
+			Data:   result,
+			Exists: exists,
 		}
 		return cacheResult, nil
 	})
 	if err != nil {
 		return false, err
 	}
-	SetReflectValue(rv, reflect.ValueOf(cacheResult.data))
-	exists = cacheResult.exists
+	SetReflectValue(rv, reflect.ValueOf(cacheResult.Data))
+	exists = cacheResult.Exists
 	return exists, nil
 }
 func (hc _HandlerCache) Query(sql string, result any) (err error) {
