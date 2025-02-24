@@ -670,6 +670,31 @@ func (p UpdateParam) Update() (rowsAffected int64, err error) {
 	return rowsAffected, err
 }
 
+func (p UpdateParam) UpdateMustExists() (rowsAffected int64, err error) {
+
+	cp := p._Fields.Copy()
+	existsParam := NewExistsBuilder(p._TableI.Table()).AppendFields(cp...)
+	exists, err := existsParam.Exists()
+	if err != nil {
+		return 0, err
+	}
+	if !exists {
+		existsSql, _ := existsParam.ToSQL()
+		err = errors.Errorf("record not exists with the sql:%s", existsSql)
+		return 0, err
+	}
+
+	sql, err := p.ToSQL()
+	if err != nil {
+		return 0, err
+	}
+	withEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
+		p.getEventHandler()(event.RowsAffected)
+	})
+	rowsAffected, err = withEventHandler.ExecWithRowsAffected(sql)
+	return rowsAffected, err
+}
+
 type FirstParam struct {
 	_Table       TableI
 	_Fields      Fields
