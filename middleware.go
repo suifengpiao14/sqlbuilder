@@ -219,7 +219,7 @@ func ValueFnMustExists(existsFn ExistsHandler) ValueFn {
 				return nil, err
 			}
 			if !exists {
-				err = errors.WithMessagef(ERROR_COLUMN_VALUE_NOT_EXISTS, "column %s value %s exists", f.DBName(), inputValue) // 没有时存在，需要返回指定错误，方便业务自主处理错误
+				err = errors.WithMessagef(ERROR_COLUMN_VALUE_NOT_EXISTS, "column %s value %s", f.DBName(), inputValue) // 没有时存在，需要返回指定错误，方便业务自主处理错误
 				return nil, err
 			}
 			return inputValue, err

@@ -623,7 +623,7 @@ func (hc _HandlerSingleflightDoOnce) Count(sql string) (count int64, err error) 
 
 }
 func (hc _HandlerSingleflightDoOnce) Exists(sql string) (exists bool, err error) {
-	existsAny, err, shared := hc.group.Do(sql, func() (interface{}, error) {
+	existsAny, err, shared := hc.group.Do(sql, func() (any, error) {
 		exists, err := hc.handler.Exists(sql)
 		if err != nil {
 			return 0, err
