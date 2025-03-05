@@ -574,6 +574,36 @@ func (f *Field) AppendValueFn(valueFns ...ValueFn) *Field {
 	return f
 }
 
+// ValueDependentForSceneSave 依赖字段,当前字段值依赖其它字段的值; srcValues 和 dependentFs 对应
+
+func (f *Field) SetRelyOnValueForSceneSave(mapValueFn func(srcValues ...any) (value any, err error), dependentFs ...*Field) *Field {
+	f.SceneSave(func(f *Field, fs ...*Field) {
+		f.ValueFns.ResetSetValueFn(func(inputValue any, f *Field, fs ...*Field) (any, error) {
+			fieldCout := len(dependentFs)
+			if fieldCout == 0 {
+				return nil, errors.New("dependentFs required")
+			}
+			srcValues := make([]any, fieldCout)
+			for i, emptySrcField := range dependentFs {
+				srcField, ok := Fields(fs).GetByName(emptySrcField.Name)
+				if ok {
+					srcValue, err := srcField.getValue(Layer_all, fs...)
+					if err != nil {
+						return nil, err
+					}
+					srcValues[i] = srcValue
+				}
+			}
+			value, err := mapValueFn(srcValues...)
+			if err != nil {
+				return nil, err
+			}
+			return value, nil
+		})
+	})
+	return f
+}
+
 func (f *Field) AppendWhereFn(whereFns ...ValueFn) *Field {
 	f.WhereFns.Append(whereFns...)
 	return f
@@ -763,6 +793,17 @@ func (f *Field) SceneFinal(middlewareFns ...ApplyFn) *Field {
 func (f *Field) SceneInsert(middlewareFn ApplyFn) *Field {
 	f.sceneFns.Append(SceneFn{
 		Scene: SCENE_SQL_INSERT,
+		Fn:    middlewareFn,
+	})
+	return f
+}
+func (f *Field) SceneSave(middlewareFn ApplyFn) *Field {
+	f.sceneFns.Append(SceneFn{
+		Scene: SCENE_SQL_INSERT,
+		Fn:    middlewareFn,
+	})
+	f.sceneFns.Append(SceneFn{
+		Scene: SCENE_SQL_UPDATE,
 		Fn:    middlewareFn,
 	})
 	return f
@@ -1290,14 +1331,11 @@ func (fs Fields) Builder() (fields Fields) {
 
 // Validate 方便前期校验
 func (fs Fields) Validate() (err error) {
-
 	for _, f := range fs {
 		f.Init(fs...)
-		field := f.InjectValueFn()
-		field.ValueFns = field.ValueFns.GetByLayer()
-		_, e := field.getValue(Layer_Validate, fs...)
-		if e != nil {
-			err = errors.Wrap(err, e.Error())
+		_, err = f.GetValue(Layer_Validate, fs...)
+		if err != nil {
+			return err
 		}
 	}
 	return err

@@ -333,6 +333,16 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
+func (p InsertParam) Validate() (err error) {
+	fs := p._Fields.Copy()
+	fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
+	err = fs.Validate()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (p InsertParam) Exec() (err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
@@ -641,6 +651,15 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 
+func (p UpdateParam) Validate() (err error) {
+	fs := p._Fields.Copy()
+	fs.SetSceneIfEmpty(SCENE_SQL_UPDATE)
+	err = fs.Validate()
+	if err != nil {
+		return err
+	}
+	return nil
+}
 func (p UpdateParam) Exec() (err error) {
 	sql, err := p.ToSQL()
 	if err != nil {
