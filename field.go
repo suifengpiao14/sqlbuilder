@@ -576,7 +576,7 @@ func (f *Field) AppendValueFn(valueFns ...ValueFn) *Field {
 
 // ValueDependentForSceneSave 依赖字段,当前字段值依赖其它字段的值; srcValues 和 dependentFs 对应
 
-func (f *Field) SetRelyOnValueForSceneSave(mapValueFn func(srcValues ...any) (value any, err error), dependentFs ...*Field) *Field {
+func (f *Field) Subscribe(subFn func(srcValues ...any) (value any, err error), dependentFs ...*Field) *Field {
 	f.SceneSave(func(f *Field, fs ...*Field) {
 		f.ValueFns.ResetSetValueFn(func(inputValue any, f *Field, fs ...*Field) (any, error) {
 			fieldCout := len(dependentFs)
@@ -594,7 +594,7 @@ func (f *Field) SetRelyOnValueForSceneSave(mapValueFn func(srcValues ...any) (va
 					srcValues[i] = srcValue
 				}
 			}
-			value, err := mapValueFn(srcValues...)
+			value, err := subFn(srcValues...)
 			if err != nil {
 				return nil, err
 			}
