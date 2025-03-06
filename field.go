@@ -574,11 +574,13 @@ func (f *Field) AppendValueFn(valueFns ...ValueFn) *Field {
 	return f
 }
 
-// ValueDependentForSceneSave 依赖字段,当前字段值依赖其它字段的值; srcValues 和 dependentFs 对应
-
+// Subscribe 专注解决当前字段值依赖其他字段值转换生成场景
 func (f *Field) Subscribe(subFn func(srcValues ...any) (value any, err error), dependentFs ...*Field) *Field {
 	f.SceneSave(func(f *Field, fs ...*Field) {
 		f.ValueFns.ResetSetValueFn(func(inputValue any, f *Field, fs ...*Field) (any, error) {
+			if subFn == nil {
+				return nil, nil
+			}
 			fieldCout := len(dependentFs)
 			if fieldCout == 0 {
 				return nil, errors.New("dependentFs required")
@@ -587,7 +589,7 @@ func (f *Field) Subscribe(subFn func(srcValues ...any) (value any, err error), d
 			for i, emptySrcField := range dependentFs {
 				srcField, ok := Fields(fs).GetByName(emptySrcField.Name)
 				if ok {
-					srcValue, err := srcField.getValue(Layer_all, fs...)
+					srcValue, err := srcField.GetValue(Layer_all, fs...)
 					if err != nil {
 						return nil, err
 					}
