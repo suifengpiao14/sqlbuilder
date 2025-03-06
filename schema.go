@@ -56,36 +56,36 @@ func (schema Schema) FullComment() string {
 	return fmt.Sprintf("%s%s", schema.Comment, schema.Enums.String())
 }
 
-func (schema Schema) SetMaxLength(max int) *Schema {
+func (schema *Schema) SetMaxLength(max int) *Schema {
 	schema.MaxLength = max
-	return &schema
+	return schema
 }
-func (schema Schema) SetMaximum(max uint) *Schema {
+func (schema *Schema) SetMaximum(max uint) *Schema {
 	schema.Maximum = max
-	return &schema
+	return schema
 }
 
-func (schema Schema) SetMinLength(min int) *Schema {
+func (schema *Schema) SetMinLength(min int) *Schema {
 	schema.MinLength = min
-	return &schema
+	return schema
 }
-func (schema Schema) SetMinimum(min int) *Schema {
+func (schema *Schema) SetMinimum(min int) *Schema {
 	schema.Minimum = min
-	return &schema
+	return schema
 }
-func (schema Schema) SetAllowZero(zeroAsEmpty bool) *Schema {
+func (schema *Schema) SetAllowZero(zeroAsEmpty bool) *Schema {
 	schema.AllowZero = true
-	return &schema
+	return schema
 }
 
-func (schema Schema) SetDefault(def any) *Schema {
+func (schema *Schema) SetDefault(def any) *Schema {
 	schema.Default = def
-	return &schema
+	return schema
 }
 
-func (schema Schema) SetRegExp(reg string) *Schema {
+func (schema *Schema) SetRegExp(reg string) *Schema {
 	schema.RegExp = reg
-	return &schema
+	return schema
 }
 
 // AllowEmpty 是否可以为空
