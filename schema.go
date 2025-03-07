@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/doug-martin/goqu/v9"
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 )
@@ -613,6 +614,21 @@ var ValueFnForward = ValueFn{
 		return in, nil
 	},
 	Layer: Value_Layer_DBFormat,
+}
+
+// ValueFnSwich 数据库值固定为2个时，向开关一样转换
+var ValueFnSwich = ValueFn{
+	Fn: func(in any, f *Field, fs ...*Field) (any, error) {
+		if f.Schema == nil || len(f.Schema.Enums) != 2 {
+			err := errors.Errorf("ValueFnSwich requied 2 enums")
+			return nil, err
+		}
+		first := f.Schema.Enums[0].Key
+		second := f.Schema.Enums[1].Key
+		expression := goqu.L(fmt.Sprintf("if(`%s`=?,?,?)", f.DBName()), first, second, first)
+		return expression, nil
+	},
+	Layer: Value_Layer_OnlyForData,
 }
 
 // ValueFnFormatArray 格式化数组,只有一个元素时,直接返回当前元素，常用于where in 条件
