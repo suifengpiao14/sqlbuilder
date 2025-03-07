@@ -57,14 +57,14 @@ type InsertWithLastIdHandler func(sql string) (lastInsertId uint64, rowsAffected
 // }
 
 type CompilerConfig struct {
-	Table       string
+	Table       TableConfig
 	Handler     Handler
 	FieldsApply ApplyFn
 }
 
-func (c CompilerConfig) WithTableIgnore(table string) CompilerConfig {
-	if c.Table == "" { // 为空时才增加,即优先级低，用于设置默认值
-		c.Table = table
+func (c CompilerConfig) WithTableIgnore(tableConfig TableConfig) CompilerConfig {
+	if c.Table.Name == "" { // 为空时才增加,即优先级低，用于设置默认值
+		c.Table = tableConfig
 	}
 	return c
 }
@@ -96,7 +96,7 @@ func (c CompilerConfig) CopyTableHandler() CompilerConfig {
 // Compiler
 type Compiler struct {
 	handler     Handler
-	tableName   string
+	tableConfig TableConfig
 	fields      Fields
 	batchFields []Fields
 }
@@ -105,7 +105,7 @@ func NewCompiler(cfg CompilerConfig, fs ...*Field) Compiler {
 	/* 	if len(fs) == 0 {
 		panic(errors.New("sqlbuilder: Compiler need fields"))// 有的场景确实不需要字段，比如列表查询时，无筛选条件
 	} */
-	c := Compiler{tableName: cfg.Table, handler: cfg.Handler, fields: fs}
+	c := Compiler{tableConfig: cfg.Table, handler: cfg.Handler, fields: fs}
 	c = c.Apply(cfg)
 	return c
 }
@@ -118,8 +118,8 @@ func (h Compiler) WithHandler(handler Handler) Compiler {
 }
 
 func (h Compiler) Apply(cfg CompilerConfig) Compiler {
-	if cfg.Table != "" { // 增加空判断，方便使用方转入nil情况
-		h.tableName = cfg.Table
+	if cfg.Table.Name != "" { // 增加空判断，方便使用方转入nil情况
+		h.tableConfig = cfg.Table
 	}
 	if cfg.Handler != nil { // 增加空判断，方便使用方转入nil情况
 		h.handler = cfg.Handler
@@ -143,8 +143,8 @@ func (h Compiler) WithBatchFields(batchFs ...Fields) Compiler {
 	h.batchFields = batchFs
 	return h
 }
-func (h Compiler) WithTable(table string) Compiler {
-	h.tableName = table
+func (h Compiler) WithTable(tableConfig TableConfig) Compiler {
+	h.tableConfig = tableConfig
 	return h
 }
 
@@ -154,9 +154,9 @@ func (h Compiler) Handler() Handler {
 	}
 	panic(errors.New("handler is nil"))
 }
-func (h Compiler) Table() (table string) {
-	if h.tableName != "" {
-		return h.tableName
+func (h Compiler) Table() (table TableConfig) {
+	if h.tableConfig.Name != "" {
+		return h.tableConfig
 	}
 	panic(errors.New("table name is nil"))
 }

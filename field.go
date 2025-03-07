@@ -294,17 +294,22 @@ func OrderFieldFn(valueOrder ...any) OrderFn {
 
 type OrderFn func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression)
 
+type TableConfig struct {
+	Name                     string
+	FieldName2DBColumnNameFn FieldName2DBColumnNameFn
+}
+
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Name          string   `json:"name"`
-	ValueFns      ValueFns `json:"-"` // 增加error，方便封装字段验证规则
-	WhereFns      ValueFns `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	_OrderFn      OrderFn  `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	Schema        *Schema  // 可以为空，为空建议设置默认值
-	table         string   // 关联表,方便收集Table全量信息
-	scene         Scene    // 场景
-	sceneFns      SceneFns // 场景初始化配置
-	tags          Tags     // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
+	Name          string      `json:"name"`
+	ValueFns      ValueFns    `json:"-"` // 增加error，方便封装字段验证规则
+	WhereFns      ValueFns    `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	_OrderFn      OrderFn     `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	Schema        *Schema     // 可以为空，为空建议设置默认值
+	table         TableConfig // 关联表,方便收集Table全量信息
+	scene         Scene       // 场景
+	sceneFns      SceneFns    // 场景初始化配置
+	tags          Tags        // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
 	dbName        string
 	docName       string
 	selectColumns []any  // 查询时列
@@ -420,12 +425,12 @@ func (f *Field) SetOrderFn(orderFn OrderFn) *Field {
 	return f
 }
 
-func (f *Field) SetTable(table string) *Field {
+func (f *Field) SetTableConfig(table TableConfig) *Field {
 	f.table = table
 	return f
 }
 
-func (f *Field) GetTable() (table string) {
+func (f *Field) GetTable() (table TableConfig) {
 	return f.table
 }
 
@@ -444,11 +449,19 @@ func (f *Field) CanUpdate(condition bool) *Field {
 }
 
 // DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
-func (f *Field) DBName() string {
+func (f *Field) DBName() (dbName string) {
 	if f.dbName != "" { // 存在dbName则使用dbName
-		return f.dbName
+		dbName = f.dbName
+
+		return dbName
 	}
-	return FieldName2DBColumnName(f.Name)
+
+	if f.table.FieldName2DBColumnNameFn != nil {
+		return f.table.FieldName2DBColumnNameFn(f.Name)
+	}
+
+	dbName = FieldName2DBColumnName(f.Name) // 兼容历史处理
+	return dbName
 }
 
 // DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
@@ -658,7 +671,7 @@ func (f *Field) Combine(combinedFields ...*Field) *Field {
 		if f.Name == "" {
 			f.Name = combined.Name
 		}
-		if f.table == "" {
+		if f.table.Name == "" {
 			f.table = combined.table
 		}
 		if f.scene == "" {
@@ -1350,10 +1363,10 @@ func (fs Fields) SetSceneIfEmpty(scene Scene) Fields {
 	return fs
 }
 
-func (fs Fields) SetTable(table string) Fields {
+func (fs Fields) SetTableConfig(table TableConfig) Fields {
 	for i := 0; i < len(fs); i++ {
-		if fs[i].table == "" {
-			fs[i].SetTable(table)
+		if fs[i].table.Name == "" {
+			fs[i].SetTableConfig(table)
 		}
 	}
 	return fs
@@ -1362,7 +1375,7 @@ func (fs Fields) SetTable(table string) Fields {
 func (fs Fields) Tables() []string {
 	m := map[string]struct{}{}
 	for i := 0; i < len(fs); i++ {
-		m[fs[i].table] = struct{}{}
+		m[fs[i].table.Name] = struct{}{}
 	}
 	tables := make([]string, 0)
 	for k := range m {
@@ -1762,8 +1775,32 @@ func Expression2String(expressions ...goqu.Expression) string {
 	return sql
 }
 
+type FieldName2DBColumnNameFn func(fieldName string) (dbColumnName string)
+
+func FieldName2DBColumnNameFnDirect() FieldName2DBColumnNameFn {
+	return func(fieldName string) (dbColumnName string) {
+		return fieldName
+	}
+}
+func (tcFn FieldName2DBColumnNameFn) WithSnakeCase() FieldName2DBColumnNameFn {
+	return func(fieldName string) (dbColumnName string) {
+		return funcs.ToSnakeCase(tcFn(fieldName))
+	}
+}
+func (tcFn FieldName2DBColumnNameFn) WithPrefix(prefix string) FieldName2DBColumnNameFn {
+	return func(fieldName string) (dbColumnName string) {
+		dbColumnName = tcFn(fieldName)
+		return fmt.Sprintf("%s%s", prefix, dbColumnName)
+	}
+}
+
+func (tcFn FieldName2DBColumnNameFn) WithSnakeCaseAndPrefix(prefix string) FieldName2DBColumnNameFn {
+	return tcFn.WithSnakeCase().WithPrefix(prefix)
+}
+
+// Deprecated  请使用TableConfig 设置
 // FieldName2DBColumnName 将接口字段转换为数据表字段列名称
-var FieldName2DBColumnName = func(fieldName string) (dbColumnName string) {
+var FieldName2DBColumnName FieldName2DBColumnNameFn = func(fieldName string) (dbColumnName string) {
 	dbColumnName = funcs.ToSnakeCase(fieldName)
 	dbColumnName = fmt.Sprintf("F%s", strings.TrimPrefix(dbColumnName, "F")) // 增加F前缀
 	return dbColumnName

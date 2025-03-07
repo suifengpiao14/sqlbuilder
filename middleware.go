@@ -286,7 +286,7 @@ func ApplyFnUniqueField(table string, existsFn ExistsHandler) ApplyFn {
 	return ApplyFnUnique(existsFn)
 }
 
-func ApplyFnUpdateIfNull(table string, firstHandler FirstHandler) ApplyFn {
+func ApplyFnUpdateIfNull(table TableConfig, firstHandler FirstHandler) ApplyFn {
 	return func(f *Field, fs ...*Field) {
 		f.SceneUpdate(func(f *Field, fs ...*Field) {
 			f.ValueFns.Append(ValueFn{
