@@ -534,6 +534,13 @@ func (f *Field) SetDescription(description string) *Field {
 	f.MergeSchema(Schema{Comment: description})
 	return f
 }
+func (f *Field) SetDefault(defaul any) *Field {
+	if f.Schema == nil {
+		f.Schema = &Schema{}
+	}
+	f.Schema.Default = defaul
+	return f
+}
 func (f *Field) SetTag(tag string) *Field {
 	if len(f.tags) == 0 {
 		f.tags = append(f.tags, tag)
