@@ -913,7 +913,7 @@ func NewField[T int | int64 | uint64 | []int | []int64 | []uint64 | string | []s
 	return field
 }
 
-func NewIntField(value int, name string, title string, maximum uint) (f *Field) {
+func NewIntField[T int | int64](value T, name string, title string, maximum uint) (f *Field) {
 	f = NewField(value).SetName(name).SetTitle(title).MergeSchema(Schema{
 		Type: Schema_Type_int,
 	})
