@@ -282,7 +282,7 @@ func ApplyFnUnique(existsFn ExistsHandler) ApplyFn { // 复合索引，给一列
 }
 
 // Deprecated ApplyFnUniqueField 单列唯一索引键,新增场景中间件
-func ApplyFnUniqueField(table string, existsFn ExistsHandler) ApplyFn {
+func ApplyFnUniqueField(existsFn ExistsHandler) ApplyFn {
 	return ApplyFnUnique(existsFn)
 }
 
