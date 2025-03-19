@@ -225,7 +225,7 @@ func (s Scene) Is(target Scene) bool {
 }
 
 const (
-	SCENE_SQL_INIT     Scene = "init"
+	SCENE_SQL_INIT     Scene = "init" // 场景初始化，常用于清除前期设置，如当前字段只用于搜索(入参用于在2个字段上搜索)，其它场景不存在
 	SCENE_SQL_INSERT   Scene = "insert"
 	SCENE_SQL_UPDATE   Scene = "update"
 	SCENE_SQL_DELETE   Scene = "delete"

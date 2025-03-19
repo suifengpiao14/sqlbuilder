@@ -791,16 +791,28 @@ func (f *Field) Apply(applyFns ...ApplyFn) *Field {
 }
 
 func (f *Field) SceneInit(middlewareFns ...ApplyFn) *Field {
+	f.Scene(NewScenes(SCENE_SQL_INIT), middlewareFns...)
+	return f
+}
+
+func NewScenes(scenes ...Scene) []Scene {
+	return scenes
+}
+
+func (f *Field) Scene(scenes []Scene, middlewareFns ...ApplyFn) *Field { // 批量设置场景，如除了查询场景，其它全部屏蔽，即可传入屏蔽函数，选择多个场景
 	sceneFns := make([]SceneFn, 0)
-	for _, fn := range middlewareFns {
-		sceneFns = append(sceneFns, SceneFn{
-			Scene: SCENE_SQL_INIT,
-			Fn:    fn,
-		})
+	for _, scene := range scenes {
+		for _, middlewareFn := range middlewareFns {
+			sceneFns = append(sceneFns, SceneFn{
+				Scene: scene,
+				Fn:    middlewareFn,
+			})
+		}
 	}
 	f.sceneFns.Append(sceneFns...)
 	return f
 }
+
 func (f *Field) SceneFinal(middlewareFns ...ApplyFn) *Field {
 	sceneFns := make([]SceneFn, 0)
 	for _, fn := range middlewareFns {
@@ -813,43 +825,24 @@ func (f *Field) SceneFinal(middlewareFns ...ApplyFn) *Field {
 	return f
 }
 func (f *Field) SceneInsert(middlewareFn ApplyFn) *Field {
-	f.sceneFns.Append(SceneFn{
-		Scene: SCENE_SQL_INSERT,
-		Fn:    middlewareFn,
-	})
+	f.Scene(NewScenes(SCENE_SQL_INSERT), middlewareFn)
 	return f
 }
 func (f *Field) SceneSave(middlewareFn ApplyFn) *Field {
-	f.sceneFns.Append(SceneFn{
-		Scene: SCENE_SQL_INSERT,
-		Fn:    middlewareFn,
-	})
-	f.sceneFns.Append(SceneFn{
-		Scene: SCENE_SQL_UPDATE,
-		Fn:    middlewareFn,
-	})
+	f.Scene(NewScenes(SCENE_SQL_INSERT, SCENE_SQL_UPDATE), middlewareFn)
 	return f
 }
 func (f *Field) SceneUpdate(middlewareFn ApplyFn) *Field {
-	f.sceneFns.Append(SceneFn{
-		Scene: SCENE_SQL_UPDATE,
-		Fn:    middlewareFn,
-	})
+	f.Scene(NewScenes(SCENE_SQL_UPDATE), middlewareFn)
 	return f
 }
 
 func (f *Field) SceneSelect(middlewareFn ApplyFn) *Field {
-	f.sceneFns.Append(SceneFn{
-		Scene: SCENE_SQL_SELECT,
-		Fn:    middlewareFn,
-	})
+	f.Scene(NewScenes(SCENE_SQL_SELECT), middlewareFn)
 	return f
 }
 func (f *Field) SceneExists(middlewareFn ApplyFn) *Field {
-	f.sceneFns.Append(SceneFn{
-		Scene: SCENE_SQL_EXISTS,
-		Fn:    middlewareFn,
-	})
+	f.Scene(NewScenes(SCENE_SQL_EXISTS), middlewareFn)
 	return f
 }
 
