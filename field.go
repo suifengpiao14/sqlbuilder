@@ -294,9 +294,60 @@ func OrderFieldFn(valueOrder ...any) OrderFn {
 
 type OrderFn func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression)
 
+type JionConfig struct {
+	Table TableConfig
+	Field *Field
+}
+
+type JionConfigs []JionConfig
+
+func (joins JionConfigs) Unique() JionConfigs {
+	return funcs.UniqueueWithKeyFn(joins, func(join JionConfig) (key string) {
+		return join.Table.Name
+	})
+}
+
+func (joins JionConfigs) Join(ds *goqu.SelectDataset) *goqu.SelectDataset {
+	joins = joins.Unique()
+	if len(joins) < 2 {
+		return ds
+	}
+	first := joins[0]
+	for i := 1; i < len(joins); i++ {
+		join := joins[i]
+		join.Field.SetTable(join.Table) // 确保一定传入表名
+		ds = ds.Join(first.Table.Table(), goqu.On(goqu.I(first.Field.FullDBName()).Eq(goqu.I(join.Field.FullDBName()))))
+	}
+
+	return ds
+
+}
+
+func Join(ds *goqu.SelectDataset, jionConfigs ...JionConfig) *goqu.SelectDataset {
+	return ds
+}
+
 type TableConfig struct {
 	Name                     string
+	alias                    string
 	FieldName2DBColumnNameFn FieldName2DBColumnNameFn
+}
+
+func (t TableConfig) Alias() (alias string) {
+	if t.alias != "" {
+		return t.alias
+	}
+	return t.Name // 默认返回表名作为别名
+}
+
+func (t *TableConfig) SetAlias(alias string) *TableConfig {
+	t.alias = alias
+
+	return t
+}
+
+func (t TableConfig) Table() exp.IdentifierExpression {
+	return goqu.T(t.Name)
 }
 
 func (t TableConfig) IsNil() bool {
@@ -438,11 +489,11 @@ func (f *Field) SetOrderFn(orderFn OrderFn) *Field {
 	return f
 }
 
-func (f *Field) SetTableConfig(table TableConfig) *Field {
+func (f *Field) SetTable(table TableConfig) *Field {
 	f.table.Set(table)
 	return f
 }
-func (f *Field) SetTableConfigNX(table TableConfig) *Field {
+func (f *Field) SetTableNX(table TableConfig) *Field {
 	f.table.Setnx(table)
 	return f
 }
@@ -479,6 +530,19 @@ func (f *Field) DBName() (dbName string) {
 
 	dbName = FieldName2DBColumnName(f.Name) // 兼容历史处理
 	return dbName
+}
+
+// FullDBName 返回完整字段名，包含表名前缀
+func (f *Field) FullDBName() (fullDbName string) {
+	fullDbName = f.DBName()
+	if !f.table.IsNil() {
+		tableName := fmt.Sprintf("%s.", f.table.Alias())
+		if !strings.Contains(fullDbName, tableName) {
+			fullDbName = fmt.Sprintf("%s%s", tableName, fullDbName)
+		}
+	}
+	return fullDbName
+
 }
 
 // DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
@@ -1378,9 +1442,9 @@ func (fs Fields) SetSceneIfEmpty(scene Scene) Fields {
 	return fs
 }
 
-func (fs Fields) SetTableConfig(table TableConfig) Fields {
+func (fs Fields) SetTable(table TableConfig) Fields {
 	for i := 0; i < len(fs); i++ {
-		fs[i].SetTableConfigNX(table)
+		fs[i].SetTableNX(table)
 	}
 	return fs
 }
