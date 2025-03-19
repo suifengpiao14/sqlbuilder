@@ -63,7 +63,7 @@ type CompilerConfig struct {
 }
 
 func (c CompilerConfig) WithTableIgnore(tableConfig TableConfig) CompilerConfig {
-	if c.Table.Name == "" { // 为空时才增加,即优先级低，用于设置默认值
+	if c.Table.IsNil() { // 为空时才增加,即优先级低，用于设置默认值
 		c.Table = tableConfig
 	}
 	return c
@@ -118,7 +118,7 @@ func (h Compiler) WithHandler(handler Handler) Compiler {
 }
 
 func (h Compiler) Apply(cfg CompilerConfig) Compiler {
-	if cfg.Table.Name != "" { // 增加空判断，方便使用方转入nil情况
+	if cfg.Table.IsNil() { // 增加空判断，方便使用方转入nil情况
 		h.tableConfig = cfg.Table
 	}
 	if cfg.Handler != nil { // 增加空判断，方便使用方转入nil情况

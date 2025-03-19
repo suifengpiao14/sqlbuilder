@@ -299,6 +299,19 @@ type TableConfig struct {
 	FieldName2DBColumnNameFn FieldName2DBColumnNameFn
 }
 
+func (t TableConfig) IsNil() bool {
+	return t.Name == ""
+}
+
+func (t *TableConfig) Setnx(table TableConfig) { // 不存在时设置,名称灵感来自 redis setnx
+	if t.IsNil() {
+		*t = table
+	}
+}
+func (t *TableConfig) Set(table TableConfig) { // 不存在时设置,名称灵感来自 redis setnx
+	*t = table
+}
+
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
 	Name          string      `json:"name"`
@@ -426,7 +439,11 @@ func (f *Field) SetOrderFn(orderFn OrderFn) *Field {
 }
 
 func (f *Field) SetTableConfig(table TableConfig) *Field {
-	f.table = table
+	f.table.Set(table)
+	return f
+}
+func (f *Field) SetTableConfigNX(table TableConfig) *Field {
+	f.table.Setnx(table)
 	return f
 }
 
@@ -678,9 +695,7 @@ func (f *Field) Combine(combinedFields ...*Field) *Field {
 		if f.Name == "" {
 			f.Name = combined.Name
 		}
-		if f.table.Name == "" {
-			f.table = combined.table
-		}
+		f.table.Setnx(combined.table)
 		if f.scene == "" {
 			f.scene = combined.scene
 		}
@@ -1365,9 +1380,7 @@ func (fs Fields) SetSceneIfEmpty(scene Scene) Fields {
 
 func (fs Fields) SetTableConfig(table TableConfig) Fields {
 	for i := 0; i < len(fs); i++ {
-		if fs[i].table.Name == "" {
-			fs[i].SetTableConfig(table)
-		}
+		fs[i].SetTableConfigNX(table)
 	}
 	return fs
 }
