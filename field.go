@@ -795,11 +795,11 @@ func (f *Field) SceneInit(middlewareFns ...ApplyFn) *Field {
 	return f
 }
 
-func NewScenes(scenes ...Scene) []Scene {
+func NewScenes(scenes ...Scene) Scenes {
 	return scenes
 }
 
-func (f *Field) Scene(scenes []Scene, middlewareFns ...ApplyFn) *Field { // 批量设置场景，如除了查询场景，其它全部屏蔽，即可传入屏蔽函数，选择多个场景
+func (f *Field) Scene(scenes Scenes, middlewareFns ...ApplyFn) *Field { // 批量设置场景，如除了查询场景，其它全部屏蔽，即可传入屏蔽函数，选择多个场景
 	sceneFns := make([]SceneFn, 0)
 	for _, scene := range scenes {
 		for _, middlewareFn := range middlewareFns {

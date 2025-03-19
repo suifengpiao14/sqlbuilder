@@ -220,6 +220,8 @@ func EscapeString(s string) (escaped string) {
 
 type Scene string // 迁移场景
 
+type Scenes []Scene
+
 func (s Scene) Is(target Scene) bool {
 	return strings.EqualFold(string(s), string(target))
 }
@@ -236,6 +238,9 @@ const (
 	SCENE_SQL_DECREASE Scene = "decrese" // 字段递减
 	SCENE_SQL_FINAL    Scene = "final"   // 最终状态(所有场景执行完成后再执行的场景 ,有时需要清除公共库设置的所有场景，只有在这里清除最保险)
 )
+
+// 操作数据库场景
+var SCENE_Commands = Scenes{SCENE_SQL_INSERT, SCENE_SQL_UPDATE, SCENE_SQL_DELETE, SCENE_SQL_INCREASE, SCENE_SQL_DECREASE}
 
 type TableI interface {
 	TableConfig() (table TableConfig)
