@@ -359,8 +359,10 @@ func (t *TableConfig) Setnx(table TableConfig) { // 不存在时设置,名称灵
 		*t = table
 	}
 }
-func (t *TableConfig) Set(table TableConfig) { // 不存在时设置,名称灵感来自 redis setnx
-	*t = table
+func (t *TableConfig) Set(table TableConfig) {
+	if !table.IsNil() {
+		*t = table
+	}
 }
 
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
