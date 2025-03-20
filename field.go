@@ -294,36 +294,66 @@ func OrderFieldFn(valueOrder ...any) OrderFn {
 
 type OrderFn func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression)
 
-type JionConfig struct {
-	Table TableConfig
-	Field *Field
+type OnUnit struct {
+	Table       TableConfig
+	Field       *Field
+	WhereFields Fields
 }
 
-type JionConfigs []JionConfig
-
-func (joins JionConfigs) Unique() JionConfigs {
-	return funcs.UniqueueWithKeyFn(joins, func(join JionConfig) (key string) {
-		return join.Table.Name
-	})
-}
-
-func (joins JionConfigs) Join(ds *goqu.SelectDataset) *goqu.SelectDataset {
-	joins = joins.Unique()
-	if len(joins) < 2 {
-		return ds
+func (onUnit OnUnit) moreCondition() (moreWhereCondition Expressions, err error) {
+	if onUnit.WhereFields == nil {
+		return nil, nil
 	}
-	first := joins[0]
-	for i := 1; i < len(joins); i++ {
-		join := joins[i]
-		join.Field.SetTable(join.Table) // 确保一定传入表名
-		ds = ds.Join(first.Table.Table(), goqu.On(goqu.I(first.Field.FullDBName()).Eq(goqu.I(join.Field.FullDBName()))))
+	moreWhereCondition, err = onUnit.WhereFields.Where()
+	if err != nil {
+		err = errors.Errorf("moreCondition error: %v", err)
+		panic(err)
 	}
-
-	return ds
-
+	return moreWhereCondition, nil
 }
 
-func Join(ds *goqu.SelectDataset, jionConfigs ...JionConfig) *goqu.SelectDataset {
+type _On [2]OnUnit
+
+func NewOn(first, second OnUnit) _On {
+	return _On{first, second}
+}
+
+func (on _On) SetFieldTable() {
+	for i := 0; i < len(on); i++ {
+		on[i].Field.SetTable(on[i].Table)
+	}
+}
+
+func (on _On) moreCondition() (moreWhereCondition Expressions, err error) {
+	for i := 0; i < len(on); i++ {
+		condition, err := on[i].moreCondition()
+		if err != nil {
+			return nil, err
+		}
+		moreWhereCondition = append(moreWhereCondition, condition...)
+	}
+	return moreWhereCondition, nil
+}
+
+func (on _On) Table() exp.IdentifierExpression {
+	return on[1].Table.Table()
+}
+func (on _On) Condition() (table exp.IdentifierExpression, condition exp.JoinCondition, err error) {
+	on.SetFieldTable() // 确保一定传入表名
+	first, second := on[0], on[1]
+	expression := goqu.I(first.Field.FullDBName()).Eq(goqu.I(second.Field.FullDBName()))
+	expressions := make([]exp.Expression, 0)
+	expressions = append(expressions, expression)
+	moreCondition, err := on.moreCondition()
+	if err != nil {
+		return nil, nil, err
+	}
+	expressions = append(expressions, moreCondition...)
+	condition = goqu.On(expressions...)
+	return on.Table(), condition, nil
+}
+
+func Join(ds *goqu.SelectDataset, jionConfigs ...OnUnit) *goqu.SelectDataset {
 	return ds
 }
 
@@ -506,6 +536,13 @@ func (f *Field) GetTable() (table TableConfig) {
 
 func (f *Field) GetScene() (scena Scene) {
 	return f.scene
+}
+
+func (f *Field) JoinConfig() (joinConfig OnUnit) {
+	return OnUnit{
+		Table: f.table,
+		Field: f,
+	}
 }
 
 // ReadOnly 很多字段只能写入一次，即新增写入后不可更改，如记录的所有者，指纹等，此处方便理解 重写f.ShieldUpdate(true)
@@ -1392,6 +1429,16 @@ type FieldsI interface {
 }
 
 type Fields []*Field
+
+//GetBySampleField 根据样板(未完全配置的初始化字段)获取对应的配置完备的字段，如果没有则返回样板本身，常用于从fields集合中筛选字段
+
+func (fs Fields) GetBySampleField(field *Field) (f *Field) {
+	f, ok := fs.GetByName(field.Name)
+	if !ok {
+		return field
+	}
+	return f
+}
 
 func (fs Fields) Fielter(fn FieldFilterFn) (fields Fields) {
 	fields = make(Fields, 0)

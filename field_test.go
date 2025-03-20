@@ -181,3 +181,21 @@ func TestValueFns(t *testing.T) {
 	valueFns.Sort()
 	require.Equal(t, valueFns[0].Name, "first")
 }
+
+func TestPopFirstMain(t *testing.T) {
+	table1 := sqlbuilder.TableConfig{
+		Name: "test1",
+	}
+	table2 := sqlbuilder.TableConfig{
+		Name: "test2",
+	}
+
+	field := sqlbuilder.NewIntField(0, "id", "ID", 0)
+	on := sqlbuilder.NewOn(
+		sqlbuilder.OnUnit{Table: table1, Field: field},
+		sqlbuilder.OnUnit{Table: table2, Field: field},
+	)
+	table, _, err := on.Condition()
+	require.NoError(t, err)
+	require.Equal(t, table2.Table(), table)
+}

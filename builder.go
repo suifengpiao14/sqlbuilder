@@ -133,11 +133,7 @@ func (d Driver) IsSame(target Driver) bool {
 	return strings.EqualFold(d.String(), target.String())
 }
 
-type Expressions []goqu.Expression
-
-func (exs Expressions) IsEmpty() bool {
-	return len(exs) == 0
-}
+type Expressions = []goqu.Expression
 
 var ERROR_EMPTY_WHERE = errors.New("error  empty where")
 
