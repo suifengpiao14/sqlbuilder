@@ -338,7 +338,7 @@ func (on _On) moreCondition() (moreWhereCondition Expressions, err error) {
 func (on _On) Table() exp.IdentifierExpression {
 	return on[1].Table.Table()
 }
-func (on _On) Condition() (table exp.IdentifierExpression, condition exp.JoinCondition, err error) {
+func (on _On) Condition() (joinTable exp.IdentifierExpression, condition exp.JoinCondition, err error) {
 	on.SetFieldTable() // 确保一定传入表名
 	first, second := on[0], on[1]
 	expression := goqu.I(first.Field.FullDBName()).Eq(goqu.I(second.Field.FullDBName()))
