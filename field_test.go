@@ -195,7 +195,6 @@ func TestPopFirstMain(t *testing.T) {
 		sqlbuilder.OnUnit{Table: table1, Field: field},
 		sqlbuilder.OnUnit{Table: table2, Field: field},
 	)
-	table, _, err := on.Condition()
-	require.NoError(t, err)
+	table, _ := on.Condition()
 	require.Equal(t, table2.Table(), table)
 }

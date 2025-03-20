@@ -312,7 +312,7 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 	tableConfig := p._TableI.TableConfig()
-	fs.SetTable(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
+	fs.SetTableNX(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
 	rowData, err := fs.Data(layer_order...)
 	if err != nil {
@@ -430,7 +430,7 @@ func (is BatchInsertParam) ToSQL() (sql string, err error) {
 	tableConfig := is._TableI.TableConfig()
 	for _, fields := range is.rowFields {
 		fs := fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
-		fs.SetTable(tableConfig)
+		fs.SetTableNX(tableConfig)
 		fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
 		rowData, err := fs.Data(layer_order...)
 		if err != nil {
@@ -519,7 +519,7 @@ func (p *DeleteParam) AppendFields(fields ...*Field) *DeleteParam {
 func (p DeleteParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._TableI.TableConfig()
-	fs.SetTable(tableConfig)
+	fs.SetTableNX(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_DELETE)
 	f, ok := fs.GetByFieldName(Field_name_deletedAt)
 	if !ok {
@@ -620,7 +620,7 @@ func (p *UpdateParam) AppendFields(fields ...*Field) *UpdateParam {
 func (p UpdateParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._TableI.TableConfig()
-	fs.SetTable(tableConfig)
+	fs.SetTableNX(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_UPDATE)
 	data, err := fs.Data(layer_order...)
 	if err != nil {
@@ -757,7 +757,7 @@ func (p *FirstParam) WithBuilderFns(builderFns ...SelectBuilderFn) *FirstParam {
 func (p FirstParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._Table.TableConfig()
-	fs.SetTable(tableConfig)
+	fs.SetTableNX(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := fs.Where()
 	if err != nil {
@@ -849,7 +849,7 @@ func NewListBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *Lis
 func (p ListParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._Table.TableConfig()
-	fs.SetTable(tableConfig)
+	fs.SetTableNX(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := fs.Where()
 	if err != nil {
@@ -956,7 +956,7 @@ func NewExistsBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *E
 func (p ExistsParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._Table.TableConfig()
-	fs.SetTable(tableConfig)             // 将表名设置到字段中,方便在ValueFn 中使用table变量
+	fs.SetTableNX(tableConfig)           // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_EXISTS) // 存在场景，和SCENE_SQL_SELECT场景不一样，在set中，这个exists 必须实时查询数据，另外部分查询条件也和查询数据场景不一致，所以独立分开处理
 
 	where, err := fs.Where()
@@ -1031,7 +1031,7 @@ func (p *TotalParam) AppendFields(fields ...*Field) *TotalParam {
 func (p TotalParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._Table.TableConfig()
-	fs.SetTable(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
+	fs.SetTableNX(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := fs.Where()
 	if err != nil {

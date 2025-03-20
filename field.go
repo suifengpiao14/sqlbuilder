@@ -300,57 +300,56 @@ type OnUnit struct {
 	WhereFields Fields
 }
 
-func (onUnit OnUnit) moreCondition() (moreWhereCondition Expressions, err error) {
+func (onUnit OnUnit) moreCondition() (moreWhereCondition Expressions) {
 	if onUnit.WhereFields == nil {
-		return nil, nil
+		return nil
 	}
-	moreWhereCondition, err = onUnit.WhereFields.Where()
-	if err != nil {
+	moreWhereCondition, err := onUnit.WhereFields.Where()
+	if err != nil { // on 中的条件只用于指定表连接的条件,不做数据筛选（需要动态筛选数据必须使用where条件）;所以 这里的更多条件的值是固定的 这里如果出错了，是必然会报错的，直接panic即可,方便使用
 		err = errors.Errorf("moreCondition error: %v", err)
 		panic(err)
 	}
-	return moreWhereCondition, nil
+	return moreWhereCondition
 }
 
 type _On [2]OnUnit
 
 func NewOn(first, second OnUnit) _On {
-	return _On{first, second}
+	on := _On{first, second}
+	on.init()
+	return on
 }
 
-func (on _On) SetFieldTable() {
+func (on _On) init() {
+	//初始化表关系
 	for i := 0; i < len(on); i++ {
 		on[i].Field.SetTable(on[i].Table)
+		if on[i].WhereFields != nil {
+			on[i].WhereFields.SetTableNX(on[i].Table)
+		}
 	}
 }
 
-func (on _On) moreCondition() (moreWhereCondition Expressions, err error) {
+func (on _On) moreCondition() (moreWhereCondition Expressions) {
 	for i := 0; i < len(on); i++ {
-		condition, err := on[i].moreCondition()
-		if err != nil {
-			return nil, err
-		}
+		condition := on[i].moreCondition()
 		moreWhereCondition = append(moreWhereCondition, condition...)
 	}
-	return moreWhereCondition, nil
+	return moreWhereCondition
 }
 
 func (on _On) Table() exp.IdentifierExpression {
 	return on[1].Table.Table()
 }
-func (on _On) Condition() (joinTable exp.IdentifierExpression, condition exp.JoinCondition, err error) {
-	on.SetFieldTable() // 确保一定传入表名
+func (on _On) Condition() (joinTable exp.IdentifierExpression, condition exp.JoinCondition) {
 	first, second := on[0], on[1]
-	expression := goqu.I(first.Field.FullDBName()).Eq(goqu.I(second.Field.FullDBName()))
 	expressions := make([]exp.Expression, 0)
+	expression := goqu.I(first.Field.FullDBName()).Eq(goqu.I(second.Field.FullDBName()))
 	expressions = append(expressions, expression)
-	moreCondition, err := on.moreCondition()
-	if err != nil {
-		return nil, nil, err
-	}
+	moreCondition := on.moreCondition()
 	expressions = append(expressions, moreCondition...)
 	condition = goqu.On(expressions...)
-	return on.Table(), condition, nil
+	return on.Table(), condition
 }
 
 func Join(ds *goqu.SelectDataset, jionConfigs ...OnUnit) *goqu.SelectDataset {
@@ -363,36 +362,57 @@ type TableConfig struct {
 	FieldName2DBColumnNameFn FieldName2DBColumnNameFn
 }
 
-func (t TableConfig) Alias() (alias string) {
-	if t.alias != "" {
-		return t.alias
+type TableConfigs []TableConfig
+
+func (ts TableConfigs) GetByName(name string) (t *TableConfig, exists bool) {
+	if name == "" {
+		return nil, false
 	}
-	return t.Name // 默认返回表名作为别名
+	t, exists = funcs.GetOne(ts, func(t TableConfig) bool { return t.Name == name })
+	return t, exists
 }
 
-func (t *TableConfig) SetAlias(alias string) *TableConfig {
-	t.alias = alias
+func (t TableConfig) Copy() TableConfig {
+	cp := t
+	return cp // 方便后续增加[]slice 时复制扩展
+}
 
+func (t TableConfig) AliasString() string {
+	alias := t.alias
+	if alias == "" {
+		alias = t.Name
+	}
+	return alias
+}
+func (t TableConfig) Alias() (aliasExpression exp.AliasedExpression) {
+	return exp.NewAliasExpression(t.Table(), t.AliasString()) // 默认返回表名作为别名
+}
+
+func (t TableConfig) WithAlias(alias string) TableConfig {
+	t.alias = alias
 	return t
 }
 
 func (t TableConfig) Table() exp.IdentifierExpression {
-	return goqu.T(t.Name)
+	table := goqu.T(t.Name)
+	return table
 }
 
 func (t TableConfig) IsNil() bool {
 	return t.Name == ""
 }
 
-func (t *TableConfig) Setnx(table TableConfig) { // 不存在时设置,名称灵感来自 redis setnx
-	if t.IsNil() {
-		*t = table
+// Merge 合并表配置信息,同名覆盖，别名同名覆盖,a.Merge(b) 实现b覆盖a; b.Merge(a)、a.Merge(b,a) 可实现a 覆盖b
+func (t TableConfig) Merge(tables ...TableConfig) TableConfig {
+	for _, table := range tables {
+		if table.Name != "" {
+			t.Name = table.Name
+		}
+		if table.alias != "" {
+			t.alias = table.alias
+		}
 	}
-}
-func (t *TableConfig) Set(table TableConfig) {
-	if !table.IsNil() {
-		*t = table
-	}
+	return t
 }
 
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
@@ -522,14 +542,13 @@ func (f *Field) SetOrderFn(orderFn OrderFn) *Field {
 }
 
 func (f *Field) SetTable(table TableConfig) *Field {
-	f.table.Set(table)
+	f.table = f.table.Merge(table)
 	return f
 }
 func (f *Field) SetTableNX(table TableConfig) *Field {
-	f.table.Setnx(table)
+	f.table = table.Merge(f.table)
 	return f
 }
-
 func (f *Field) GetTable() (table TableConfig) {
 	return f.table
 }
@@ -575,7 +594,7 @@ func (f *Field) DBName() (dbName string) {
 func (f *Field) FullDBName() (fullDbName string) {
 	fullDbName = f.DBName()
 	if !f.table.IsNil() {
-		tableName := fmt.Sprintf("%s.", f.table.Alias())
+		tableName := fmt.Sprintf("%s.", f.table.AliasString())
 		if !strings.Contains(fullDbName, tableName) {
 			fullDbName = fmt.Sprintf("%s%s", tableName, fullDbName)
 		}
@@ -798,7 +817,7 @@ func (f *Field) Combine(combinedFields ...*Field) *Field {
 		if f.Name == "" {
 			f.Name = combined.Name
 		}
-		f.table.Setnx(combined.table)
+		f.table = combined.table.Merge(f.table)
 		if f.scene == "" {
 			f.scene = combined.scene
 		}
@@ -1491,9 +1510,21 @@ func (fs Fields) SetSceneIfEmpty(scene Scene) Fields {
 	return fs
 }
 
-func (fs Fields) SetTable(table TableConfig) Fields {
+func (fs Fields) SetTableNX(table TableConfig) Fields {
 	for i := 0; i < len(fs); i++ {
 		fs[i].SetTableNX(table)
+	}
+	return fs
+}
+
+// MergeMatchedTable 匹配表，更新表字段表配置信息，用于多表查询时，字段归属表不清晰的情况。例如： 多表join查询
+func (fs Fields) MergeMatchedTable(tables ...TableConfig) Fields {
+	ts := TableConfigs(tables)
+	for i := 0; i < len(fs); i++ {
+		t, exists := ts.GetByName(fs[i].table.Name)
+		if exists {
+			fs[i].SetTableNX(*t)
+		}
 	}
 	return fs
 }
