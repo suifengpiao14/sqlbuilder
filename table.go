@@ -67,16 +67,19 @@ func (t TableConfig) Merge(tables ...TableConfig) TableConfig {
 	return t
 }
 
+type BusinessIdentity string // 业务标识,是关联数据表字段和Field的桥梁，是固定不变的，是模型组合的核心标识，始终保持不变（具体细化、应用待实践）
+
 type ColumnConfig struct {
-	Name     string     `json:"name"` // 驼峰,程序中使用
-	Type     SchemaType `json:"type"`
-	Length   int        `json:"length"`
-	PK       bool       `json:"pk"`
-	Unique   bool       `json:"unique"`
-	Nullable bool       `json:"nullable"`
-	Default  any        `json:"default"`
-	Comment  string     `json:"comment"`
-	Enums    Enums      `json:"enums"`
+	BusinessIdentity BusinessIdentity // 业务标识
+	Name             string           `json:"name"` // 驼峰,程序中使用
+	Type             SchemaType       `json:"type"`
+	Length           int              `json:"length"`
+	PK               bool             `json:"pk"`
+	Unique           bool             `json:"unique"`
+	Nullable         bool             `json:"nullable"`
+	Default          any              `json:"default"`
+	Comment          string           `json:"comment"`
+	Enums            Enums            `json:"enums"`
 }
 
 func (c ColumnConfig) CamelName() string {
