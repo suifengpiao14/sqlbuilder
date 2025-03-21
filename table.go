@@ -43,10 +43,11 @@ func (id DBIdentifier) BaseName() string {
 	copy(cp, id)
 	slices.Reverse(cp)
 	cp = funcs.FilterEmpty(cp)
-	for i := 0; i < 1; i++ {
-		return cp[i].BaseName()
+	if len(cp) == 0 {
+		return ""
 	}
-	return ""
+	baseName := cp[0].BaseName()
+	return baseName
 }
 
 func (id DBIdentifier) FullName() string {
