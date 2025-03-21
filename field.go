@@ -356,65 +356,6 @@ func Join(ds *goqu.SelectDataset, jionConfigs ...OnUnit) *goqu.SelectDataset {
 	return ds
 }
 
-type TableConfig struct {
-	Name                     string
-	alias                    string
-	FieldName2DBColumnNameFn FieldName2DBColumnNameFn
-}
-
-type TableConfigs []TableConfig
-
-func (ts TableConfigs) GetByName(name string) (t *TableConfig, exists bool) {
-	if name == "" {
-		return nil, false
-	}
-	t, exists = funcs.GetOne(ts, func(t TableConfig) bool { return t.Name == name })
-	return t, exists
-}
-
-func (t TableConfig) Copy() TableConfig {
-	cp := t
-	return cp // 方便后续增加[]slice 时复制扩展
-}
-
-func (t TableConfig) AliasString() string {
-	alias := t.alias
-	if alias == "" {
-		alias = t.Name
-	}
-	return alias
-}
-func (t TableConfig) Alias() (aliasExpression exp.AliasedExpression) {
-	return exp.NewAliasExpression(t.Table(), t.AliasString()) // 默认返回表名作为别名
-}
-
-func (t TableConfig) WithAlias(alias string) TableConfig {
-	t.alias = alias
-	return t
-}
-
-func (t TableConfig) Table() exp.IdentifierExpression {
-	table := goqu.T(t.Name)
-	return table
-}
-
-func (t TableConfig) IsNil() bool {
-	return t.Name == ""
-}
-
-// Merge 合并表配置信息,同名覆盖，别名同名覆盖,a.Merge(b) 实现b覆盖a; b.Merge(a)、a.Merge(b,a) 可实现a 覆盖b
-func (t TableConfig) Merge(tables ...TableConfig) TableConfig {
-	for _, table := range tables {
-		if table.Name != "" {
-			t.Name = table.Name
-		}
-		if table.alias != "" {
-			t.alias = table.alias
-		}
-	}
-	return t
-}
-
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
 	Name          string      `json:"name"`
