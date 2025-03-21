@@ -625,7 +625,7 @@ var ValueFnSwich = ValueFn{
 		}
 		first := f.Schema.Enums[0].Key
 		second := f.Schema.Enums[1].Key
-		expression := goqu.L(fmt.Sprintf("if(`%s`=?,?,?)", f.DBName()), first, second, first)
+		expression := goqu.L(fmt.Sprintf("if(%s=?,?,?)", f.DBColumnName().FullNameWithQuotes()), first, second, first)
 		return expression, nil
 	},
 	Layer: Value_Layer_OnlyForData,

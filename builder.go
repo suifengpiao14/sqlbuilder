@@ -312,7 +312,7 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 	tableConfig := p._TableI.TableConfig()
-	fs.SetTableNX(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
+	fs.SetTable(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
 	rowData, err := fs.Data(layer_order...)
 	if err != nil {
@@ -430,7 +430,7 @@ func (is BatchInsertParam) ToSQL() (sql string, err error) {
 	tableConfig := is._TableI.TableConfig()
 	for _, fields := range is.rowFields {
 		fs := fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
-		fs.SetTableNX(tableConfig)
+		fs.MergeMatchedTable(tableConfig)
 		fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
 		rowData, err := fs.Data(layer_order...)
 		if err != nil {
@@ -519,7 +519,7 @@ func (p *DeleteParam) AppendFields(fields ...*Field) *DeleteParam {
 func (p DeleteParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._TableI.TableConfig()
-	fs.SetTableNX(tableConfig)
+	fs.MergeMatchedTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_DELETE)
 	f, ok := fs.GetByFieldName(Field_name_deletedAt)
 	if !ok {
@@ -620,7 +620,7 @@ func (p *UpdateParam) AppendFields(fields ...*Field) *UpdateParam {
 func (p UpdateParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._TableI.TableConfig()
-	fs.SetTableNX(tableConfig)
+	fs.MergeMatchedTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_UPDATE)
 	data, err := fs.Data(layer_order...)
 	if err != nil {
@@ -757,14 +757,14 @@ func (p *FirstParam) WithBuilderFns(builderFns ...SelectBuilderFn) *FirstParam {
 func (p FirstParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._Table.TableConfig()
-	fs.SetTableNX(tableConfig)
+	fs.MergeMatchedTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := fs.Where()
 	if err != nil {
 		return "", err
 	}
 	ds := Dialect.DialectWrapper().Select(fs.Select()...).
-		From(tableConfig.Name).
+		From(tableConfig.Table()).
 		Where(where...).
 		Order(fs.Order()...).
 		Limit(1)
@@ -849,7 +849,7 @@ func NewListBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *Lis
 func (p ListParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._Table.TableConfig()
-	fs.SetTableNX(tableConfig)
+	fs.MergeMatchedTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := fs.Where()
 	if err != nil {
@@ -862,9 +862,10 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	}
 
 	ds := Dialect.DialectWrapper().Select(fs.Select()...).
-		From(tableConfig.Name).
+		From(tableConfig.Table()).
 		Where(where...).
 		Order(fs.Order()...)
+
 	if pageSize > 0 {
 		ds = ds.Offset(uint(ofsset)).Limit(uint(pageSize))
 	}
@@ -956,7 +957,7 @@ func NewExistsBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *E
 func (p ExistsParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._Table.TableConfig()
-	fs.SetTableNX(tableConfig)           // 将表名设置到字段中,方便在ValueFn 中使用table变量
+	fs.MergeMatchedTable(tableConfig)    // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_EXISTS) // 存在场景，和SCENE_SQL_SELECT场景不一样，在set中，这个exists 必须实时查询数据，另外部分查询条件也和查询数据场景不一致，所以独立分开处理
 
 	where, err := fs.Where()
@@ -964,11 +965,12 @@ func (p ExistsParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 
-	ds := Dialect.DialectWrapper().Select(goqu.L("1").As("exists")).
-		From(tableConfig.Name).
+	ds := Dialect.DialectWrapper().
+		From(tableConfig.Table()).
 		Where(where...).
 		Limit(1)
 	ds = p.builderFns.Apply(ds)
+	ds = ds.Select(goqu.L("1").As("exists")) // 确保不会被 p.builderFns.Apply 覆盖
 
 	sql, _, err = ds.ToSQL()
 	if err != nil {
@@ -1031,14 +1033,17 @@ func (p *TotalParam) AppendFields(fields ...*Field) *TotalParam {
 func (p TotalParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._Table.TableConfig()
-	fs.SetTableNX(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
+	fs.MergeMatchedTable(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := fs.Where()
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.DialectWrapper().From(tableConfig.Name).Where(where...).Select(goqu.COUNT(goqu.Star()).As("count"))
+	ds := Dialect.DialectWrapper().
+		From(tableConfig.Table()).
+		Where(where...)
 	ds = p.builderFns.Apply(ds)
+	ds = ds.Select(goqu.COUNT(goqu.Star()).As("count")) // 确保select 部分固定
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err

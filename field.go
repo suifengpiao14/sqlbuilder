@@ -275,16 +275,16 @@ var ValueFnWhereLike = ValueFn{
 }
 
 var OrderFnDesc OrderFn = func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
-	return ConcatOrderedExpression(goqu.I(f.DBName()).Desc())
+	return ConcatOrderedExpression(goqu.I(f.DBColumnName().FullName()).Desc())
 }
 var OrderFnAsc OrderFn = func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
-	return ConcatOrderedExpression(goqu.I(f.DBName()).Asc())
+	return ConcatOrderedExpression(goqu.I(f.DBColumnName().FullName()).Asc())
 }
 
 // OrderFieldFn 给定列按指定值顺序排序
 func OrderFieldFn(valueOrder ...any) OrderFn {
 	return func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
-		segment := fmt.Sprintf("FIELD(%s %s)", f.DBName(), strings.Repeat(",?", len(valueOrder))) // 此处 f.DBName() 可能返回 table.column 格式，所以不加 ``
+		segment := fmt.Sprintf("FIELD(%s %s)", f.DBColumnName().FullNameWithQuotes(), strings.Repeat(",?", len(valueOrder))) // 此处 f.DBName() 可能返回 table.column 格式，所以不加 ``
 		expression := goqu.L(segment, valueOrder...)
 		orderedExpression := exp.NewOrderedExpression(expression, exp.AscDir, exp.NoNullsSortType)
 		orderedExpressions = ConcatOrderedExpression(orderedExpression)
@@ -325,7 +325,7 @@ func (on _On) init() {
 	for i := 0; i < len(on); i++ {
 		on[i].Field.SetTable(on[i].Table)
 		if on[i].WhereFields != nil {
-			on[i].WhereFields.SetTableNX(on[i].Table)
+			on[i].WhereFields.SetTable(on[i].Table)
 		}
 	}
 }
@@ -338,18 +338,19 @@ func (on _On) moreCondition() (moreWhereCondition Expressions) {
 	return moreWhereCondition
 }
 
-func (on _On) Table() exp.IdentifierExpression {
+func (on _On) Table() exp.Expression {
 	return on[1].Table.Table()
 }
-func (on _On) Condition() (joinTable exp.IdentifierExpression, condition exp.JoinCondition) {
+func (on _On) Condition() (joinTable exp.Expression, condition exp.JoinCondition) {
 	first, second := on[0], on[1]
 	expressions := make([]exp.Expression, 0)
-	expression := goqu.I(first.Field.FullDBName()).Eq(goqu.I(second.Field.FullDBName()))
+	expression := goqu.I(first.Field.DBColumnName().FullName()).Eq(goqu.I(second.Field.DBColumnName().FullName()))
 	expressions = append(expressions, expression)
 	moreCondition := on.moreCondition()
 	expressions = append(expressions, moreCondition...)
 	condition = goqu.On(expressions...)
-	return on.Table(), condition
+	table := on.Table()
+	return table, condition
 }
 
 func Join(ds *goqu.SelectDataset, jionConfigs ...OnUnit) *goqu.SelectDataset {
@@ -482,14 +483,12 @@ func (f *Field) SetOrderFn(orderFn OrderFn) *Field {
 	return f
 }
 
+// SetTable 设置表配置信息，不存在则设置,存在则合并,合并策略: Field.Table 优先级最高
 func (f *Field) SetTable(table TableConfig) *Field {
-	f.table = f.table.Merge(table)
-	return f
-}
-func (f *Field) SetTableNX(table TableConfig) *Field {
 	f.table = table.Merge(f.table)
 	return f
 }
+
 func (f *Field) GetTable() (table TableConfig) {
 	return f.table
 }
@@ -515,33 +514,50 @@ func (f *Field) CanUpdate(condition bool) *Field {
 	return f
 }
 
-// DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
-func (f *Field) DBName() (dbName string) {
-	if f.dbName != "" { // 存在dbName则使用dbName
-		dbName = f.dbName
-
-		return dbName
-	}
-
-	if f.table.FieldName2DBColumnNameFn != nil {
-		return f.table.FieldName2DBColumnNameFn(f.Name)
-	}
-
-	dbName = FieldName2DBColumnName(f.Name) // 兼容历史处理
-	return dbName
+type DBColumnName struct {
+	DBName
+	Table TableConfig
 }
 
-// FullDBName 返回完整字段名，包含表名前缀
-func (f *Field) FullDBName() (fullDbName string) {
-	fullDbName = f.DBName()
-	if !f.table.IsNil() {
-		tableName := fmt.Sprintf("%s.", f.table.AliasString())
-		if !strings.Contains(fullDbName, tableName) {
-			fullDbName = fmt.Sprintf("%s%s", tableName, fullDbName)
-		}
+func (dbColName DBColumnName) FullName() string {
+	identifier := DBIdentifier{
+		dbColName.Table.Schema.DBName,
+		dbColName.Table.DBName,
+		dbColName.DBName,
 	}
-	return fullDbName
+	return identifier.FullName()
+}
 
+func (dbColName DBColumnName) FullNameWithQuotes() string {
+	identifier := DBIdentifier{
+		dbColName.Table.Schema.DBName,
+		dbColName.Table.DBName,
+		dbColName.DBName,
+	}
+	return identifier.FullNameWithQuotes()
+}
+
+func (f *Field) DBColumnName() (dbName DBColumnName) {
+	return DBColumnName{
+		DBName: DBName{
+			Name: f._DBName(),
+		},
+		Table: f.table,
+	}
+}
+
+// _DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
+func (f *Field) _DBName() (dbName string) { // 改为私有方法，外部使用DBColumnName().Fullname()
+
+	dbName = f.dbName
+	//使用自带函数转换
+	if dbName == "" && f.table.FieldName2DBColumnNameFn != nil { // 存在dbName则使用dbName
+		dbName = f.table.FieldName2DBColumnNameFn(f.Name)
+	}
+	if dbName == "" { // 使用全局函数转换
+		dbName = FieldName2DBColumnName(f.Name)
+	}
+	return dbName
 }
 
 // DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
@@ -1244,7 +1260,7 @@ func (f1 Field) Data(layers []Layer, fs ...*Field) (data any, err error) {
 	// 	val = Dialect.EscapeString(valStr)
 	// }
 	data = map[string]any{
-		f.DBName(): val,
+		f.DBColumnName().FullName(): val,
 	}
 	return data, nil
 }
@@ -1257,10 +1273,10 @@ func (f Field) Where(fs ...*Field) (expressions Expressions, err error) {
 	if val == nil {
 		return nil, nil
 	}
-	if ex, ok := TryParseExpressions(f.DBName(), val); ok {
+	if ex, ok := TryParseExpressions(f.DBColumnName().FullName(), val); ok {
 		return ex, nil
 	}
-	return ConcatExpression(goqu.Ex{f.DBName(): val}), nil
+	return ConcatExpression(goqu.Ex{f.DBColumnName().FullName(): val}), nil
 }
 
 func (f Field) Order(fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
@@ -1330,6 +1346,16 @@ func ValueFnDBFormat(fn func(in any, f *Field, fs ...*Field) (any, error)) Value
 		Layer:       Value_Layer_DBFormat,
 		Description: "db 格式化数据时机执行", // 描述
 	}
+}
+
+func WrapWithSkipNil(fn func(in any, f *Field, fs ...*Field) (any, error)) ValueFnFn {
+	return func(in any, f *Field, fs ...*Field) (any, error) {
+		if IsNil(in) {
+			return nil, nil
+		}
+		return fn(in, f, fs...)
+	}
+
 }
 
 func ValueFnApiValidate(valueFnFn ValueFnFn) ValueFn {
@@ -1451,9 +1477,10 @@ func (fs Fields) SetSceneIfEmpty(scene Scene) Fields {
 	return fs
 }
 
-func (fs Fields) SetTableNX(table TableConfig) Fields {
+// SetTable 设置表,不存在直接设置,存在则合并表配置信息
+func (fs Fields) SetTable(table TableConfig) Fields {
 	for i := 0; i < len(fs); i++ {
-		fs[i].SetTableNX(table)
+		fs[i].SetTable(table)
 	}
 	return fs
 }
@@ -1464,7 +1491,7 @@ func (fs Fields) MergeMatchedTable(tables ...TableConfig) Fields {
 	for i := 0; i < len(fs); i++ {
 		t, exists := ts.GetByName(fs[i].table.Name)
 		if exists {
-			fs[i].SetTableNX(*t)
+			fs[i].SetTable(*t)
 		}
 	}
 	return fs
@@ -1696,7 +1723,7 @@ func (fs Fields) GetByName(name string) (*Field, bool) {
 func (fs Fields) DBNames() (dbNames []string, err error) {
 	dbNames = make([]string, 0)
 	for _, f := range fs {
-		dbNames = append(dbNames, f.DBName())
+		dbNames = append(dbNames, f.DBColumnName().FullName())
 	}
 	return dbNames, nil
 }

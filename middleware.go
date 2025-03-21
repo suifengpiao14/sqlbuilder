@@ -80,7 +80,7 @@ func ValueFnFnIncrease(f *Field, fs ...*Field) ValueFnFn {
 		if num < 0 {
 			symbol = "-"
 		}
-		val := fmt.Sprintf("%s %s %d", f.DBName(), symbol, num)
+		val := fmt.Sprintf("%s %s %d", f.DBColumnName().FullName(), symbol, num)
 		return goqu.L(val), nil
 	}
 }
@@ -108,7 +108,7 @@ var ApplyFnWhereGte ApplyFn = func(f *Field, fs ...*Field) {
 			if IsNil(inputValue) {
 				return nil, nil
 			}
-			ex := goqu.I(f.DBName()).Gte(inputValue)
+			ex := goqu.I(f.DBColumnName().FullName()).Gte(inputValue)
 			return ex, nil
 		},
 		Layer: Value_Layer_DBFormat,
@@ -121,7 +121,7 @@ var ApplyFnWhereLte ApplyFn = func(f *Field, fs ...*Field) {
 			if IsNil(inputValue) {
 				return nil, nil
 			}
-			ex := goqu.I(f.DBName()).Lte(inputValue)
+			ex := goqu.I(f.DBColumnName().FullName()).Lte(inputValue)
 			return ex, nil
 		},
 		Layer: Value_Layer_DBFormat,
@@ -136,7 +136,7 @@ var ApplyFnWhereFindInColumnSet ApplyFn = func(f *Field, fs ...*Field) {
 				return nil, nil
 			}
 			val := cast.ToString(inputValue)
-			column := goqu.I(f.DBName())
+			column := goqu.I(f.DBColumnName().FullName())
 			expression := goqu.L("FIND_IN_SET(?,?)", val, column)
 			return expression, nil
 		},
@@ -150,7 +150,7 @@ var ApplyFnValueFnSetIfEmpty ApplyFn = func(f *Field, fs ...*Field) {
 		if IsNil(inputValue) {
 			return nil, nil
 		}
-		column := goqu.I(f.DBName())
+		column := goqu.I(f.DBColumnName().FullName())
 		expression := goqu.L("if(?,?,?) ", column, column, inputValue)
 		return expression, nil
 	}))
@@ -192,7 +192,7 @@ func ValueFnMustNotExists(existsFn ExistsHandler) ValueFn {
 				return nil, err
 			}
 			if exists {
-				err = errors.WithMessagef(ERROR_COLUMN_VALUE_EXISTS, "column %s value %s exists", f.DBName(), inputValue) // 有时存在，需要返回指定错误，方便业务自主处理错误
+				err = errors.WithMessagef(ERROR_COLUMN_VALUE_EXISTS, "column %s value %s exists", f.DBColumnName().FullName(), inputValue) // 有时存在，需要返回指定错误，方便业务自主处理错误
 				return nil, err
 			}
 			return inputValue, err
@@ -219,7 +219,7 @@ func ValueFnMustExists(existsFn ExistsHandler) ValueFn {
 				return nil, err
 			}
 			if !exists {
-				err = errors.WithMessagef(ERROR_COLUMN_VALUE_NOT_EXISTS, "column %s value %s", f.DBName(), inputValue) // 没有时存在，需要返回指定错误，方便业务自主处理错误
+				err = errors.WithMessagef(ERROR_COLUMN_VALUE_NOT_EXISTS, "column %s value %s", f.DBColumnName().FullName(), inputValue) // 没有时存在，需要返回指定错误，方便业务自主处理错误
 				return nil, err
 			}
 			return inputValue, err
@@ -258,7 +258,7 @@ func ApplyFnUnique(existsFn ExistsHandler) ApplyFn { // 复合索引，给一列
 							return nil, err
 						}
 						if exists {
-							err = errors.WithMessagef(ERROR_Unique, "unique column %s value %s exists", f1.DBName(), inputValue) // 有时存在，需要返回指定错误，方便业务自主处理错误（如批量新增，存在忽略即可）
+							err = errors.WithMessagef(ERROR_Unique, "unique column %s value %s exists", f1.DBColumnName().FullName(), inputValue) // 有时存在，需要返回指定错误，方便业务自主处理错误（如批量新增，存在忽略即可）
 							return nil, err
 						}
 						return inputValue, nil
@@ -297,7 +297,7 @@ func ApplyFnUpdateIfNull(table TableConfig, firstHandler FirstHandler) ApplyFn {
 
 					cpFields := Fields(fs).Copy()
 					if len(cpFields) > 0 {
-						cpFields[0].SetSelectColumns(f.DBName())
+						cpFields[0].SetSelectColumns(f.DBColumnName().FullName())
 					}
 					var dbValue any
 					exists, err := NewFirstBuilder(table).WithHandler(firstHandler).AppendFields(cpFields...).First(&dbValue)

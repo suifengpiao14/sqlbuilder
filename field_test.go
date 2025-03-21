@@ -184,10 +184,10 @@ func TestValueFns(t *testing.T) {
 
 func TestPopFirstMain(t *testing.T) {
 	table1 := sqlbuilder.TableConfig{
-		Name: "test1",
+		DBName: sqlbuilder.DBName{Name: "test1"},
 	}
 	table2 := sqlbuilder.TableConfig{
-		Name: "test2",
+		DBName: sqlbuilder.DBName{Name: "test1"},
 	}
 
 	field := sqlbuilder.NewIntField(0, "id", "ID", 0)

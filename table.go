@@ -1,17 +1,119 @@
 package sqlbuilder
 
 import (
+	"fmt"
+	"slices"
+	"strings"
+
 	"github.com/doug-martin/goqu/v9"
 	"github.com/doug-martin/goqu/v9/exp"
 	"github.com/pkg/errors"
 	"github.com/suifengpiao14/funcs"
 )
 
+type DBName struct {
+	Name  string `json:"name"`
+	Alias string `json:"alias"`
+}
+
+func (n DBName) BaseName() string {
+	if n.Alias != "" {
+		return n.Alias
+	}
+	return n.Name
+}
+
+func (n DBName) BaseNameWithQuotes() string {
+	name := n.BaseName()
+	if name == "" {
+		return ""
+	}
+	nameWithQuotes := fmt.Sprintf("`%s`", name)
+	return nameWithQuotes
+}
+
+func (n DBName) IsNil() bool {
+	return n.BaseName() == ""
+}
+
+type DBIdentifier []DBName
+
+func (id DBIdentifier) BaseName() string {
+	cp := make(DBIdentifier, len(id))
+	copy(cp, id)
+	slices.Reverse(cp)
+	cp = funcs.FilterEmpty(cp)
+	for i := 0; i < 1; i++ {
+		return cp[i].BaseName()
+	}
+	return ""
+}
+
+func (id DBIdentifier) FullName() string {
+	names := funcs.Filter(id, func(s DBName) bool {
+		return !s.IsNil()
+	})
+	arr := funcs.Map(names, func(s DBName) string {
+		return s.BaseName()
+	})
+	return strings.Join(arr, ".")
+}
+
+func (i DBIdentifier) NameWithQuotes() string {
+	name := i.BaseName()
+	if name == "" {
+		return ""
+	}
+	nameWithQuotes := fmt.Sprintf("`%s`", name)
+	return nameWithQuotes
+}
+
+func (id DBIdentifier) FullNameWithQuotes() string {
+	names := funcs.Filter(id, func(s DBName) bool {
+		return !s.IsNil()
+	})
+	arr := funcs.Map(names, func(s DBName) string {
+		return s.BaseNameWithQuotes()
+	})
+	return strings.Join(arr, ".")
+}
+
+type SchemaConfig struct {
+	DBName
+}
+
 type TableConfig struct {
-	Name                     string
-	alias                    string
+	DBName
 	Columns                  ColumnConfigs // 后续吧table 纳入，通过 Column.Identity 生成 Field 操作
 	FieldName2DBColumnNameFn FieldName2DBColumnNameFn
+	Schema                   SchemaConfig
+}
+
+func NewTableConfig(name string) TableConfig {
+	return TableConfig{
+		DBName: DBName{Name: name},
+	}
+}
+
+func (t TableConfig) WithFieldName2DBColumnNameFn(convertFn FieldName2DBColumnNameFn) TableConfig {
+	t.FieldName2DBColumnNameFn = convertFn
+	return t
+}
+
+func (t TableConfig) GetFullName() string {
+	identifier := DBIdentifier{
+		t.Schema.DBName,
+		t.DBName,
+	}
+	return identifier.FullName()
+}
+
+func (t TableConfig) FullNameWithQuotes() string {
+	identifier := DBIdentifier{
+		t.Schema.DBName,
+		t.DBName,
+	}
+	return identifier.FullNameWithQuotes()
 }
 
 type TableConfigs []TableConfig
@@ -26,27 +128,21 @@ func (ts TableConfigs) GetByName(name string) (t *TableConfig, exists bool) {
 
 func (t TableConfig) Copy() TableConfig {
 	cp := t
+	copy(cp.Columns, t.Columns)
 	return cp // 方便后续增加[]slice 时复制扩展
 }
 
 func (t TableConfig) AliasString() string {
-	alias := t.alias
-	if alias == "" {
-		alias = t.Name
-	}
-	return alias
-}
-func (t TableConfig) Alias() (aliasExpression exp.AliasedExpression) {
-	return exp.NewAliasExpression(t.Table(), t.AliasString()) // 默认返回表名作为别名
+	return t.Alias
 }
 
 func (t TableConfig) WithAlias(alias string) TableConfig {
-	t.alias = alias
+	t.Alias = alias
 	return t
 }
 
-func (t TableConfig) Table() exp.IdentifierExpression {
-	table := goqu.T(t.Name)
+func (t TableConfig) Table() exp.AliasedExpression {
+	table := goqu.T(t.Name).As(t.Alias)
 	return table
 }
 
@@ -57,11 +153,21 @@ func (t TableConfig) IsNil() bool {
 // Merge 合并表配置信息,同名覆盖，别名同名覆盖,a.Merge(b) 实现b覆盖a; b.Merge(a)、a.Merge(b,a) 可实现a 覆盖b
 func (t TableConfig) Merge(tables ...TableConfig) TableConfig {
 	for _, table := range tables {
+		if t.Name != "" && table.Name != t.Name { //表名存在并且不同，忽略合并操作，表名不存在，使用第一个表名作为基准表名
+			continue
+		}
+
 		if table.Name != "" {
 			t.Name = table.Name
 		}
-		if table.alias != "" {
-			t.alias = table.alias
+		if table.Alias != "" {
+			t.Alias = table.Alias
+		}
+		if table.FieldName2DBColumnNameFn != nil {
+			t.FieldName2DBColumnNameFn = table.FieldName2DBColumnNameFn
+		}
+		if table.Columns != nil {
+			t.Columns = t.Columns.Merge(table.Columns...)
 		}
 	}
 	return t
@@ -99,6 +205,11 @@ func (c ColumnConfig) MakeField(value any) *Field {
 }
 
 type ColumnConfigs []ColumnConfig
+
+func (cs ColumnConfigs) Merge(others ...ColumnConfig) ColumnConfigs {
+	cs = append(cs, others...)
+	return cs
+}
 
 // GetByIdentity  通过标识获取列配置信息，找不到则panic退出。主要用于生成字段时快速定位列配置信息。
 func (cs ColumnConfigs) GetByName(name string) (c ColumnConfig) {
