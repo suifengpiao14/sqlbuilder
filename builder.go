@@ -424,9 +424,7 @@ var ERROR_NOT_FOUND = errors.New("not found record")
 
 func (is BatchInsertParam) ToSQL() (sql string, err error) {
 	data := make([]any, 0)
-	if len(is.rowFields) == 0 {
-		return "", ERROR_BATCH_INSERT_DATA_IS_NIL
-	}
+
 	tableConfig := is._TableI.TableConfig()
 	for _, fields := range is.rowFields {
 		fs := fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
@@ -440,6 +438,9 @@ func (is BatchInsertParam) ToSQL() (sql string, err error) {
 			continue
 		}
 		data = append(data, rowData)
+	}
+	if len(data) == 0 {
+		return "", ERROR_BATCH_INSERT_DATA_IS_NIL
 	}
 	ds := Dialect.DialectWrapper().Insert(tableConfig.Name).Rows(data...)
 	sql, _, err = ds.ToSQL()
