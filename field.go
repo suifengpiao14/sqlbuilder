@@ -527,6 +527,14 @@ func (dbColName DBColumnName) FullName() string {
 	}
 	return identifier.FullName()
 }
+func (dbColName DBColumnName) BaseName() string {
+	identifier := DBIdentifier{
+		dbColName.Table.Schema.DBName,
+		dbColName.Table.DBName,
+		dbColName.DBName,
+	}
+	return identifier.BaseName()
+}
 
 func (dbColName DBColumnName) FullNameWithQuotes() string {
 	identifier := DBIdentifier{
@@ -1260,7 +1268,7 @@ func (f1 Field) Data(layers []Layer, fs ...*Field) (data any, err error) {
 	// 	val = Dialect.EscapeString(valStr)
 	// }
 	data = map[string]any{
-		f.DBColumnName().FullName(): val,
+		f.DBColumnName().BaseName(): val, // Data 函数只用于insert,update 写入数据部分,只用基础名称即可(insert 带有全名时,gorm报错)
 	}
 	return data, nil
 }
