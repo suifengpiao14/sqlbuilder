@@ -967,7 +967,7 @@ type AttributeI interface {
 }
 
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
-func NewField[T ~int | ~int64 | ~uint64 | ~[]int | ~[]int64 | ~[]uint64 | ~string | ~[]string | ValueFn | ValueFnFn | func(inputValue any, f *Field, fs ...*Field) (any, error)](value T, middlewareFns ...ApplyFn) (field *Field) {
+func NewField[T ~int | ~int64 | ~uint64 | ~uint | ~uint8 | ~[]int | ~[]int64 | ~[]uint64 | ~[]uint | ~[]uint8 | ~string | ~[]string | ValueFn | ValueFnFn | func(inputValue any, f *Field, fs ...*Field) (any, error)](value T, middlewareFns ...ApplyFn) (field *Field) {
 	field = &Field{}
 	var valueFn ValueFn
 	switch v := any(value).(type) {
@@ -1000,7 +1000,7 @@ func NewField[T ~int | ~int64 | ~uint64 | ~[]int | ~[]int64 | ~[]uint64 | ~strin
 	return field
 }
 
-func NewIntField[T ~int | ~int64 | ~[]int | ~[]int64](value T, name string, title string, maximum uint) (f *Field) {
+func NewIntField[T ~int | ~int64 | ~uint | ~uint8 | ~[]int | ~[]int64 | ~[]uint | ~[]uint8](value T, name string, title string, maximum uint) (f *Field) {
 	f = NewField(value).SetName(name).SetTitle(title).MergeSchema(Schema{
 		Type: Schema_Type_int,
 	})
