@@ -42,7 +42,9 @@ func (id DBIdentifier) BaseName() string {
 	cp := make(DBIdentifier, len(id))
 	copy(cp, id)
 	slices.Reverse(cp)
-	cp = funcs.FilterEmpty(cp)
+	cp = funcs.Filter(cp, func(n DBName) bool {
+		return !n.IsNil()
+	})
 	if len(cp) == 0 {
 		return ""
 	}
