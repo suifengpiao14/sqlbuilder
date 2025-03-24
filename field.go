@@ -1290,8 +1290,23 @@ func (f Field) Where(fs ...*Field) (expressions Expressions, err error) {
 func (f Field) Order(fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
 	orderedExpressions = make([]exp.OrderedExpression, 0)
 	if f._OrderFn != nil {
-		ex := f._OrderFn(&f, fs...)
-		orderedExpressions = append(orderedExpressions, ex...)
+		exs := f._OrderFn(&f, fs...)
+		realExs := make([]exp.OrderedExpression, 0)
+		if len(exs) > 0 {
+			for _, v := range exs {
+				switch sortE := v.SortExpression().(type) {
+				case exp.IdentifierExpression:
+					col := cast.ToString(sortE.GetCol())
+					if col != "" { // 过滤排序字段为空的错误设置情况(考虑返回错误，会变复杂，panic处理不友好，考虑到即便panic这个错误,上层也只能这样处理,所以暂时过滤掉，后续再优化处理)
+						realExs = append(realExs, v)
+					}
+				default:
+					realExs = append(realExs, v)
+				}
+
+			}
+		}
+		orderedExpressions = append(orderedExpressions, realExs...)
 	}
 	return orderedExpressions
 }

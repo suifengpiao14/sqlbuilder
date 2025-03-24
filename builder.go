@@ -862,10 +862,12 @@ func (p ListParam) ToSQL() (sql string, err error) {
 		ofsset = 0
 	}
 
-	ds := Dialect.DialectWrapper().Select(fs.Select()...).
+	selec := fs.Select()
+	order := fs.Order()
+	ds := Dialect.DialectWrapper().Select(selec...).
 		From(tableConfig.Table()).
 		Where(where...).
-		Order(fs.Order()...)
+		Order(order...)
 
 	if pageSize > 0 {
 		ds = ds.Offset(uint(ofsset)).Limit(uint(pageSize))
