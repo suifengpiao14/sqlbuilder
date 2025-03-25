@@ -519,7 +519,7 @@ type DBColumnName struct {
 	Table TableConfig
 }
 
-func (dbColName DBColumnName) FullName() string {
+func (dbColName DBColumnName) FullName() string { //构建where条件部分，使用fullname 能兼容不连表、连表不取别名、连表取别名情况
 	identifier := DBIdentifier{
 		dbColName.Table.Schema.DBName,
 		dbColName.Table.DBName,
@@ -1281,10 +1281,11 @@ func (f Field) Where(fs ...*Field) (expressions Expressions, err error) {
 	if val == nil {
 		return nil, nil
 	}
-	if ex, ok := TryParseExpressions(f.DBColumnName().FullName(), val); ok {
+	dbName := f.DBColumnName().FullName()
+	if ex, ok := TryParseExpressions(dbName, val); ok {
 		return ex, nil
 	}
-	return ConcatExpression(goqu.Ex{f.DBColumnName().FullName(): val}), nil
+	return ConcatExpression(goqu.Ex{dbName: val}), nil
 }
 
 func (f Field) Order(fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
