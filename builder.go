@@ -756,22 +756,25 @@ func (p *FirstParam) WithBuilderFns(builderFns ...SelectBuilderFn) *FirstParam {
 }
 
 func (p FirstParam) ToSQL() (sql string, err error) {
-	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._Table.TableConfig()
+	errWithMsg := fmt.Sprintf("FirstParam.ToSQL(),table:%s", tableConfig.Name)
+	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	fs.MergeMatchedTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := fs.Where()
 	if err != nil {
+		err = errors.Wrap(err, errWithMsg)
 		return "", err
 	}
 	ds := Dialect.DialectWrapper().Select(fs.Select()...).
-		From(tableConfig.Table()).
+		From(tableConfig.AliasOrTableExpr()).
 		Where(where...).
 		Order(fs.Order()...).
 		Limit(1)
 	ds = p.builderFns.Apply(ds)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
+		err = errors.Wrap(err, errWithMsg)
 		return "", err
 	}
 	if p._log != nil {
@@ -848,12 +851,14 @@ func NewListBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *Lis
 }
 
 func (p ListParam) ToSQL() (sql string, err error) {
-	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._Table.TableConfig()
+	errWithMsg := fmt.Sprintf("ListParam.ToSQL(),table:%s", tableConfig.Name)
+	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	fs.MergeMatchedTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := fs.Where()
 	if err != nil {
+		err = errors.WithMessage(err, errWithMsg)
 		return "", err
 	}
 	pageIndex, pageSize := fs.Pagination()
@@ -865,7 +870,7 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	selec := fs.Select()
 	order := fs.Order()
 	ds := Dialect.DialectWrapper().Select(selec...).
-		From(tableConfig.Table()).
+		From(tableConfig.AliasOrTableExpr()).
 		Where(where...).
 		Order(order...)
 
@@ -875,6 +880,7 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	ds = p.builderFns.Apply(ds)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
+		err = errors.WithMessage(err, errWithMsg)
 		return "", err
 	}
 	if p._log != nil {
@@ -958,18 +964,20 @@ func NewExistsBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *E
 }
 
 func (p ExistsParam) ToSQL() (sql string, err error) {
-	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._Table.TableConfig()
+	errWithMsg := fmt.Sprintf("ExistsParam.ToSQL(),table:%s", tableConfig.Name)
+	fs := p._Fields.Builder()            // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	fs.MergeMatchedTable(tableConfig)    // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_EXISTS) // 存在场景，和SCENE_SQL_SELECT场景不一样，在set中，这个exists 必须实时查询数据，另外部分查询条件也和查询数据场景不一致，所以独立分开处理
 
 	where, err := fs.Where()
 	if err != nil {
+		err = errors.WithMessage(err, errWithMsg)
 		return "", err
 	}
 
 	ds := Dialect.DialectWrapper().
-		From(tableConfig.Table()).
+		From(tableConfig.AliasOrTableExpr()).
 		Where(where...).
 		Limit(1)
 	ds = p.builderFns.Apply(ds)
@@ -977,13 +985,16 @@ func (p ExistsParam) ToSQL() (sql string, err error) {
 
 	sql, _, err = ds.ToSQL()
 	if err != nil {
+		err = errors.WithMessage(err, errWithMsg)
 		return "", err
 	}
 	if p._log != nil {
 		p._log.Log(sql)
 	}
 	if len(where) == 0 && !p.allowEmptyWhereCondition { // 默认where 条件不能为空，先写日志，再返回错误，方便用户查看SQL语句
-		return "", errors.Errorf("exists sql must have where condition")
+		err = errors.Errorf("exists sql must have where condition")
+		err = errors.WithMessage(err, errWithMsg)
+		return "", err
 	}
 	return sql, nil
 }
@@ -1034,21 +1045,24 @@ func (p *TotalParam) AppendFields(fields ...*Field) *TotalParam {
 }
 
 func (p TotalParam) ToSQL() (sql string, err error) {
-	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._Table.TableConfig()
+	errWithMsg := fmt.Sprintf("TotalParam.ToSQL(),table:%s", tableConfig.Name)
+	fs := p._Fields.Builder()         // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	fs.MergeMatchedTable(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := fs.Where()
 	if err != nil {
+		err = errors.WithMessage(err, errWithMsg)
 		return "", err
 	}
 	ds := Dialect.DialectWrapper().
-		From(tableConfig.Table()).
+		From(tableConfig.AliasOrTableExpr()).
 		Where(where...)
 	ds = p.builderFns.Apply(ds)
 	ds = ds.Select(goqu.COUNT(goqu.Star()).As("count")) // 确保select 部分固定
 	sql, _, err = ds.ToSQL()
 	if err != nil {
+		err = errors.WithMessage(err, errWithMsg)
 		return "", err
 	}
 	if p._log != nil {

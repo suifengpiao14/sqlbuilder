@@ -102,9 +102,6 @@ type Compiler struct {
 }
 
 func NewCompiler(cfg CompilerConfig, fs ...*Field) Compiler {
-	/* 	if len(fs) == 0 {
-		panic(errors.New("sqlbuilder: Compiler need fields"))// 有的场景确实不需要字段，比如列表查询时，无筛选条件
-	} */
 	c := Compiler{tableConfig: cfg.Table, handler: cfg.Handler, fields: fs}
 	c = c.Apply(cfg)
 	return c
@@ -161,10 +158,7 @@ func (h Compiler) Table() (table TableConfig) {
 	panic(errors.New("table name is nil"))
 }
 func (h Compiler) Fields() (fs Fields) {
-	if len(h.fields) > 0 {
-		return h.fields
-	}
-	panic(errors.New("fields is nil"))
+	return h.fields // 查询条件可以为空
 }
 func (h Compiler) BatchFields() (batchFs []Fields) {
 	if len(h.batchFields) > 0 {

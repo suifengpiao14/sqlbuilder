@@ -339,7 +339,7 @@ func (on _On) moreCondition() (moreWhereCondition Expressions) {
 }
 
 func (on _On) Table() exp.Expression {
-	return on[1].Table.Table()
+	return on[1].Table.AliasOrTableExpr()
 }
 func (on _On) Condition() (joinTable exp.Expression, condition exp.JoinCondition) {
 	first, second := on[0], on[1]

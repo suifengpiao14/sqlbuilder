@@ -144,9 +144,18 @@ func (t TableConfig) WithAlias(alias string) TableConfig {
 	return t
 }
 
-func (t TableConfig) Table() exp.AliasedExpression {
-	table := goqu.T(t.Name).As(t.Alias)
-	return table
+func (t TableConfig) AliasOrTableExpr() exp.Expression { // 有别名，返回别名，没有返回表名
+	table := goqu.T(t.Name)
+	if t.Alias == "" {
+		return table
+	}
+	alias := table.As(t.Alias)
+	return alias
+}
+func (t TableConfig) AliasExpr() exp.AliasedExpression { // 有时候需要独立获取别名表达式，如 select alias.* from a as alias; ,生成alias.*
+
+	alias := goqu.T(t.Name).As(t.Alias)
+	return alias
 }
 
 func (t TableConfig) IsNil() bool {
