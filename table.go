@@ -87,8 +87,8 @@ type SchemaConfig struct {
 
 type TableConfig struct {
 	DBName
-	Columns                  ColumnConfigs // 后续吧table 纳入，通过 Column.Identity 生成 Field 操作
-	FieldName2DBColumnNameFn FieldName2DBColumnNameFn
+	Columns                  ColumnConfigs            // 后续吧table 纳入，通过 Column.Identity 生成 Field 操作
+	FieldName2DBColumnNameFn FieldName2DBColumnNameFn `json:"-"`
 	Schema                   SchemaConfig
 }
 

@@ -58,8 +58,8 @@ type InsertWithLastIdHandler func(sql string) (lastInsertId uint64, rowsAffected
 
 type CompilerConfig struct {
 	Table       TableConfig
-	Handler     Handler
-	FieldsApply ApplyFn
+	Handler     Handler `json:"-"`
+	FieldsApply ApplyFn `json:"-"`
 }
 
 func (c CompilerConfig) WithTableIgnore(tableConfig TableConfig) CompilerConfig {
