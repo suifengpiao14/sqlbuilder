@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/doug-martin/goqu/v9"
 	_ "github.com/doug-martin/goqu/v9/dialect/mysql"
@@ -45,17 +46,17 @@ func (b Builder) TotalParam(fs ...*Field) *TotalParam {
 
 }
 func (b Builder) ListParam(fs ...*Field) *ListParam {
-	p := NewListBuilder(b.table).WithHandler(b.handler.Query).AppendFields(fs...)
+	p := NewListBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
 	return p
 
 }
 
 func (b Builder) PaginationParam(fs ...*Field) *PaginationParam {
-	p := NewPaginationBuilder(b.table).WithHandler(b.handler.Count, b.handler.Query).AppendFields(fs...)
+	p := NewPaginationBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
 	return p
 }
 func (b Builder) FirstParam(fs ...*Field) *FirstParam {
-	p := NewFirstBuilder(b.table).WithHandler(b.handler.First).AppendFields(fs...)
+	p := NewFirstBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
 	return p
 }
 func (b Builder) InsertParam(fs ...*Field) *InsertParam {
@@ -717,11 +718,12 @@ func (p UpdateParam) UpdateMustExists() (rowsAffected int64, err error) {
 }
 
 type FirstParam struct {
-	_Table       TableI
-	_Fields      Fields
-	_log         LogI
-	firstHandler FirstHandler
-	builderFns   SelectBuilderFns
+	_Table     TableI
+	_Fields    Fields
+	_log       LogI
+	handler    Handler
+	builderFns SelectBuilderFns
+	context    Context
 }
 
 func NewFirstBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *FirstParam {
@@ -738,13 +740,18 @@ func (p *FirstParam) SetLog(log LogI) *FirstParam {
 	return p
 }
 
+func (p *FirstParam) WithCacheDuration(duration time.Duration) *FirstParam {
+	p.context.CacheDuration = duration
+	return p
+}
+
 func (p *FirstParam) AppendFields(fields ...*Field) *FirstParam {
 	p._Fields.Append(fields...)
 	return p
 }
 
-func (p *FirstParam) WithHandler(firstHandler FirstHandler) *FirstParam {
-	p.firstHandler = firstHandler
+func (p *FirstParam) WithHandler(handler Handler) *FirstParam {
+	p.handler = handler
 	return p
 }
 func (p *FirstParam) WithBuilderFns(builderFns ...SelectBuilderFn) *FirstParam {
@@ -788,7 +795,12 @@ func (p FirstParam) First(result any) (exists bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	return p.firstHandler(sql, result)
+	handler := p.handler
+	if p.context.CacheDuration > 0 {
+		handler = _WithCache(handler)
+	}
+	exists, err = handler.First(p.context, sql, result)
+	return exists, err
 }
 
 func (p FirstParam) FirstMustExists(result any) (err error) {
@@ -814,19 +826,24 @@ func (fns SelectBuilderFns) Apply(ds *goqu.SelectDataset) *goqu.SelectDataset {
 }
 
 type ListParam struct {
-	_Table       TableI
-	_Fields      Fields
-	_log         LogI
-	queryHandler QueryHandler
-	builderFns   SelectBuilderFns
+	_Table     TableI
+	_Fields    Fields
+	_log       LogI
+	handler    Handler
+	builderFns SelectBuilderFns
+	context    Context
 }
 
 func (p *ListParam) SetLog(log LogI) ListParam {
 	p._log = log
 	return *p
 }
-func (p *ListParam) WithHandler(queryHandler QueryHandler) *ListParam {
-	p.queryHandler = queryHandler
+func (p *ListParam) WithHandler(handler Handler) *ListParam {
+	p.handler = handler
+	return p
+}
+func (p *ListParam) WithCacheDuration(duration time.Duration) *ListParam {
+	p.context.CacheDuration = duration
 	return p
 }
 func (p *ListParam) WithBuilderFns(builderFns ...SelectBuilderFn) *ListParam {
@@ -898,7 +915,15 @@ func (p ListParam) List(result any) (err error) {
 	if err != nil {
 		return err
 	}
-	return p.queryHandler(sql, result)
+	handler := p.handler
+	if p.context.CacheDuration > 0 {
+		handler = _WithCache(handler) // 启用缓存中间件
+	}
+	err = handler.Query(p.context, sql, result)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 type LogI interface {
@@ -1080,11 +1105,11 @@ func (p TotalParam) Count() (total int64, err error) {
 }
 
 type PaginationParam struct {
-	_Table       TableI
-	_Fields      Fields
-	countHandler CountHandler
-	queryHandler QueryHandler
-	builderFns   SelectBuilderFns
+	_Table     TableI
+	_Fields    Fields
+	handler    Handler
+	builderFns SelectBuilderFns
+	context    Context
 }
 
 func (p *PaginationParam) AppendFields(fields ...*Field) *PaginationParam {
@@ -1097,9 +1122,13 @@ func NewPaginationBuilder(tableConfig TableConfig) *PaginationParam {
 		_Table: TableFn(func() TableConfig { return tableConfig }),
 	}
 }
-func (p *PaginationParam) WithHandler(countHandler CountHandler, queryHandler QueryHandler) *PaginationParam {
-	p.countHandler = countHandler
-	p.queryHandler = queryHandler
+func (p *PaginationParam) WithHandler(handler Handler) *PaginationParam {
+	p.handler = handler
+	return p
+}
+
+func (p *PaginationParam) WithCacheDuration(duration time.Duration) *PaginationParam {
+	p.context.CacheDuration = duration
 	return p
 }
 
@@ -1125,15 +1154,19 @@ func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 }
 
 func (p PaginationParam) paginationHandler(totalSql string, listSql string, result any) (count int64, err error) {
-	count, err = p.countHandler(totalSql)
+	handler := p.handler
+	if p.context.CacheDuration > 0 {
+		handler = _WithCache(handler)
+	}
+
+	count, err = handler.Count(totalSql)
 	if err != nil {
 		return 0, err
 	}
 	if count == 0 {
 		return 0, nil
 	}
-
-	err = p.queryHandler(listSql, result)
+	err = p.handler.Query(p.context, listSql, result)
 	if err != nil {
 		return 0, err
 	}

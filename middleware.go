@@ -286,7 +286,7 @@ func ApplyFnUniqueField(existsFn ExistsHandler) ApplyFn {
 	return ApplyFnUnique(existsFn)
 }
 
-func ApplyFnUpdateIfNull(table TableConfig, firstHandler FirstHandler) ApplyFn {
+func ApplyFnUpdateIfNull(table TableConfig, handler Handler) ApplyFn {
 	return func(f *Field, fs ...*Field) {
 		f.SceneUpdate(func(f *Field, fs ...*Field) {
 			f.ValueFns.Append(ValueFn{
@@ -300,7 +300,7 @@ func ApplyFnUpdateIfNull(table TableConfig, firstHandler FirstHandler) ApplyFn {
 						cpFields[0].SetSelectColumns(f.DBColumnName().FullName())
 					}
 					var dbValue any
-					exists, err := NewFirstBuilder(table).WithHandler(firstHandler).AppendFields(cpFields...).First(&dbValue)
+					exists, err := NewFirstBuilder(table).WithHandler(handler).AppendFields(cpFields...).First(&dbValue)
 					if err != nil {
 						return nil, err
 					}
