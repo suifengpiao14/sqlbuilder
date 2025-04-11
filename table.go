@@ -90,6 +90,7 @@ type TableConfig struct {
 	Columns                  ColumnConfigs            // 后续吧table 纳入，通过 Column.Identity 生成 Field 操作
 	FieldName2DBColumnNameFn FieldName2DBColumnNameFn `json:"-"`
 	Schema                   SchemaConfig
+	handler                  Handler
 }
 
 func NewTableConfig(name string) TableConfig {
@@ -97,6 +98,31 @@ func NewTableConfig(name string) TableConfig {
 		DBName: DBName{Name: name},
 	}
 }
+
+func (t TableConfig) AddColumns(columns ...ColumnConfig) TableConfig {
+	t.Columns.AddColumns(columns...)
+	return t
+}
+
+func (t TableConfig) WithHandler(handler Handler) TableConfig {
+	t.handler = handler
+	return t
+}
+
+func (t TableConfig) GetHandler() (handler Handler) {
+	if t.handler == nil {
+		err := errors.New("handler is nil, please use WithHandler to set handler")
+		panic(err)
+	}
+	return t.handler
+}
+
+func (t TableConfig) GetDBNameByFieldName(fieldName string) (dbName string) {
+	col, _ := t.Columns.GetByFieldName(fieldName)
+	return col.DbName
+}
+
+//Deprecated: use GetDBNameByFieldName instead
 
 func (t TableConfig) WithFieldName2DBColumnNameFn(convertFn FieldName2DBColumnNameFn) TableConfig {
 	t.FieldName2DBColumnNameFn = convertFn
@@ -185,23 +211,28 @@ func (t TableConfig) Merge(tables ...TableConfig) TableConfig {
 	return t
 }
 
-type BusinessIdentity string // 业务标识,是关联数据表字段和Field的桥梁，是固定不变的，是模型组合的核心标识，始终保持不变（具体细化、应用待实践）
-
 type ColumnConfig struct {
-	BusinessIdentity BusinessIdentity // 业务标识
-	Name             string           `json:"name"` // 驼峰,程序中使用
-	Type             SchemaType       `json:"type"`
-	Length           int              `json:"length"`
-	PK               bool             `json:"pk"`
-	Unique           bool             `json:"unique"`
-	Nullable         bool             `json:"nullable"`
-	Default          any              `json:"default"`
-	Comment          string           `json:"comment"`
-	Enums            Enums            `json:"enums"`
+	FieldName string     // 业务标识 和Field.Name 保持一致，用户 column 和Field 互转
+	DbName    string     `json:"dbName"` // 数据库字段名，和数据库字段保持一致
+	Type      SchemaType `json:"type"`
+	Length    int        `json:"length"`
+	PK        bool       `json:"pk"`
+	Unique    bool       `json:"unique"`
+	Nullable  bool       `json:"nullable"`
+	Default   any        `json:"default"`
+	Comment   string     `json:"comment"`
+	Enums     Enums      `json:"enums"`
+}
+
+func NewColumnConfig(dbName, fieldName string) ColumnConfig {
+	return ColumnConfig{
+		FieldName: fieldName,
+		DbName:    dbName,
+	}
 }
 
 func (c ColumnConfig) CamelName() string {
-	return funcs.CamelCase(c.Name, false, false)
+	return funcs.CamelCase(c.DbName, false, false)
 }
 
 func (c ColumnConfig) MakeField(value any) *Field {
@@ -218,18 +249,33 @@ func (c ColumnConfig) MakeField(value any) *Field {
 
 type ColumnConfigs []ColumnConfig
 
+func (cs *ColumnConfigs) AddColumns(cols ...ColumnConfig) {
+	if *cs == nil {
+		*cs = make([]ColumnConfig, 0)
+
+	}
+	*cs = append(*cs, cols...)
+}
+
 func (cs ColumnConfigs) Merge(others ...ColumnConfig) ColumnConfigs {
 	cs = append(cs, others...)
 	return cs
 }
 
-// GetByIdentity  通过标识获取列配置信息，找不到则panic退出。主要用于生成字段时快速定位列配置信息。
-func (cs ColumnConfigs) GetByName(name string) (c ColumnConfig) {
+// GetByFieldName  通过标识获取列配置信息，找不到则panic退出。主要用于生成字段时快速定位列配置信息。
+func (cs ColumnConfigs) GetByFieldNameMust(fieldName string) (c ColumnConfig) {
+	c, exists := cs.GetByFieldName(fieldName)
+	if !exists {
+		err := errors.Errorf("ColumnConfig not found by fieldName: " + string(fieldName))
+		panic(err)
+	}
+	return c
+}
+func (cs ColumnConfigs) GetByFieldName(fieldName string) (c ColumnConfig, exists bool) {
 	for _, c := range cs {
-		if c.Name == name {
-			return c
+		if strings.EqualFold(c.FieldName, fieldName) {
+			return c, true
 		}
 	}
-	err := errors.Errorf("ColumnConfig not found by identity: " + string(name))
-	panic(err)
+	return c, false
 }

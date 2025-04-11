@@ -336,8 +336,7 @@ func (h GormHandler) GetDB() *gorm.DB {
 	return h()
 }
 
-//Deprecated: 请使用 WithSingleflight 代替 WithCacheSingleflightHandler,cache 可以通过 FirstParam.WithCacheDuration 设置缓存时间来启用
-
+// Deprecated: 请使用 WithSingleflight 代替 WithCacheSingleflightHandler,cache 可以通过 FirstParam.WithCacheDuration 设置缓存时间来启用
 func WithCacheSingleflightHandler(handler Handler, withCache bool, withSingleflight bool) Handler {
 
 	if withSingleflight {
@@ -623,6 +622,7 @@ type _HandlerSingleflightDoOnce struct {
 	group   *singleflight.Group
 }
 
+// WithSingleflightDoOnce 单例执行一次，防止并发问题,目前用于Set 中的exists 查询，所以只实现 exists 查询
 func WithSingleflightDoOnce(handler Handler) Handler {
 	return _HandlerSingleflightDoOnce{
 		handler: handler,

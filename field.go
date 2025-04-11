@@ -557,7 +557,10 @@ func (f *Field) DBColumnName() (dbName DBColumnName) {
 // _DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
 func (f *Field) _DBName() (dbName string) { // 改为私有方法，外部使用DBColumnName().Fullname()
 
-	dbName = f.dbName
+	if f.dbName != "" { // 后续要废弃dbName字段，使用 f.table.GetDBNameByFieldName(f.Name) 获取
+		return f.dbName
+	}
+	dbName = f.table.GetDBNameByFieldName(f.Name) // 后续仅保留这种方式转换为DB字段名,方便将Field 和数据表解耦
 	//使用自带函数转换
 	if dbName == "" && f.table.FieldName2DBColumnNameFn != nil { // 存在dbName则使用dbName
 		dbName = f.table.FieldName2DBColumnNameFn(f.Name)
