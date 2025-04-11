@@ -291,9 +291,15 @@ func (h GormHandler) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffe
 			return err
 		}
 		rowsAffected = tx.RowsAffected
-		switch tx.Dialector.Name() {
-		case "mysql":
+		driverName := tx.Dialector.Name()
+		switch driverName {
+		case Driver_mysql.String():
 			err = tx.Raw("SELECT LAST_INSERT_ID()").Scan(&lastInsertId).Error
+			if err != nil {
+				return err
+			}
+		case Driver_sqlite3.String(), _Driver_sqlite.String():
+			err = tx.Raw("SELECT last_insert_rowid()").Scan(&lastInsertId).Error
 			if err != nil {
 				return err
 			}

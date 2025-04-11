@@ -141,6 +141,7 @@ var ERROR_EMPTY_WHERE = errors.New("error  empty where")
 const (
 	Driver_mysql   Driver = "mysql"
 	Driver_sqlite3 Driver = "sqlite3"
+	_Driver_sqlite Driver = "sqlite" // 内部使用
 )
 
 var MysqlEscapeString = func(val string) string {
