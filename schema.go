@@ -723,6 +723,29 @@ var ValueFnEmpty2Nil = ValueFn{ // 空字符串改成nil,值改成nil后,sql语�
 	Layer: Value_Layer_SetFormat,
 }
 
+// ReducedArrayOnlyOneElement 数组只有一个元素时,缩减为单个值(降维)
+var ReducedArrayOnlyOneElement = ValueFn{
+	Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
+		if IsNil(inputValue) {
+			return nil, nil
+		}
+		rv := reflect.Indirect(reflect.ValueOf(inputValue))
+		switch rv.Kind() {
+		case reflect.Slice, reflect.Array:
+			count := rv.Len()
+			if count == 0 {
+				return nil, nil
+			}
+			if count == 1 {
+				value := rv.Index(0).Interface()
+				return value, nil
+			}
+		}
+		return inputValue, nil
+	},
+	Layer: Value_Layer_SetFormat,
+}
+
 var ValueFnGte = ValueFn{
 	Fn: func(in any, f *Field, fs ...*Field) (value any, err error) {
 		if IsNil(in) {
