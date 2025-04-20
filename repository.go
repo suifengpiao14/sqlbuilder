@@ -21,6 +21,13 @@ type RepositoryCommandService struct {
 	handler     Handler
 }
 
+func NewRepositoryCommandService(tableConfig TableConfig, handler Handler) RepositoryCommandService {
+	return RepositoryCommandService{
+		tableConfig: tableConfig,
+		handler:     handler,
+	}
+}
+
 func (s RepositoryCommandService) getConfig() CompilerConfig {
 	cfg := CompilerConfig{}.WithHandlerIgnore(s.handler).WithTableIgnore(s.tableConfig)
 	return cfg
@@ -77,7 +84,7 @@ func (s RepositoryQueryService[Model]) First(fields FieldsI) (model Model, exist
 	exists, err = builder.First(&model)
 	return model, exists, err
 }
-func (s RepositoryQueryService[Model]) Pagination(dst any, fields FieldsI) (modelTable memorytable.Table[Model], total int64, err error) {
+func (s RepositoryQueryService[Model]) Pagination(fields FieldsI) (modelTable memorytable.Table[Model], total int64, err error) {
 	builder := NewCompiler(s.getConfig(), fields.Fields()...).Pagination()
 	SelectBuilderFns, ok := fields.(SelectBuilderFnsI)
 	if ok {
