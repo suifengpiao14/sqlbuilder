@@ -2,6 +2,20 @@ package sqlbuilder
 
 import "github.com/suifengpiao14/memorytable"
 
+type FieldsI interface {
+	Fields() Fields
+}
+
+type FieldsFn func() (fields Fields)
+
+func (fn FieldsFn) Fields() Fields {
+	return fn()
+}
+
+type SelectBuilderFnsI interface {
+	SelectBuilderFn() (selectBuilder SelectBuilderFns)
+}
+
 type RepositoryService struct {
 	tableConfig TableConfig
 	handler     Handler
@@ -50,11 +64,19 @@ func (s RepositoryQueryService[Model]) getConfig() CompilerConfig {
 
 func (s RepositoryQueryService[Model]) First(fields FieldsI) (model Model, exists bool, err error) {
 	builder := NewCompiler(s.getConfig(), fields.Fields()...).First()
+	SelectBuilderFns, ok := fields.(SelectBuilderFnsI)
+	if ok {
+		builder = builder.WithBuilderFns(SelectBuilderFns.SelectBuilderFn()...)
+	}
 	exists, err = builder.First(&model)
 	return model, exists, err
 }
 func (s RepositoryQueryService[Model]) Pagination(dst any, fields FieldsI) (modelTable memorytable.Table[Model], total int64, err error) {
 	builder := NewCompiler(s.getConfig(), fields.Fields()...).Pagination()
+	SelectBuilderFns, ok := fields.(SelectBuilderFnsI)
+	if ok {
+		builder = builder.WithBuilderFns(SelectBuilderFns.SelectBuilderFn()...)
+	}
 	modelTable = make([]Model, 0)
 	total, err = builder.Pagination(&modelTable)
 	return modelTable, total, err
@@ -62,23 +84,39 @@ func (s RepositoryQueryService[Model]) Pagination(dst any, fields FieldsI) (mode
 
 func (s RepositoryQueryService[Model]) All(fields FieldsI) (modelTable memorytable.Table[Model], err error) {
 	builder := NewCompiler(s.getConfig(), fields.Fields()...).List()
+	SelectBuilderFns, ok := fields.(SelectBuilderFnsI)
+	if ok {
+		builder = builder.WithBuilderFns(SelectBuilderFns.SelectBuilderFn()...)
+	}
 	modelTable = make([]Model, 0)
 	err = builder.List(&modelTable)
 	return modelTable, err
 }
 func (s RepositoryQueryService[Model]) GetByIdentityMust(fields FieldsI) (model Model, err error) {
 	builder := NewCompiler(s.getConfig(), fields.Fields()...).First()
+	SelectBuilderFns, ok := fields.(SelectBuilderFnsI)
+	if ok {
+		builder = builder.WithBuilderFns(SelectBuilderFns.SelectBuilderFn()...)
+	}
 	err = builder.FirstMustExists(&model)
 	return model, err
 }
 
 func (s RepositoryQueryService[Model]) GetByIdentity(fields FieldsI) (model Model, exists bool, err error) {
 	builder := NewCompiler(s.getConfig(), fields.Fields()...).First()
+	SelectBuilderFns, ok := fields.(SelectBuilderFnsI)
+	if ok {
+		builder = builder.WithBuilderFns(SelectBuilderFns.SelectBuilderFn()...)
+	}
 	exists, err = builder.First(&model)
 	return model, exists, err
 }
 func (s RepositoryQueryService[Model]) GetByIdentities(fields FieldsI) (modelTable memorytable.Table[Model], err error) {
 	builder := NewCompiler(s.getConfig(), fields.Fields()...).List()
+	SelectBuilderFns, ok := fields.(SelectBuilderFnsI)
+	if ok {
+		builder = builder.WithBuilderFns(SelectBuilderFns.SelectBuilderFn()...)
+	}
 	err = builder.List(modelTable)
 	return modelTable, err
 }
