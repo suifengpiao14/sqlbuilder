@@ -1441,6 +1441,12 @@ type FieldsI interface {
 	Fields() Fields
 }
 
+type FieldsFn func() (fields Fields)
+
+func (fn FieldsFn) Fields() Fields {
+	return fn()
+}
+
 type Fields []*Field
 
 //GetBySampleField 根据样板(未完全配置的初始化字段)获取对应的配置完备的字段，如果没有则返回样板本身，常用于从fields集合中筛选字段
