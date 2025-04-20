@@ -16,22 +16,22 @@ type SelectBuilderFnsI interface {
 	SelectBuilderFn() (selectBuilder SelectBuilderFns)
 }
 
-type RepositoryService struct {
+type RepositoryCommandService struct {
 	tableConfig TableConfig
 	handler     Handler
 }
 
-func (s RepositoryService) getConfig() CompilerConfig {
+func (s RepositoryCommandService) getConfig() CompilerConfig {
 	cfg := CompilerConfig{}.WithHandlerIgnore(s.handler).WithTableIgnore(s.tableConfig)
 	return cfg
 }
 
-func (s RepositoryService) Insert(fields FieldsI) (err error) {
+func (s RepositoryCommandService) Insert(fields FieldsI) (err error) {
 	builder := NewCompiler(s.getConfig(), fields.Fields()...).Insert()
 	err = builder.Exec()
 	return err
 }
-func (s RepositoryService) InsertWithLastId(fields FieldsI) (lastInsertId uint64, err error) {
+func (s RepositoryCommandService) InsertWithLastId(fields FieldsI) (lastInsertId uint64, err error) {
 	builder := NewCompiler(s.getConfig(), fields.Fields()...).Insert()
 	lastInsertId, _, err = builder.Insert()
 	if err != nil {
@@ -40,13 +40,19 @@ func (s RepositoryService) InsertWithLastId(fields FieldsI) (lastInsertId uint64
 	return lastInsertId, nil
 }
 
-func (s RepositoryService) Update(fields FieldsI) (err error) {
+func (s RepositoryCommandService) Update(fields FieldsI) (err error) {
 	builder := NewCompiler(s.getConfig(), fields.Fields()...).Update()
 	err = builder.Exec()
 	return err
 }
 
-func (s RepositoryService) Delete(fields FieldsI) (err error) {
+func (s RepositoryCommandService) Set(fields FieldsI) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
+	builder := NewCompiler(s.getConfig(), fields.Fields()...).Set()
+	isInsert, lastInsertId, rowsAffected, err = builder.Set()
+	return isInsert, lastInsertId, rowsAffected, err
+}
+
+func (s RepositoryCommandService) Delete(fields FieldsI) (err error) {
 	builder := NewCompiler(s.getConfig(), fields.Fields()...).Delete()
 	err = builder.Exec()
 	return err
