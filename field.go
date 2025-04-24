@@ -546,6 +546,37 @@ func (dbColName DBColumnName) FullNameWithQuotes() string {
 }
 
 func (f *Field) DBColumnName() (dbName DBColumnName) {
+	arr := strings.Split(f._DBName(), ".")
+	switch len(arr) {
+	case 1:
+		return DBColumnName{
+			DBName: DBName{
+				Name: arr[0],
+			},
+			Table: f.table,
+		}
+	case 2:
+		table := f.table
+		table.DBName.Name = arr[0]
+		return DBColumnName{
+			DBName: DBName{
+				Name: arr[1],
+			},
+			Table: table,
+		}
+	case 3:
+		table := f.table
+		table.DBName.Name = arr[1]
+		table.Schema.Name = arr[0]
+		return DBColumnName{
+			DBName: DBName{
+				Name: arr[2],
+			},
+			Table: table,
+		}
+
+	}
+
 	return DBColumnName{
 		DBName: DBName{
 			Name: f._DBName(),
