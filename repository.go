@@ -1,9 +1,17 @@
 package sqlbuilder
 
-import "github.com/suifengpiao14/memorytable"
+import (
+	"github.com/suifengpiao14/memorytable"
+)
 
 type FieldsI interface {
 	Fields() Fields
+}
+
+type FieldsIs []FieldsI
+
+func (fsis FieldsIs) Fields() Fields {
+	return mergeFields(Fields{}, fsis...)
 }
 
 type FieldsFn func() (fields Fields)
@@ -12,7 +20,7 @@ func (fn FieldsFn) Fields() Fields {
 	return fn()
 }
 
-//MakeFieldsI 生成一个FieldsI接口的实现，用于传递字段信息。
+// MakeFieldsI 生成一个FieldsI接口的实现，用于传递字段信息。
 func MakeFieldsI(fields ...*Field) FieldsI {
 	var fn FieldsFn = func() Fields {
 		return fields
@@ -25,29 +33,29 @@ type SelectBuilderFnsI interface {
 	SelectBuilderFn() (selectBuilder SelectBuilderFns)
 }
 
-type RepositoryCommandService struct {
+type RepositoryCommand struct {
 	tableConfig TableConfig
 	handler     Handler
 }
 
-func NewRepositoryCommandService(tableConfig TableConfig, handler Handler) RepositoryCommandService {
-	return RepositoryCommandService{
+func NewRepositoryCommand(tableConfig TableConfig) RepositoryCommand {
+	return RepositoryCommand{
 		tableConfig: tableConfig,
-		handler:     handler,
+		handler:     tableConfig.handler,
 	}
 }
 
-func (s RepositoryCommandService) getConfig() CompilerConfig {
+func (s RepositoryCommand) getConfig() CompilerConfig {
 	cfg := CompilerConfig{}.WithHandlerIgnore(s.handler).WithTableIgnore(s.tableConfig)
 	return cfg
 }
 
-func (s RepositoryCommandService) Insert(fieldsI FieldsI, fieldsIs ...FieldsI) (err error) {
+func (s RepositoryCommand) Insert(fieldsI FieldsI, fieldsIs ...FieldsI) (err error) {
 	builder := NewCompiler(s.getConfig(), mergeFields(fieldsI, fieldsIs...)...).Insert()
 	err = builder.Exec()
 	return err
 }
-func (s RepositoryCommandService) InsertWithLastId(fieldsI FieldsI, fieldsIs ...FieldsI) (lastInsertId uint64, err error) {
+func (s RepositoryCommand) InsertWithLastId(fieldsI FieldsI, fieldsIs ...FieldsI) (lastInsertId uint64, err error) {
 	builder := NewCompiler(s.getConfig(), mergeFields(fieldsI, fieldsIs...)...).Insert()
 	lastInsertId, _, err = builder.Insert()
 	if err != nil {
@@ -56,42 +64,49 @@ func (s RepositoryCommandService) InsertWithLastId(fieldsI FieldsI, fieldsIs ...
 	return lastInsertId, nil
 }
 
-func (s RepositoryCommandService) Update(fieldsI FieldsI, fieldsIs ...FieldsI) (err error) {
+func (s RepositoryCommand) Update(fieldsI FieldsI, fieldsIs ...FieldsI) (err error) {
 	builder := NewCompiler(s.getConfig(), mergeFields(fieldsI, fieldsIs...)...).Update()
 	err = builder.Exec()
 	return err
 }
 
-func (s RepositoryCommandService) Set(fieldsI FieldsI, fieldsIs ...FieldsI) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
+func (s RepositoryCommand) Set(fieldsI FieldsI, fieldsIs ...FieldsI) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
 	builder := NewCompiler(s.getConfig(), mergeFields(fieldsI, fieldsIs...)...).Set()
 	isInsert, lastInsertId, rowsAffected, err = builder.Set()
 	return isInsert, lastInsertId, rowsAffected, err
 }
 
-func (s RepositoryCommandService) Delete(fieldsI FieldsI, fieldsIs ...FieldsI) (err error) {
+func (s RepositoryCommand) Delete(fieldsI FieldsI, fieldsIs ...FieldsI) (err error) {
 	builder := NewCompiler(s.getConfig(), mergeFields(fieldsI, fieldsIs...)...).Delete()
 	err = builder.Exec()
 	return err
 }
 
-type RepositoryQueryService[Model any] struct {
+type RepositoryQuery[Model any] struct {
 	tableConfig TableConfig
 	handler     Handler
 }
 
-func (s RepositoryQueryService[Model]) getConfig() CompilerConfig {
+func NewRepositoryQuery[Model any](tableConfig TableConfig) RepositoryQuery[Model] {
+	return RepositoryQuery[Model]{
+		tableConfig: tableConfig,
+		handler:     tableConfig.handler,
+	}
+}
+
+func (s RepositoryQuery[Model]) getConfig() CompilerConfig {
 	cfg := CompilerConfig{}.WithHandlerIgnore(s.handler).WithTableIgnore(s.tableConfig)
 	return cfg
 }
 
-func (s RepositoryQueryService[Model]) First(fieldsI FieldsI, fieldsIs ...FieldsI) (model Model, exists bool, err error) {
+func (s RepositoryQuery[Model]) First(fieldsI FieldsI, fieldsIs ...FieldsI) (model Model, exists bool, err error) {
 	builder := NewCompiler(s.getConfig(), mergeFields(fieldsI, fieldsIs...)...).First()
 	selectBuilderFns := mergeSelectBuilderFns(fieldsI, fieldsIs...)
 	builder = builder.WithBuilderFns(selectBuilderFns...)
 	exists, err = builder.First(&model)
 	return model, exists, err
 }
-func (s RepositoryQueryService[Model]) Pagination(fieldsI FieldsI, fieldsIs ...FieldsI) (modelTable memorytable.Table[Model], total int64, err error) {
+func (s RepositoryQuery[Model]) Pagination(fieldsI FieldsI, fieldsIs ...FieldsI) (modelTable memorytable.Table[Model], total int64, err error) {
 	builder := NewCompiler(s.getConfig(), mergeFields(fieldsI, fieldsIs...)...).Pagination()
 	selectBuilderFns := mergeSelectBuilderFns(fieldsI, fieldsIs...)
 	builder = builder.WithBuilderFns(selectBuilderFns...)
@@ -100,7 +115,7 @@ func (s RepositoryQueryService[Model]) Pagination(fieldsI FieldsI, fieldsIs ...F
 	return modelTable, total, err
 }
 
-func (s RepositoryQueryService[Model]) All(fieldsI FieldsI, fieldsIs ...FieldsI) (modelTable memorytable.Table[Model], err error) {
+func (s RepositoryQuery[Model]) All(fieldsI FieldsI, fieldsIs ...FieldsI) (modelTable memorytable.Table[Model], err error) {
 	builder := NewCompiler(s.getConfig(), mergeFields(fieldsI, fieldsIs...)...).List()
 	selectBuilderFns := mergeSelectBuilderFns(fieldsI, fieldsIs...)
 	builder = builder.WithBuilderFns(selectBuilderFns...)
@@ -108,7 +123,7 @@ func (s RepositoryQueryService[Model]) All(fieldsI FieldsI, fieldsIs ...FieldsI)
 	err = builder.List(&modelTable)
 	return modelTable, err
 }
-func (s RepositoryQueryService[Model]) GetByIdentityMust(fieldsI FieldsI, fieldsIs ...FieldsI) (model Model, err error) {
+func (s RepositoryQuery[Model]) GetByIdentityMust(fieldsI FieldsI, fieldsIs ...FieldsI) (model Model, err error) {
 	builder := NewCompiler(s.getConfig(), mergeFields(fieldsI, fieldsIs...)...).First()
 	selectBuilderFns := mergeSelectBuilderFns(fieldsI, fieldsIs...)
 	builder = builder.WithBuilderFns(selectBuilderFns...)
@@ -116,14 +131,14 @@ func (s RepositoryQueryService[Model]) GetByIdentityMust(fieldsI FieldsI, fields
 	return model, err
 }
 
-func (s RepositoryQueryService[Model]) GetByIdentity(fieldsI FieldsI, fieldsIs ...FieldsI) (model Model, exists bool, err error) {
+func (s RepositoryQuery[Model]) GetByIdentity(fieldsI FieldsI, fieldsIs ...FieldsI) (model Model, exists bool, err error) {
 	builder := NewCompiler(s.getConfig(), mergeFields(fieldsI, fieldsIs...)...).First()
 	selectBuilderFns := mergeSelectBuilderFns(fieldsI, fieldsIs...)
 	builder = builder.WithBuilderFns(selectBuilderFns...)
 	exists, err = builder.First(&model)
 	return model, exists, err
 }
-func (s RepositoryQueryService[Model]) GetByIdentities(fieldsI FieldsI, fieldsIs ...FieldsI) (modelTable memorytable.Table[Model], err error) {
+func (s RepositoryQuery[Model]) GetByIdentities(fieldsI FieldsI, fieldsIs ...FieldsI) (modelTable memorytable.Table[Model], err error) {
 	builder := NewCompiler(s.getConfig(), mergeFields(fieldsI, fieldsIs...)...).List()
 	selectBuilderFns := mergeSelectBuilderFns(fieldsI, fieldsIs...)
 	builder = builder.WithBuilderFns(selectBuilderFns...)
