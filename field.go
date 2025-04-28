@@ -1472,7 +1472,15 @@ func FieldFilterInclude(subFileds ...*Field) FieldFilterFn {
 	}
 }
 
+type FieldsI interface {
+	Fields() Fields
+}
+
 type Fields []*Field
+
+func NewFields(fs ...*Field) Fields {
+	return fs
+}
 
 func (fs Fields) Fields() Fields {
 	return fs
