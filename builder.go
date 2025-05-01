@@ -880,10 +880,7 @@ func (p ListParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 	pageIndex, pageSize := fs.Pagination()
-	ofsset := pageIndex * pageSize
-	if ofsset < 0 {
-		ofsset = 0
-	}
+	ofsset := max(pageIndex*pageSize, 0)
 
 	selec := fs.Select()
 	order := fs.Order()

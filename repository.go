@@ -1,9 +1,5 @@
 package sqlbuilder
 
-import (
-	"github.com/suifengpiao14/memorytable"
-)
-
 type SelectBuilderFnsI interface {
 	SelectBuilderFn() (selectBuilder SelectBuilderFns)
 }
@@ -26,9 +22,19 @@ func (s RepositoryCommand) getConfig() CompilerConfig {
 }
 
 type CustomFnInsertParam func(insert *InsertParam)
+type CustomFnBatchInsertParam func(insert *BatchInsertParam)
 
 func (s RepositoryCommand) Insert(fields Fields, customFn CustomFnInsertParam) (err error) {
 	builder := NewCompiler(s.getConfig(), fields...).Insert()
+	if customFn != nil {
+		customFn(builder)
+
+	}
+	err = builder.Exec()
+	return err
+}
+func (s RepositoryCommand) BatchInsert(fieldsList []Fields, customFn CustomFnBatchInsertParam) (err error) {
+	builder := NewCompiler(s.getConfig()).WithBatchFields(fieldsList...).InsertBatch()
 	if customFn != nil {
 		customFn(builder)
 
@@ -113,28 +119,28 @@ func (s RepositoryQuery[Model]) First(fields Fields, customFn CustomFnFirstParam
 
 type CustomFnPaginationParam func(pagination *PaginationParam)
 
-func (s RepositoryQuery[Model]) Pagination(fields Fields, customFn CustomFnPaginationParam) (modelTable memorytable.Table[Model], total int64, err error) {
+func (s RepositoryQuery[Model]) Pagination(fields Fields, customFn CustomFnPaginationParam) (models []Model, total int64, err error) {
 	builder := NewCompiler(s.getConfig(), fields...).Pagination()
 	if customFn != nil {
 		customFn(builder)
 
 	}
-	modelTable = make([]Model, 0)
-	total, err = builder.Pagination(&modelTable)
-	return modelTable, total, err
+	models = make([]Model, 0)
+	total, err = builder.Pagination(&models)
+	return models, total, err
 }
 
 type CustomFnListParam func(listParam *ListParam)
 
-func (s RepositoryQuery[Model]) All(fields Fields, customFn CustomFnListParam) (modelTable memorytable.Table[Model], err error) {
+func (s RepositoryQuery[Model]) All(fields Fields, customFn CustomFnListParam) (models []Model, err error) {
 	builder := NewCompiler(s.getConfig(), fields...).List()
 	if customFn != nil {
 		customFn(builder)
 
 	}
-	modelTable = make([]Model, 0)
-	err = builder.List(&modelTable)
-	return modelTable, err
+	models = make([]Model, 0)
+	err = builder.List(&models)
+	return models, err
 }
 func (s RepositoryQuery[Model]) GetByIdentityMust(fields Fields, customFn CustomFnFirstParam) (model Model, err error) {
 	builder := NewCompiler(s.getConfig(), fields...).First()
@@ -156,12 +162,12 @@ func (s RepositoryQuery[Model]) GetByIdentity(fields Fields, customFn CustomFnFi
 	return model, exists, err
 }
 
-func (s RepositoryQuery[Model]) GetByIdentities(fields Fields, customFn CustomFnListParam) (modelTable memorytable.Table[Model], err error) {
+func (s RepositoryQuery[Model]) GetByIdentities(fields Fields, customFn CustomFnListParam) (models []Model, err error) {
 	builder := NewCompiler(s.getConfig(), fields...).List()
 	if customFn != nil {
 		customFn(builder)
 
 	}
-	err = builder.List(modelTable)
-	return modelTable, err
+	err = builder.List(models)
+	return models, err
 }
