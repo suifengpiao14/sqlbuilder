@@ -92,7 +92,7 @@ var ApplyFnUseDBValue ApplyFn = func(f *Field, fs ...*Field) {
 	})
 }
 
-// ApplyFnUseDBValueWhenNotEmpty 使用数据库值当数据库值不为空时
+// ApplyFnUseDBValueWhenNotEmpty 使用数据库值当数据库值不为空时,需要实现传入值不为空时更新，使用ValueFnEmpty2Nil过滤字段
 func ValueFnFnUseDBValue(f *Field, fs ...*Field) ValueFnFn {
 	return func(inputValue any, f *Field, fs ...*Field) (any, error) {
 		if IsNil(inputValue) {
