@@ -85,6 +85,25 @@ func ValueFnFnIncrease(f *Field, fs ...*Field) ValueFnFn {
 	}
 }
 
+var ApplyFnUseDBValue ApplyFn = func(f *Field, fs ...*Field) {
+	f.ValueFns.Append(ValueFn{
+		Fn:    ValueFnFnUseDBValue(f, fs...),
+		Layer: Value_Layer_DBFormat,
+	})
+}
+
+// ApplyFnUseDBValueWhenNotEmpty 使用数据库值当数据库值不为空时
+func ValueFnFnUseDBValue(f *Field, fs ...*Field) ValueFnFn {
+	return func(inputValue any, f *Field, fs ...*Field) (any, error) {
+		if IsNil(inputValue) {
+			return nil, nil
+		}
+		dbName := f.DBColumnName().FullNameWithQuotes()
+		val := fmt.Sprintf("if(%s,%s,?)", dbName, dbName)
+		return goqu.L(val, inputValue), nil
+	}
+}
+
 var ApplyFnWhereIlike ApplyFn = func(f *Field, fs ...*Field) {
 	f.WhereFns.Append(ValueFnWhereLike)
 }
