@@ -111,7 +111,7 @@ func (t TableConfig) WithHandler(handler Handler) TableConfig {
 
 func (t TableConfig) GetHandler() (handler Handler) {
 	if t.handler == nil {
-		err := errors.New("handler is nil, please use WithHandler to set handler")
+		err := errors.New("database handler is nil, please use WithHandler to set handler")
 		panic(err)
 	}
 	return t.handler

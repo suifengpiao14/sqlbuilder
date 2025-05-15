@@ -157,7 +157,7 @@ func (h Compiler) Handler() Handler {
 	if h.handler != nil {
 		return h.handler
 	}
-	panic(errors.New("handler is nil"))
+	panic(errors.New("database handler is nil"))
 }
 func (h Compiler) Table() (table TableConfig) {
 	if h.tableConfig.Name != "" {
