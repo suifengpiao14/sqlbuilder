@@ -1875,14 +1875,22 @@ func TryNeq(field string, value any) (expressions Expressions, ok bool) {
 // Ilike 不区分大小写like语句
 type Ilike [3]any
 
+func (iLike Ilike) String() (ilikeVal string) {
+	strArr := make([]string, 0)
+	for _, arg := range iLike {
+		str := cast.ToString(arg)
+		if str != "" {
+			strArr = append(strArr, str)
+		}
+	}
+	ilikeVal = strings.Join(strArr, "")
+	return ilikeVal
+}
+
 func TryIlike(field string, value any) (expressions Expressions, ok bool) {
 	if iLike, ok := value.(Ilike); ok {
 		identifier := goqu.I(field)
-		strArr := make([]string, 0)
-		for _, arg := range iLike {
-			strArr = append(strArr, cast.ToString(arg))
-		}
-		val := strings.Join(strArr, "")
+		val := iLike.String()
 		return ConcatExpression(identifier.ILike(val)), true
 	}
 	return nil, false
