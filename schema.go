@@ -692,35 +692,40 @@ var ValueFnShieldForData = ValueFnOnlyForData(ValueFnShieldFn)
 
 var ValueFnEmpty2Nil = ValueFn{ // 空字符串改成nil,值改成nil后,sql语句中会忽略该字段,常常用在update,where 字句中
 	Fn: func(in any, f *Field, fs ...*Field) (any, error) {
-		switch val := in.(type) {
-		case string:
-			if val == "" {
-				return nil, nil
-			}
-		case int:
-			if val == 0 {
-				return nil, nil
-			}
-		case int64:
-			if val == 0 {
-				return nil, nil
-			}
-		case []string:
-			if len(val) == 0 {
-				return nil, nil
-			}
-		case []int:
-			if len(val) == 0 {
-				return nil, nil
-			}
-		case []int64:
-			if len(val) == 0 {
-				return nil, nil
-			}
-		}
-		return in, nil
+		out := Empty2Nil(in)
+		return out, nil
 	},
 	Layer: Value_Layer_SetFormat,
+}
+
+func Empty2Nil(in any) (out any) {
+	switch val := in.(type) {
+	case string:
+		if val == "" {
+			return nil
+		}
+	case int:
+		if val == 0 {
+			return nil
+		}
+	case int64:
+		if val == 0 {
+			return nil
+		}
+	case []string:
+		if len(val) == 0 {
+			return nil
+		}
+	case []int:
+		if len(val) == 0 {
+			return nil
+		}
+	case []int64:
+		if len(val) == 0 {
+			return nil
+		}
+	}
+	return in
 }
 
 // ReducedArrayOnlyOneElement 数组只有一个元素时,缩减为单个值(降维)

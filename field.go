@@ -1916,8 +1916,17 @@ func NewBetweenWithoutEmpty[T int | int64 | float64 | string](start T, end T) Be
 
 type Between [3]any
 
+func (b Between) Empty2Nil() (newB Between) {
+	newB = b
+	for i := range newB {
+		newB[i] = Empty2Nil(newB[i])
+	}
+	return newB
+}
+
 func TryConvert2Betwwen(field string, value any) (expressions Expressions, ok bool) {
 	if between, ok := value.(Between); ok {
+		between = between.Empty2Nil()
 		identifier := goqu.I(field)
 		min, val, max := between[0], between[1], between[2]
 		if min == nil && max == nil && val == nil {
@@ -1925,7 +1934,7 @@ func TryConvert2Betwwen(field string, value any) (expressions Expressions, ok bo
 		}
 
 		if max != nil {
-			expressions = ConcatExpression(goqu.L("?", val).Between(exp.NewRangeVal(goqu.C(cast.ToString(min)), goqu.C(cast.ToString(max)))))
+			expressions = ConcatExpression(goqu.L("?", val).Between(exp.NewRangeVal(goqu.I(cast.ToString(min)), goqu.I(cast.ToString(max)))))
 			return expressions, true
 		}
 		max = val // 当作2个值处理
