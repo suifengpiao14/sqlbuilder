@@ -251,6 +251,7 @@ var ERROR_COLUMN_VALUE_NOT_EXISTS = errors.New("column value not exists")
 var ERROR_COLUMN_VALUE_EXISTS = errors.New("column value exists")
 var ERROR_Unique = errors.New("unique error")
 
+// Deprecated ApplyFnUnique use tableConfig.Indexs 设置unique index 代替，无需手动添加中间件
 func ApplyFnUnique(existsFn ExistsHandler) ApplyFn { // 复合索引，给一列应用该中间件即可
 	return func(f *Field, fs ...*Field) {
 		sceneFnName := "checkexists"

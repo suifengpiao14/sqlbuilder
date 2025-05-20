@@ -91,11 +91,17 @@ type TableConfig struct {
 	FieldName2DBColumnNameFn FieldName2DBColumnNameFn `json:"-"`
 	Schema                   SchemaConfig
 	handler                  Handler
+	Indexs                   Indexs                                                // 索引信息，唯一索引，在新增时会自动校验是否存在,更新时会自动保护
+	TableLevelFieldsHook     func(scene Scene, fs ...*Field) (hookedFields Fields) // 表级别的字段（值产生方式和实际数据无关），比如创建时间、更新时间、删除字段等，这些字段设置好后，相关操作可从此获取字段信息,增加该字段，方便封装delete操作、冗余字段自动填充等操作。
+
 }
 
 func NewTableConfig(name string) TableConfig {
 	return TableConfig{
 		DBName: DBName{Name: name},
+		TableLevelFieldsHook: func(scene Scene, fs ...*Field) (hookedFields Fields) {
+			return fs
+		},
 	}
 }
 

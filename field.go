@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -381,41 +382,62 @@ func (f Field) Fields() Fields {
 }
 
 type Index struct {
-	Unique bool   `json:"unique"` // 是否唯一索引
-	Name   string `json:"name"`   // 索引名称
-	Order  int    `json:"order"`  // 复合索引时,需要指定顺序,数字小的排前面
+	IsPrimary bool `json:"isPrimary"` // 是否主键索引
+	Unique    bool `json:"unique"`    // 是否唯一索引
+	//Name        string   `json:"name"`   // 索引名称
+	ColumnNames []string //和 field.Name 对应,方便通过索引找到列
+	//Order       int      `json:"order"` // 复合索引时,需要指定顺序,数字小的排前面
 }
 
-func (i *Index) WithOrder(order int) *Index {
-	i.Order = order
-	return i
+func (i Index) IndexName() string {
+	prefix := "idx"
+	if i.Unique {
+		prefix = "uniq"
+	}
+	arr := append([]string{prefix}, i.ColumnNames...)
+	indexName := strings.Join(arr, "_")
+	return indexName
+
+}
+
+func (i Index) Fields(allFields Fields) (fields Fields) {
+	for _, field := range allFields {
+		dbName := field.DBColumnName().BaseName()
+		ok := slices.Contains(i.ColumnNames, dbName)
+		if ok {
+			fields = append(fields, field)
+		}
+
+	}
+
+	return fields
 }
 
 type Indexs []Index
 
-func (is *Indexs) Append(indexs ...Index) {
-	if *is == nil {
-		*is = make(Indexs, 0)
+func (indexs *Indexs) Append(subIndexs ...Index) {
+	if *indexs == nil {
+		*indexs = make(Indexs, 0)
 	}
-	for _, index := range indexs {
-		if is.HasIndex(index) {
+	for _, index := range subIndexs {
+		if indexs.HasIndex(index) {
 			continue
 		}
-		*is = append(*is, index)
+		*indexs = append(*indexs, index)
 	}
 }
-func (is Indexs) HasIndex(index Index) bool {
-	for _, i := range is {
-		if index.Name == i.Name && index.Unique == i.Unique {
+func (indexs Indexs) HasIndex(index Index) bool {
+	for _, i := range indexs {
+		if index.IndexName() == i.IndexName() && index.Unique == i.Unique {
 			return true
 		}
 	}
 	return false
 }
 
-func (is Indexs) GetUnique() (uniqueIndex Indexs) {
+func (indexs Indexs) GetUnique() (uniqueIndex Indexs) {
 	uniqueIndex = make(Indexs, 0)
-	for _, index := range is {
+	for _, index := range indexs {
 		if index.Unique {
 			uniqueIndex = append(uniqueIndex, index)
 		}
@@ -1628,6 +1650,14 @@ func (fs Fields) Pagination() (index int, size int) {
 	}
 
 	return index, size
+}
+func (fs Fields) DeletedAt() (f *Field, err error) {
+	f, ok := fs.GetByFieldName(Field_name_deletedAt)
+	if !ok {
+		err = errors.Errorf("not found deleted column by fieldName:%s", Field_name_deletedAt)
+		return nil, err
+	}
+	return f, nil
 }
 
 func (fs Fields) Limit() (limit uint) {

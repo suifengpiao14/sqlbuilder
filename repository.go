@@ -16,6 +16,16 @@ func NewRepositoryCommand(tableConfig TableConfig) RepositoryCommand {
 	}
 }
 
+//GetHandler 返回当前操作的 Handler 对象。增加handler 返回，方便外部调用handler 进行其他操作 比如事务处理、值验证的 唯一验证等操作。
+
+func (s RepositoryCommand) GetHandler() Handler {
+	return s.handler
+}
+
+func (s RepositoryCommand) GetTableConfig() TableConfig {
+	return s.tableConfig
+}
+
 func (s RepositoryCommand) getConfig() CompilerConfig {
 	cfg := CompilerConfig{}.WithHandlerIgnore(s.handler).WithTableIgnore(s.tableConfig)
 	return cfg
@@ -100,7 +110,9 @@ func NewRepositoryQuery[Model any](tableConfig TableConfig) RepositoryQuery[Mode
 		handler:     tableConfig.handler,
 	}
 }
-
+func (s RepositoryQuery[Model]) GetHandler() Handler {
+	return s.handler
+}
 func (s RepositoryQuery[Model]) getConfig() CompilerConfig {
 	cfg := CompilerConfig{}.WithHandlerIgnore(s.handler).WithTableIgnore(s.tableConfig)
 	return cfg

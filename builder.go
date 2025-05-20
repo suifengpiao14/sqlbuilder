@@ -1,6 +1,7 @@
 package sqlbuilder
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -314,6 +315,9 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 	tableConfig := p._TableI.TableConfig()
+	if tableConfig.TableLevelFieldsHook != nil {
+		fs = tableConfig.TableLevelFieldsHook(SCENE_SQL_INSERT, fs...)
+	}
 	fs.SetTable(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
 	rowData, err := fs.Data(layer_order...)
@@ -364,6 +368,12 @@ func (p InsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64
 }
 
 func (p InsertParam) Insert() (lastInsertId uint64, rowsAffected int64, err error) {
+	tableConfig := p._TableI.TableConfig()
+	fs := p._Fields.Builder()
+	err = ExistsUniqueIndex(tableConfig, fs...)
+	if err != nil {
+		return 0, 0, err
+	}
 	sql, err := p.ToSQL()
 	if err != nil {
 		return 0, 0, err
@@ -372,6 +382,28 @@ func (p InsertParam) Insert() (lastInsertId uint64, rowsAffected int64, err erro
 		p.getEventHandler()(event.LastInsertId, event.RowsAffected)
 	})
 	return withEventHandler.InsertWithLastId(sql)
+}
+
+func ExistsUniqueIndex(tableConfig TableConfig, fs ...*Field) (err error) {
+	indexs := tableConfig.Indexs.GetUnique()
+	for _, index := range indexs {
+		uFs := index.Fields(fs).AppendWhereValueFn(ValueFnForward) // 变成查询条件
+		if len(uFs) != len(index.ColumnNames) {                    // 如果唯一标识字段数量和筛选条件字段数量不一致，则忽略该唯一索引校验（如 update 时不涉及到指定唯一索引）
+			continue
+		}
+		exists, err := NewExistsBuilder(tableConfig).AppendFields(uFs...).Exists()
+		if err != nil {
+			return err
+		}
+		if exists {
+			data, _ := uFs.Data()
+			b, _ := json.Marshal(data)
+			s := string(b)
+			err := errors.Errorf("ExistsUniqueIndex unique index already exist table:%s,value%s ", tableConfig.Name, s)
+			return err
+		}
+	}
+	return nil
 }
 
 type BatchInsertParam struct {
@@ -430,6 +462,9 @@ func (is BatchInsertParam) ToSQL() (sql string, err error) {
 	tableConfig := is._TableI.TableConfig()
 	for _, fields := range is.rowFields {
 		fs := fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+		if tableConfig.TableLevelFieldsHook != nil {
+			fs = tableConfig.TableLevelFieldsHook(SCENE_SQL_INSERT, fs...)
+		}
 		fs.SetTable(tableConfig)
 		fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
 		rowData, err := fs.Data(layer_order...)
@@ -522,11 +557,13 @@ func (p *DeleteParam) AppendFields(fields ...*Field) *DeleteParam {
 func (p DeleteParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._TableI.TableConfig()
+	if tableConfig.TableLevelFieldsHook != nil {
+		fs = tableConfig.TableLevelFieldsHook(SCENE_SQL_INSERT, fs...)
+	}
 	fs.SetTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_DELETE)
-	f, ok := fs.GetByFieldName(Field_name_deletedAt)
-	if !ok {
-		err = errors.Errorf("not found deleted column by fieldName:%s", Field_name_deletedAt)
+	f, err := fs.DeletedAt()
+	if err != nil {
 		return "", err
 	}
 	canUpdateFields := fs.GetByTags(Field_tag_CanWriteWhenDeleted)
@@ -1262,6 +1299,11 @@ func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string,
 }
 
 func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
+	table := p._Table.TableConfig()
+	err = ExistsUniqueIndex(table)
+	if err != nil {
+		return false, 0, 0, err
+	}
 	existsSql, insertSql, updateSql, err := p.ToSQL()
 	if err != nil {
 		return false, 0, 0, err
