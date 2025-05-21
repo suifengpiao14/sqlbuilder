@@ -1,7 +1,7 @@
 package sqlbuilder
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
@@ -270,8 +270,13 @@ type InsertParam struct {
 	//execHandler             ExecHandler
 	handler             Handler
 	_triggerInsertEvent EventInsertTrigger
+	context             context.Context
 }
 
+func (p *InsertParam) WithContext(ctx context.Context) *InsertParam {
+	p.context = ctx
+	return p
+}
 func (p *InsertParam) WithTriggerEvent(triggerInsertEvent EventInsertTrigger) *InsertParam {
 	p._triggerInsertEvent = triggerInsertEvent
 	return p
@@ -315,9 +320,7 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 	tableConfig := p._TableI.TableConfig()
-	if tableConfig.TableLevelFieldsHook != nil {
-		fs = tableConfig.TableLevelFieldsHook(SCENE_SQL_INSERT, fs...)
-	}
+	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_INSERT, fs...)
 	fs.SetTable(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
 	rowData, err := fs.Data(layer_order...)
@@ -370,7 +373,7 @@ func (p InsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64
 func (p InsertParam) Insert() (lastInsertId uint64, rowsAffected int64, err error) {
 	tableConfig := p._TableI.TableConfig()
 	fs := p._Fields.Builder()
-	err = ExistsUniqueIndex(tableConfig, fs...)
+	err = tableConfig.CheckUniqueIndex(fs...)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -384,28 +387,6 @@ func (p InsertParam) Insert() (lastInsertId uint64, rowsAffected int64, err erro
 	return withEventHandler.InsertWithLastId(sql)
 }
 
-func ExistsUniqueIndex(tableConfig TableConfig, fs ...*Field) (err error) {
-	indexs := tableConfig.Indexs.GetUnique()
-	for _, index := range indexs {
-		uFs := index.Fields(fs).AppendWhereValueFn(ValueFnForward) // 变成查询条件
-		if len(uFs) != len(index.ColumnNames) {                    // 如果唯一标识字段数量和筛选条件字段数量不一致，则忽略该唯一索引校验（如 update 时不涉及到指定唯一索引）
-			continue
-		}
-		exists, err := NewExistsBuilder(tableConfig).AppendFields(uFs...).Exists()
-		if err != nil {
-			return err
-		}
-		if exists {
-			data, _ := uFs.Data()
-			b, _ := json.Marshal(data)
-			s := string(b)
-			err := errors.Errorf("ExistsUniqueIndex unique index already exist table:%s,value%s ", tableConfig.Name, s)
-			return err
-		}
-	}
-	return nil
-}
-
 type BatchInsertParam struct {
 	rowFields []Fields
 	_TableI   TableI
@@ -413,6 +394,12 @@ type BatchInsertParam struct {
 	//execHandler             ExecHandler
 	handler             Handler
 	_triggerInsertEvent EventInsertTrigger
+	context             context.Context
+}
+
+func (p *BatchInsertParam) WithContext(ctx context.Context) *BatchInsertParam {
+	p.context = ctx
+	return p
 }
 
 func (p *BatchInsertParam) WithTriggerEvent(triggerInsertEvent EventInsertTrigger) *BatchInsertParam {
@@ -462,9 +449,7 @@ func (is BatchInsertParam) ToSQL() (sql string, err error) {
 	tableConfig := is._TableI.TableConfig()
 	for _, fields := range is.rowFields {
 		fs := fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
-		if tableConfig.TableLevelFieldsHook != nil {
-			fs = tableConfig.TableLevelFieldsHook(SCENE_SQL_INSERT, fs...)
-		}
+		fs = tableConfig.RunTableLevelFieldsHook(is.context, SCENE_SQL_INSERT, fs...)
 		fs.SetTable(tableConfig)
 		fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
 		rowData, err := fs.Data(layer_order...)
@@ -518,6 +503,12 @@ type DeleteParam struct {
 	_log                 LogI
 	handler              Handler
 	_triggerDeletedEvent EventDeletedTrigger
+	context              context.Context
+}
+
+func (p *DeleteParam) WithContext(ctx context.Context) DeleteParam {
+	p.context = ctx
+	return *p
 }
 
 func (p *DeleteParam) WithTriggerEvent(triggerDeletedEvent EventDeletedTrigger) *DeleteParam {
@@ -557,9 +548,7 @@ func (p *DeleteParam) AppendFields(fields ...*Field) *DeleteParam {
 func (p DeleteParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._TableI.TableConfig()
-	if tableConfig.TableLevelFieldsHook != nil {
-		fs = tableConfig.TableLevelFieldsHook(SCENE_SQL_INSERT, fs...)
-	}
+	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_DELETE, fs...)
 	fs.SetTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_DELETE)
 	f, err := fs.DeletedAt()
@@ -621,8 +610,13 @@ type UpdateParam struct {
 	_log                 LogI
 	handler              Handler
 	_triggerUpdatedEvent EventUpdateTrigger
+	context              context.Context
 }
 
+func (p *UpdateParam) WithContext(ctx context.Context) *UpdateParam {
+	p.context = ctx
+	return p
+}
 func (p *UpdateParam) WithTriggerEvent(triggerUpdateEvent EventUpdateTrigger) *UpdateParam {
 	p._triggerUpdatedEvent = triggerUpdateEvent
 	return p
@@ -660,6 +654,7 @@ func (p *UpdateParam) AppendFields(fields ...*Field) *UpdateParam {
 func (p UpdateParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._TableI.TableConfig()
+	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_UPDATE, fs...)
 	fs.SetTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_UPDATE)
 	data, err := fs.Data(layer_order...)
@@ -755,13 +750,50 @@ func (p UpdateParam) UpdateMustExists() (rowsAffected int64, err error) {
 	return rowsAffected, err
 }
 
+const (
+	Context_key_CacheDuration = "Context_CacheDuration"
+)
+
+func WithCacheDuration(ctx context.Context, duration time.Duration) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if duration <= 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, Context_key_CacheDuration, duration)
+}
+func GetCacheDuration(ctx context.Context) time.Duration {
+	if ctx == nil {
+		return 0
+	}
+	if v, ok := ctx.Value(Context_key_CacheDuration).(time.Duration); ok {
+		return v
+	}
+	return 0
+}
+
+type SelectParam struct {
+	_Table     TableI
+	_Fields    Fields
+	_log       LogI
+	handler    Handler
+	builderFns SelectBuilderFns
+	context    context.Context
+}
+
 type FirstParam struct {
 	_Table     TableI
 	_Fields    Fields
 	_log       LogI
 	handler    Handler
 	builderFns SelectBuilderFns
-	context    Context
+	context    context.Context
+}
+
+func (p *FirstParam) WithContext(ctx context.Context) *FirstParam {
+	p.context = ctx
+	return p
 }
 
 func NewFirstBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *FirstParam {
@@ -779,7 +811,7 @@ func (p *FirstParam) SetLog(log LogI) *FirstParam {
 }
 
 func (p *FirstParam) WithCacheDuration(duration time.Duration) *FirstParam {
-	p.context.CacheDuration = duration
+	p.context = WithCacheDuration(p.context, duration)
 	return p
 }
 
@@ -801,11 +833,12 @@ func (p *FirstParam) WithBuilderFns(builderFns ...SelectBuilderFn) *FirstParam {
 }
 
 func (p FirstParam) ToSQL() (sql string, err error) {
-	tableConfig := p._Table.TableConfig()
-	errWithMsg := fmt.Sprintf("FirstParam.ToSQL(),table:%s", tableConfig.Name)
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	tableConfig := p._Table.TableConfig()
+	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_SELECT, fs...)
 	fs.SetTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
+	errWithMsg := fmt.Sprintf("FirstParam.ToSQL(),table:%s", tableConfig.Name)
 	where, err := fs.Where()
 	if err != nil {
 		err = errors.Wrap(err, errWithMsg)
@@ -834,7 +867,8 @@ func (p FirstParam) First(result any) (exists bool, err error) {
 		return false, err
 	}
 	handler := p.handler
-	if p.context.CacheDuration > 0 {
+	cacheDuration := GetCacheDuration(p.context)
+	if cacheDuration > 0 {
 		handler = _WithCache(handler)
 	}
 	exists, err = handler.First(p.context, sql, result)
@@ -869,7 +903,12 @@ type ListParam struct {
 	_log       LogI
 	handler    Handler
 	builderFns SelectBuilderFns
-	context    Context
+	context    context.Context
+}
+
+func (p *ListParam) WithContext(ctx context.Context) *ListParam {
+	p.context = ctx
+	return p
 }
 
 func (p *ListParam) SetLog(log LogI) ListParam {
@@ -881,7 +920,7 @@ func (p *ListParam) WithHandler(handler Handler) *ListParam {
 	return p
 }
 func (p *ListParam) WithCacheDuration(duration time.Duration) *ListParam {
-	p.context.CacheDuration = duration
+	p.context = WithCacheDuration(p.context, duration)
 	return p
 }
 func (p *ListParam) WithBuilderFns(builderFns ...SelectBuilderFn) *ListParam {
@@ -909,6 +948,7 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	tableConfig := p._Table.TableConfig()
 	errWithMsg := fmt.Sprintf("ListParam.ToSQL(),table:%s", tableConfig.Name)
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_SELECT, fs...)
 	fs.SetTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := fs.Where()
@@ -951,7 +991,8 @@ func (p ListParam) List(result any) (err error) {
 		return err
 	}
 	handler := p.handler
-	if p.context.CacheDuration > 0 {
+	cacheDuration := GetCacheDuration(p.context)
+	if cacheDuration > 0 {
 		handler = _WithCache(handler) // 启用缓存中间件
 	}
 	err = handler.Query(p.context, sql, result)
@@ -986,6 +1027,7 @@ type ExistsParam struct {
 	allowEmptyWhereCondition bool
 	existsHandler            ExistsHandler
 	builderFns               SelectBuilderFns
+	context                  context.Context
 }
 
 func (p *ExistsParam) AppendFields(fields ...*Field) *ExistsParam {
@@ -996,7 +1038,10 @@ func (p *ExistsParam) SetLog(log LogI) ExistsParam {
 	p._log = log
 	return *p
 }
-
+func (p *ExistsParam) WithContext(ctx context.Context) *ExistsParam {
+	p.context = ctx
+	return p
+}
 func (p *ExistsParam) WithHandler(existsHandler ExistsHandler) *ExistsParam {
 	p.existsHandler = existsHandler
 	return p
@@ -1025,8 +1070,9 @@ func NewExistsBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *E
 
 func (p ExistsParam) ToSQL() (sql string, err error) {
 	tableConfig := p._Table.TableConfig()
+	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_EXISTS, fs...)
 	errWithMsg := fmt.Sprintf("ExistsParam.ToSQL(),table:%s", tableConfig.Name)
-	fs := p._Fields.Builder()            // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	fs.SetTable(tableConfig)             // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_EXISTS) // 存在场景，和SCENE_SQL_SELECT场景不一样，在set中，这个exists 必须实时查询数据，另外部分查询条件也和查询数据场景不一致，所以独立分开处理
 
@@ -1073,6 +1119,7 @@ type TotalParam struct {
 	_log         LogI
 	countHandler CountHandler
 	builderFns   SelectBuilderFns
+	context      context.Context
 }
 
 func NewTotalBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *TotalParam {
@@ -1084,6 +1131,11 @@ func NewTotalBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *To
 }
 func (p *TotalParam) SetLog(log LogI) *TotalParam {
 	p._log = log
+	return p
+}
+
+func (p *TotalParam) WithContext(ctx context.Context) *TotalParam {
+	p.context = ctx
 	return p
 }
 func (p *TotalParam) WithHandler(countHandler CountHandler) *TotalParam {
@@ -1106,9 +1158,10 @@ func (p *TotalParam) AppendFields(fields ...*Field) *TotalParam {
 
 func (p TotalParam) ToSQL() (sql string, err error) {
 	tableConfig := p._Table.TableConfig()
-	errWithMsg := fmt.Sprintf("TotalParam.ToSQL(),table:%s", tableConfig.Name)
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
-	fs.SetTable(tableConfig)  // 将表名设置到字段中,方便在ValueFn 中使用table变量
+	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_SELECT, fs...)
+	errWithMsg := fmt.Sprintf("TotalParam.ToSQL(),table:%s", tableConfig.Name)
+	fs.SetTable(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := fs.Where()
 	if err != nil {
@@ -1144,7 +1197,7 @@ type PaginationParam struct {
 	_Fields    Fields
 	handler    Handler
 	builderFns SelectBuilderFns
-	context    Context
+	context    context.Context
 }
 
 func (p *PaginationParam) AppendFields(fields ...*Field) *PaginationParam {
@@ -1157,13 +1210,17 @@ func NewPaginationBuilder(tableConfig TableConfig) *PaginationParam {
 		_Table: TableFn(func() TableConfig { return tableConfig }),
 	}
 }
+func (p *PaginationParam) WithContext(ctx context.Context) *PaginationParam {
+	p.context = ctx
+	return p
+}
 func (p *PaginationParam) WithHandler(handler Handler) *PaginationParam {
 	p.handler = handler
 	return p
 }
 
 func (p *PaginationParam) WithCacheDuration(duration time.Duration) *PaginationParam {
-	p.context.CacheDuration = duration
+	p.context = WithCacheDuration(p.context, duration)
 	return p
 }
 
@@ -1190,7 +1247,8 @@ func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 
 func (p PaginationParam) paginationHandler(totalSql string, listSql string, result any) (count int64, err error) {
 	handler := p.handler
-	if p.context.CacheDuration > 0 {
+	cacheDuration := GetCacheDuration(p.context)
+	if cacheDuration > 0 {
 		handler = _WithCache(handler)
 	}
 
@@ -1300,7 +1358,7 @@ func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string,
 
 func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
 	table := p._Table.TableConfig()
-	err = ExistsUniqueIndex(table)
+	err = table.CheckUniqueIndex(p._Fields...)
 	if err != nil {
 		return false, 0, 0, err
 	}

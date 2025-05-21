@@ -13,18 +13,18 @@ import (
 
 var CacheInstance = cache.MemeryCache()
 
-type Context struct {
-	CacheDuration time.Duration
-	Context       context.Context
-}
+// type Context struct {
+// 	CacheDuration time.Duration
+// 	Context       context.Context
+// }
 
 type EventInsertTrigger func(lastInsertId uint64, rowsAffected int64) (err error) // 新增事件触发器
 type EventUpdateTrigger func(rowsAffected int64) (err error)                      // 更新事件触发器
 type EventDeletedTrigger EventUpdateTrigger                                       // 删除事件触发器
 
 type CountHandler func(sql string) (count int64, err error)
-type QueryHandler func(context Context, sql string, result any) (err error)
-type FirstHandler func(context Context, sql string, result any) (exists bool, err error)
+type QueryHandler func(context context.Context, sql string, result any) (err error)
+type FirstHandler func(context context.Context, sql string, result any) (exists bool, err error)
 type ExecHandler func(sql string) (err error)
 type ExistsHandler func(sql string) (exists bool, err error)
 type ExecWithRowsAffectedHandler func(sql string) (rowsAffected int64, err error)
@@ -244,8 +244,8 @@ type Handler interface {
 	Exec(sql string) (err error)
 	ExecWithRowsAffected(sql string) (rowsAffected int64, err error)
 	InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error)
-	First(context Context, sql string, result any) (exists bool, err error)
-	Query(context Context, sql string, result any) (err error)
+	First(context context.Context, sql string, result any) (exists bool, err error)
+	Query(context context.Context, sql string, result any) (err error)
 	Count(sql string) (count int64, err error)
 	Exists(sql string) (exists bool, err error)
 	OriginalHandler() Handler // 获取原始handler，有时候需要绕过各种中间件，获取原始handler，比如 set 操作判断是否存在时，要绕过缓存中间件
@@ -276,7 +276,7 @@ func (h GormHandler) ExecWithRowsAffected(sql string) (rowsAffected int64, err e
 
 func (h GormHandler) Exists(sql string) (exists bool, err error) {
 	result := make([]any, 0)
-	ctx := Context{}
+	ctx := context.Background()
 	err = h.Query(ctx, sql, &result)
 	if err != nil {
 		return false, err
@@ -311,7 +311,7 @@ func (h GormHandler) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffe
 
 	return lastInsertId, rowsAffected, err
 }
-func (h GormHandler) First(ctx Context, sql string, result any) (exists bool, err error) {
+func (h GormHandler) First(ctx context.Context, sql string, result any) (exists bool, err error) {
 	err = h().Raw(sql).First(result).Error
 	exists = true
 	if err != nil {
@@ -328,7 +328,7 @@ func (h GormHandler) First(ctx Context, sql string, result any) (exists bool, er
 	return exists, nil
 }
 
-func (h GormHandler) Query(ctx Context, sql string, result any) (err error) {
+func (h GormHandler) Query(ctx context.Context, sql string, result any) (err error) {
 	err = h().Raw(sql).Find(result).Error
 	return err
 }
@@ -445,7 +445,7 @@ func (hc _HandlerSingleflight) InsertWithLastId(sql string) (lastInsertId uint64
 	rowsAffected = dbExecResult.RowsAffected
 	return lastInsertId, rowsAffected, nil
 }
-func (hc _HandlerSingleflight) First(ctx Context, sql string, result any) (exists bool, err error) {
+func (hc _HandlerSingleflight) First(ctx context.Context, sql string, result any) (exists bool, err error) {
 	rv := reflect.Indirect(reflect.ValueOf(result))
 	dbExecResultAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
 		v := reflect.New(rv.Type()).Interface()
@@ -467,7 +467,7 @@ func (hc _HandlerSingleflight) First(ctx Context, sql string, result any) (exist
 	exists = dbExecResult.Exists
 	return exists, nil
 }
-func (hc _HandlerSingleflight) Query(ctx Context, sql string, result any) (err error) {
+func (hc _HandlerSingleflight) Query(ctx context.Context, sql string, result any) (err error) {
 	rv := reflect.Indirect(reflect.ValueOf(result))
 	dbExecResultAny, err, _ := hc.group.Do(sql, func() (interface{}, error) {
 		v := reflect.New(rv.Type()).Interface()
@@ -548,16 +548,16 @@ func (hc _HandlerCache) ExecWithRowsAffected(sql string) (rowsAffected int64, er
 func (hc _HandlerCache) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
 	return hc.handler.InsertWithLastId(sql)
 }
-func (hc _HandlerCache) First(cxt Context, sql string, result any) (exists bool, err error) {
+func (hc _HandlerCache) First(ctx context.Context, sql string, result any) (exists bool, err error) {
 	cacheResult := _DBQueryResult{
 		Data: result, //此处必须将类型传入，否则 json 反序列化时，类型不对
 	}
 	err = cache.RememberWithCacheInstance(CacheInstance, sql, &cacheResult, func(dst *_DBQueryResult) (duration time.Duration, err error) {
-		dst.Exists, err = hc.handler.First(cxt, sql, dst.Data)
+		dst.Exists, err = hc.handler.First(ctx, sql, dst.Data)
 		if err != nil {
 			return 0, err
 		}
-		return cxt.CacheDuration, nil
+		return GetCacheDuration(ctx), nil
 	})
 	if err != nil {
 		return false, err
@@ -566,7 +566,7 @@ func (hc _HandlerCache) First(cxt Context, sql string, result any) (exists bool,
 	return exists, nil
 }
 
-func (hc _HandlerCache) Query(ctx Context, sql string, result any) (err error) {
+func (hc _HandlerCache) Query(ctx context.Context, sql string, result any) (err error) {
 	cacheResult := _DBQueryResult{
 		Data: result, //此处必须将类型传入，否则 json 反序列化时，类型不对
 	}
@@ -575,7 +575,7 @@ func (hc _HandlerCache) Query(ctx Context, sql string, result any) (err error) {
 		if err != nil {
 			return 0, err
 		}
-		return ctx.CacheDuration, nil
+		return GetCacheDuration(ctx), nil
 	})
 	if err != nil {
 		return err
@@ -652,10 +652,10 @@ func (hc _HandlerSingleflightDoOnce) ExecWithRowsAffected(sql string) (rowsAffec
 func (hc _HandlerSingleflightDoOnce) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
 	return hc.handler.InsertWithLastId(sql)
 }
-func (hc _HandlerSingleflightDoOnce) First(ctx Context, sql string, result any) (exists bool, err error) {
+func (hc _HandlerSingleflightDoOnce) First(ctx context.Context, sql string, result any) (exists bool, err error) {
 	return hc.handler.First(ctx, sql, result)
 }
-func (hc _HandlerSingleflightDoOnce) Query(ctx Context, sql string, result any) (err error) {
+func (hc _HandlerSingleflightDoOnce) Query(ctx context.Context, sql string, result any) (err error) {
 	return hc.handler.Query(ctx, sql, result)
 }
 func (hc _HandlerSingleflightDoOnce) Count(sql string) (count int64, err error) {
@@ -768,10 +768,10 @@ func (hc _HandlerTriggerAsyncEvent) InsertWithLastId(sql string) (lastInsertId u
 
 	return lastInsertId, rowsAffected, nil
 }
-func (hc _HandlerTriggerAsyncEvent) First(ctx Context, sql string, result any) (exists bool, err error) {
+func (hc _HandlerTriggerAsyncEvent) First(ctx context.Context, sql string, result any) (exists bool, err error) {
 	return hc.handler.First(ctx, sql, result)
 }
-func (hc _HandlerTriggerAsyncEvent) Query(ctx Context, sql string, result any) (err error) {
+func (hc _HandlerTriggerAsyncEvent) Query(ctx context.Context, sql string, result any) (err error) {
 	return hc.handler.Query(ctx, sql, result)
 }
 func (hc _HandlerTriggerAsyncEvent) Count(sql string) (count int64, err error) {

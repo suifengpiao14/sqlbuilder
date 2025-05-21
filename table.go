@@ -1,6 +1,8 @@
 package sqlbuilder
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -91,15 +93,15 @@ type TableConfig struct {
 	FieldName2DBColumnNameFn FieldName2DBColumnNameFn `json:"-"`
 	Schema                   SchemaConfig
 	handler                  Handler
-	Indexs                   Indexs                                                // 索引信息，唯一索引，在新增时会自动校验是否存在,更新时会自动保护
-	TableLevelFieldsHook     func(scene Scene, fs ...*Field) (hookedFields Fields) // 表级别的字段（值产生方式和实际数据无关），比如创建时间、更新时间、删除字段等，这些字段设置好后，相关操作可从此获取字段信息,增加该字段，方便封装delete操作、冗余字段自动填充等操作。
-
+	Indexs                   Indexs // 索引信息，唯一索引，在新增时会自动校验是否存在,更新时会自动保护
+	// 表级别的字段（值产生方式和实际数据无关），比如创建时间、更新时间、删除字段等，这些字段设置好后，相关操作可从此获取字段信息,增加该字段，方便封装delete操作、冗余字段自动填充等操作, 增加ctx 入参 方便使用ctx专递数据，比如 业务扩展多租户，只需表增加相关字段，在ctx中传递租户信息，并设置表级别字段场景即可
+	TableLevelFieldsHook func(ctx context.Context, scene Scene, fs ...*Field) (hookedFields Fields)
 }
 
 func NewTableConfig(name string) TableConfig {
 	return TableConfig{
 		DBName: DBName{Name: name},
-		TableLevelFieldsHook: func(scene Scene, fs ...*Field) (hookedFields Fields) {
+		TableLevelFieldsHook: func(ctx context.Context, scene Scene, fs ...*Field) (hookedFields Fields) {
 			return fs
 		},
 	}
@@ -126,6 +128,35 @@ func (t TableConfig) GetHandler() (handler Handler) {
 func (t TableConfig) GetDBNameByFieldName(fieldName string) (dbName string) {
 	col, _ := t.Columns.GetByFieldName(fieldName)
 	return col.DbName
+}
+
+func (t TableConfig) RunTableLevelFieldsHook(ctx context.Context, scene Scene, fs ...*Field) Fields {
+	if t.TableLevelFieldsHook != nil {
+		fs = t.TableLevelFieldsHook(ctx, scene, fs...)
+	}
+	return fs
+}
+
+func (t TableConfig) CheckUniqueIndex(fs ...*Field) (err error) {
+	indexs := t.Indexs.GetUnique()
+	for _, index := range indexs {
+		uFs := index.Fields(fs).AppendWhereValueFn(ValueFnForward) // 变成查询条件
+		if len(uFs) != len(index.ColumnNames) {                    // 如果唯一标识字段数量和筛选条件字段数量不一致，则忽略该唯一索引校验（如 update 时不涉及到指定唯一索引）
+			continue
+		}
+		exists, err := NewExistsBuilder(t).AppendFields(uFs...).Exists()
+		if err != nil {
+			return err
+		}
+		if exists {
+			data, _ := uFs.Data()
+			b, _ := json.Marshal(data)
+			s := string(b)
+			err := errors.Errorf("ExistsUniqueIndex unique index already exist table:%s,value%s ", t.Name, s)
+			return err
+		}
+	}
+	return nil
 }
 
 //Deprecated: use GetDBNameByFieldName instead
