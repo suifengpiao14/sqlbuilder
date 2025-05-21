@@ -750,8 +750,10 @@ func (p UpdateParam) UpdateMustExists() (rowsAffected int64, err error) {
 	return rowsAffected, err
 }
 
+type Context_Key string
+
 const (
-	Context_key_CacheDuration = "Context_CacheDuration"
+	Context_key_CacheDuration Context_Key = "Context_CacheDuration"
 )
 
 func WithCacheDuration(ctx context.Context, duration time.Duration) context.Context {
@@ -771,15 +773,6 @@ func GetCacheDuration(ctx context.Context) time.Duration {
 		return v
 	}
 	return 0
-}
-
-type SelectParam struct {
-	_Table     TableI
-	_Fields    Fields
-	_log       LogI
-	handler    Handler
-	builderFns SelectBuilderFns
-	context    context.Context
 }
 
 type FirstParam struct {
