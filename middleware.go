@@ -252,6 +252,7 @@ var ERROR_COLUMN_VALUE_EXISTS = errors.New("column value exists")
 var ERROR_Unique = errors.New("unique error")
 
 // Deprecated ApplyFnUnique use tableConfig.Indexs 设置unique index 代替，无需手动添加中间件
+/*
 func ApplyFnUnique(handler Handler) ApplyFn { // 复合索引，给一列应用该中间件即可
 	return func(f *Field, fs ...*Field) {
 		sceneFnName := "checkexists"
@@ -300,11 +301,11 @@ func ApplyFnUnique(handler Handler) ApplyFn { // 复合索引，给一列应用�
 		})
 	}
 }
-
+*/
 // Deprecated ApplyFnUniqueField 单列唯一索引键,新增场景中间件
-func ApplyFnUniqueField(handler Handler) ApplyFn {
-	return ApplyFnUnique(handler)
-}
+// func ApplyFnUniqueField(handler Handler) ApplyFn {
+// 	return ApplyFnUnique(handler)
+// }
 
 func ApplyFnUpdateIfNull(table TableConfig, handler Handler) ApplyFn {
 	return func(f *Field, fs ...*Field) {

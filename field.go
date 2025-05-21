@@ -363,7 +363,7 @@ type Field struct {
 	Name          string      `json:"name"`
 	ValueFns      ValueFns    `json:"-"` // 增加error，方便封装字段验证规则
 	WhereFns      ValueFns    `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	_OrderFn      OrderFn     `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	_OrderFn      OrderFn     `json:"-"` // 排序函数
 	Schema        *Schema     // 可以为空，为空建议设置默认值
 	table         TableConfig // 关联表,方便收集Table全量信息
 	scene         Scene       // 场景
@@ -373,7 +373,7 @@ type Field struct {
 	docName       string
 	selectColumns []any  // 查询时列
 	fieldName     string //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
-	indexs        Indexs // 索引
+	//indexs        Indexs // 索引(索引跟表走，不在领域语言上)
 	//applyFns      ApplyFns // apply 必须当场执行，因为存在apply函数嵌套apply函数,
 }
 
@@ -489,8 +489,8 @@ func (f *Field) Copy() (copyF *Field) {
 	}
 	tags := f.tags
 	fcp.tags = tags
-	indexs := f.indexs
-	fcp.indexs = indexs
+	// indexs := f.indexs
+	// fcp.indexs = indexs
 	return &fcp
 }
 
@@ -499,10 +499,10 @@ const (
 	Tag_updatedAt = "updatedAt"
 )
 
-func (f *Field) AddIndex(indexs ...Index) *Field {
-	f.indexs.Append(indexs...)
-	return f
-}
+// func (f *Field) AddIndex(indexs ...Index) *Field {
+// 	f.indexs.Append(indexs...)
+// 	return f
+// }
 
 func (f *Field) SetOrderFn(orderFn OrderFn) *Field {
 	f._OrderFn = orderFn
@@ -719,15 +719,15 @@ func (f *Field) HastTag(tag string) bool {
 	return f.tags.HastTag(tag)
 }
 
-func (f *Field) HasIndex(index Index) bool {
-	if len(f.indexs) == 0 {
-		return false
-	}
-	return f.indexs.HasIndex(index)
-}
-func (f *Field) GetIndexs() Indexs {
-	return f.indexs
-}
+// func (f *Field) HasIndex(index Index) bool {
+// 	if len(f.indexs) == 0 {
+// 		return false
+// 	}
+// 	return f.indexs.HasIndex(index)
+// }
+// func (f *Field) GetIndexs() Indexs {
+// 	return f.indexs
+// }
 
 func (f *Field) GetTags() Tags {
 	return f.tags
@@ -855,10 +855,10 @@ func (f *Field) Combine(combinedFields ...*Field) *Field {
 		if len(f.selectColumns) == 0 {
 			f.selectColumns = combined.selectColumns
 		}
-		f.indexs.Append(combined.indexs...)
-		if f.fieldName == "" {
-			f.fieldName = combined.fieldName
-		}
+		// f.indexs.Append(combined.indexs...)
+		// if f.fieldName == "" {
+		// 	f.fieldName = combined.fieldName
+		// }
 		f.tags.Append(combined.tags...)
 		f.sceneFns.Append(combined.sceneFns...)
 		//	f.ValueFns.Append(combined.ValueFns...) value 不可写入
@@ -1789,17 +1789,18 @@ func (fs Fields) GetByTags(tags ...string) (subFs Fields) {
 	}
 	return subFs
 }
-func (fs Fields) GetByIndex(indexs ...Index) (subFs Fields) {
-	subFs = make(Fields, 0)
-	for i := 0; i < len(fs); i++ {
-		for _, index := range indexs {
-			if fs[i].HasIndex(index) {
-				subFs = append(subFs, fs[i])
-			}
-		}
-	}
-	return subFs
-}
+
+// func (fs Fields) GetByIndex(indexs ...Index) (subFs Fields) {
+// 	subFs = make(Fields, 0)
+// 	for i := 0; i < len(fs); i++ {
+// 		for _, index := range indexs {
+// 			if fs[i].HasIndex(index) {
+// 				subFs = append(subFs, fs[i])
+// 			}
+// 		}
+// 	}
+// 	return subFs
+// }
 
 func (fs Fields) GetByFieldName(fieldName string) (*Field, bool) {
 	for i := 0; i < len(fs); i++ {
