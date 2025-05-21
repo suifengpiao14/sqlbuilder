@@ -1539,6 +1539,13 @@ func (fs Fields) Each(fn func(f *Field) error) error {
 	return nil
 }
 
+func (fs Fields) ApplyCunstomFn(customFn CustomFieldsFn) (newFs Fields) {
+	if customFn != nil {
+		fs = customFn(fs...)
+	}
+	return fs
+}
+
 func (fs Fields) Copy() (fields Fields) {
 	fields = make(Fields, 0)
 	for _, f := range fs {

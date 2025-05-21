@@ -262,6 +262,9 @@ func ConcatExpression(expressions ...exp.Expression) Expressions {
 	return expressions
 }
 
+// 设置字段支持多阶段设置，(比如 最初的调用入口、封装的服务固定字段、以及表级别的字段)CustomFieldsFn 用于在所有字段合并后给用户一个入口修改最终字段列表的机会(可扩展性更强)
+type CustomFieldsFn func(inputFs ...*Field) (fs Fields)
+
 // InsertParam 供子类复用,修改数据
 type InsertParam struct {
 	_TableI TableI
@@ -271,12 +274,19 @@ type InsertParam struct {
 	handler             Handler
 	_triggerInsertEvent EventInsertTrigger
 	context             context.Context
+	customFieldsFn      CustomFieldsFn
 }
 
 func (p *InsertParam) WithContext(ctx context.Context) *InsertParam {
 	p.context = ctx
 	return p
 }
+
+func (p *InsertParam) WithCustomFieldsFn(customFields CustomFieldsFn) *InsertParam {
+	p.customFieldsFn = customFields
+	return p
+}
+
 func (p *InsertParam) WithTriggerEvent(triggerInsertEvent EventInsertTrigger) *InsertParam {
 	p._triggerInsertEvent = triggerInsertEvent
 	return p
@@ -321,6 +331,7 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 	}
 	tableConfig := p._TableI.TableConfig()
 	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_INSERT, fs...)
+	fs = fs.ApplyCunstomFn(p.customFieldsFn)
 	fs.SetTable(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
 	rowData, err := fs.Data(layer_order...)
@@ -395,10 +406,16 @@ type BatchInsertParam struct {
 	handler             Handler
 	_triggerInsertEvent EventInsertTrigger
 	context             context.Context
+	customFieldsFn      CustomFieldsFn
 }
 
 func (p *BatchInsertParam) WithContext(ctx context.Context) *BatchInsertParam {
 	p.context = ctx
+	return p
+}
+
+func (p *BatchInsertParam) WithCustomFieldsFn(customFieldsFn CustomFieldsFn) *BatchInsertParam {
+	p.customFieldsFn = customFieldsFn
 	return p
 }
 
@@ -450,6 +467,7 @@ func (is BatchInsertParam) ToSQL() (sql string, err error) {
 	for _, fields := range is.rowFields {
 		fs := fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 		fs = tableConfig.RunTableLevelFieldsHook(is.context, SCENE_SQL_INSERT, fs...)
+		fs = fs.ApplyCunstomFn(is.customFieldsFn)
 		fs.SetTable(tableConfig)
 		fs.SetSceneIfEmpty(SCENE_SQL_INSERT)
 		rowData, err := fs.Data(layer_order...)
@@ -504,11 +522,17 @@ type DeleteParam struct {
 	handler              Handler
 	_triggerDeletedEvent EventDeletedTrigger
 	context              context.Context
+	customFieldsFn       CustomFieldsFn
 }
 
 func (p *DeleteParam) WithContext(ctx context.Context) DeleteParam {
 	p.context = ctx
 	return *p
+}
+
+func (p *DeleteParam) WithCustomFieldsFn(customFieldsFn CustomFieldsFn) *DeleteParam {
+	p.customFieldsFn = customFieldsFn
+	return p
 }
 
 func (p *DeleteParam) WithTriggerEvent(triggerDeletedEvent EventDeletedTrigger) *DeleteParam {
@@ -549,6 +573,7 @@ func (p DeleteParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._TableI.TableConfig()
 	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_DELETE, fs...)
+	fs = fs.ApplyCunstomFn(p.customFieldsFn)
 	fs.SetTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_DELETE)
 	f, err := fs.DeletedAt()
@@ -611,12 +636,19 @@ type UpdateParam struct {
 	handler              Handler
 	_triggerUpdatedEvent EventUpdateTrigger
 	context              context.Context
+	customFieldsFn       CustomFieldsFn
 }
 
 func (p *UpdateParam) WithContext(ctx context.Context) *UpdateParam {
 	p.context = ctx
 	return p
 }
+
+func (p *UpdateParam) WithCustomFieldsFn(customFieldsFn CustomFieldsFn) *UpdateParam {
+	p.customFieldsFn = customFieldsFn
+	return p
+}
+
 func (p *UpdateParam) WithTriggerEvent(triggerUpdateEvent EventUpdateTrigger) *UpdateParam {
 	p._triggerUpdatedEvent = triggerUpdateEvent
 	return p
@@ -655,6 +687,7 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._TableI.TableConfig()
 	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_UPDATE, fs...)
+	fs = fs.ApplyCunstomFn(p.customFieldsFn)
 	fs.SetTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_UPDATE)
 	data, err := fs.Data(layer_order...)
@@ -776,16 +809,22 @@ func GetCacheDuration(ctx context.Context) time.Duration {
 }
 
 type FirstParam struct {
-	_Table     TableI
-	_Fields    Fields
-	_log       LogI
-	handler    Handler
-	builderFns SelectBuilderFns
-	context    context.Context
+	_Table         TableI
+	_Fields        Fields
+	_log           LogI
+	handler        Handler
+	builderFns     SelectBuilderFns
+	context        context.Context
+	customFieldsFn CustomFieldsFn
 }
 
 func (p *FirstParam) WithContext(ctx context.Context) *FirstParam {
 	p.context = ctx
+	return p
+}
+
+func (p *FirstParam) WithCustomFieldsFn(customFieldsFn CustomFieldsFn) *FirstParam {
+	p.customFieldsFn = customFieldsFn
 	return p
 }
 
@@ -829,6 +868,7 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	tableConfig := p._Table.TableConfig()
 	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_SELECT, fs...)
+	fs = fs.ApplyCunstomFn(p.customFieldsFn)
 	fs.SetTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	errWithMsg := fmt.Sprintf("FirstParam.ToSQL(),table:%s", tableConfig.Name)
@@ -891,16 +931,21 @@ func (fns SelectBuilderFns) Apply(ds *goqu.SelectDataset) *goqu.SelectDataset {
 }
 
 type ListParam struct {
-	_Table     TableI
-	_Fields    Fields
-	_log       LogI
-	handler    Handler
-	builderFns SelectBuilderFns
-	context    context.Context
+	_Table         TableI
+	_Fields        Fields
+	_log           LogI
+	handler        Handler
+	builderFns     SelectBuilderFns
+	context        context.Context
+	customFieldsFn CustomFieldsFn
 }
 
 func (p *ListParam) WithContext(ctx context.Context) *ListParam {
 	p.context = ctx
+	return p
+}
+func (p *ListParam) WithCustomFieldsFn(customFieldsFn CustomFieldsFn) *ListParam {
+	p.customFieldsFn = customFieldsFn
 	return p
 }
 
@@ -942,6 +987,7 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	errWithMsg := fmt.Sprintf("ListParam.ToSQL(),table:%s", tableConfig.Name)
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_SELECT, fs...)
+	fs = fs.ApplyCunstomFn(p.customFieldsFn)
 	fs.SetTable(tableConfig)
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
 	where, err := fs.Where()
@@ -1021,6 +1067,7 @@ type ExistsParam struct {
 	handler                  Handler
 	builderFns               SelectBuilderFns
 	context                  context.Context
+	customFieldsFn           CustomFieldsFn
 }
 
 func (p *ExistsParam) AppendFields(fields ...*Field) *ExistsParam {
@@ -1033,6 +1080,10 @@ func (p *ExistsParam) SetLog(log LogI) ExistsParam {
 }
 func (p *ExistsParam) WithContext(ctx context.Context) *ExistsParam {
 	p.context = ctx
+	return p
+}
+func (p *ExistsParam) WithCustomFieldsFn(customFieldsFn CustomFieldsFn) *ExistsParam {
+	p.customFieldsFn = customFieldsFn
 	return p
 }
 func (p *ExistsParam) WithHandler(handler Handler) *ExistsParam {
@@ -1065,6 +1116,7 @@ func (p ExistsParam) ToSQL() (sql string, err error) {
 	tableConfig := p._Table.TableConfig()
 	fs := p._Fields.Builder()                                                    // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_SELECT, fs...) //后续启用SCENE_SQL_EXISTS 时，这里也要改
+	fs = fs.ApplyCunstomFn(p.customFieldsFn)
 	errWithMsg := fmt.Sprintf("ExistsParam.ToSQL(),table:%s", tableConfig.Name)
 	fs.SetTable(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	//fs.SetSceneIfEmpty(SCENE_SQL_EXISTS) // 存在场景，和SCENE_SQL_SELECT场景不一样，在set中，这个exists 必须实时查询数据，另外部分查询条件也和查询数据场景不一致，所以独立分开处理
@@ -1121,12 +1173,13 @@ func (p ExistsParam) Exists() (exists bool, err error) {
 }
 
 type TotalParam struct {
-	_Table     TableI
-	_Fields    Fields
-	_log       LogI
-	handler    Handler
-	builderFns SelectBuilderFns
-	context    context.Context
+	_Table         TableI
+	_Fields        Fields
+	_log           LogI
+	handler        Handler
+	builderFns     SelectBuilderFns
+	context        context.Context
+	customFieldsFn CustomFieldsFn
 }
 
 func NewTotalBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *TotalParam {
@@ -1143,6 +1196,10 @@ func (p *TotalParam) SetLog(log LogI) *TotalParam {
 
 func (p *TotalParam) WithContext(ctx context.Context) *TotalParam {
 	p.context = ctx
+	return p
+}
+func (p *TotalParam) WithCustomFieldsFn(customFieldsFn CustomFieldsFn) *TotalParam {
+	p.customFieldsFn = customFieldsFn
 	return p
 }
 func (p *TotalParam) WithHandler(handler Handler) *TotalParam {
@@ -1167,6 +1224,7 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 	tableConfig := p._Table.TableConfig()
 	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_SELECT, fs...)
+	fs = fs.ApplyCunstomFn(p.customFieldsFn)
 	errWithMsg := fmt.Sprintf("TotalParam.ToSQL(),table:%s", tableConfig.Name)
 	fs.SetTable(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
 	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
@@ -1200,11 +1258,12 @@ func (p TotalParam) Count() (total int64, err error) {
 }
 
 type PaginationParam struct {
-	_Table     TableI
-	_Fields    Fields
-	handler    Handler
-	builderFns SelectBuilderFns
-	context    context.Context
+	_Table         TableI
+	_Fields        Fields
+	handler        Handler
+	builderFns     SelectBuilderFns
+	context        context.Context
+	customFieldsFn CustomFieldsFn
 }
 
 func (p *PaginationParam) AppendFields(fields ...*Field) *PaginationParam {
@@ -1219,6 +1278,10 @@ func NewPaginationBuilder(tableConfig TableConfig) *PaginationParam {
 }
 func (p *PaginationParam) WithContext(ctx context.Context) *PaginationParam {
 	p.context = ctx
+	return p
+}
+func (p *PaginationParam) WithCustomFieldsFn(customFieldsFn CustomFieldsFn) *PaginationParam {
+	p.customFieldsFn = customFieldsFn
 	return p
 }
 func (p *PaginationParam) WithHandler(handler Handler) *PaginationParam {
@@ -1241,11 +1304,11 @@ func (p *PaginationParam) WithBuilderFns(builderFns ...SelectBuilderFn) *Paginat
 
 func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 	table := p._Table.TableConfig()
-	totalSql, err = NewTotalBuilder(table).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).ToSQL()
+	totalSql, err = NewTotalBuilder(table).WithCustomFieldsFn(p.customFieldsFn).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).ToSQL()
 	if err != nil {
 		return "", "", err
 	}
-	listSql, err = NewListBuilder(table).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).ToSQL()
+	listSql, err = NewListBuilder(table).WithCustomFieldsFn(p.customFieldsFn).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).ToSQL()
 	if err != nil {
 		return "", "", err
 	}
@@ -1303,6 +1366,8 @@ type SetParam struct {
 	setPolicy             SetPolicy // 更新策略,默认根据主键判断是否需要更新
 	_triggerInsertedEvent EventInsertTrigger
 	_triggerUpdatedEvent  EventUpdateTrigger
+	context               context.Context
+	customFieldsFn        CustomFieldsFn
 }
 
 func (p *SetParam) AppendFields(fields ...*Field) *SetParam {
@@ -1318,6 +1383,16 @@ func NewSetBuilder(tableConfig TableConfig) *SetParam {
 
 func (p *SetParam) WithPolicy(policy SetPolicy) *SetParam {
 	p.setPolicy = policy
+	return p
+}
+
+func (p *SetParam) WithContext(ctx context.Context) *SetParam {
+	p.context = ctx
+	return p
+}
+
+func (p *SetParam) WithCustomFieldsFn(customFieldsFn CustomFieldsFn) *SetParam {
+	p.customFieldsFn = customFieldsFn
 	return p
 }
 
@@ -1348,15 +1423,15 @@ func (p *SetParam) WithHandler(handler Handler) *SetParam {
 // ToSQL 一次生成 查询、新增、修改 sql,若查询后记录存在,并且需要根据数据库记录值修改数据,则可以重新赋值后生成sql
 func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string, err error) {
 	table := p._Table.TableConfig()
-	existsSql, err = NewExistsBuilder(table).AppendFields(p._Fields...).ToSQL() // 有些根据场景设置 如枚举值 ""，所有需要复制
+	existsSql, err = NewExistsBuilder(table).WithCustomFieldsFn(p.customFieldsFn).AppendFields(p._Fields...).ToSQL() // 有些根据场景设置 如枚举值 ""，所有需要复制
 	if err != nil {
 		return "", "", "", err
 	}
-	insertSql, err = NewInsertBuilder(table).AppendFields(p._Fields...).ToSQL()
+	insertSql, err = NewInsertBuilder(table).WithCustomFieldsFn(p.customFieldsFn).AppendFields(p._Fields...).ToSQL()
 	if err != nil {
 		return "", "", "", err
 	}
-	updateSql, err = NewUpdateBuilder(table).AppendFields(p._Fields...).ToSQL()
+	updateSql, err = NewUpdateBuilder(table).WithCustomFieldsFn(p.customFieldsFn).AppendFields(p._Fields...).ToSQL()
 	if err != nil {
 		return "", "", "", err
 	}
