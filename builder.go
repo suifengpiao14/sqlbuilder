@@ -42,7 +42,7 @@ func (b Builder) Handler() (handler Handler) { // 提供给外部使用
 }
 
 func (b Builder) TotalParam(fs ...*Field) *TotalParam {
-	p := NewTotalBuilder(b.table).WithHandler(b.handler.Count).AppendFields(fs...)
+	p := NewTotalBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
 	return p
 
 }
@@ -79,7 +79,7 @@ func (b Builder) DeleteParam(fs ...*Field) *DeleteParam {
 }
 
 func (b Builder) ExistsParam(fs ...*Field) *ExistsParam {
-	p := NewExistsBuilder(b.table).WithHandler(b.handler.Exists).AppendFields(fs...)
+	p := NewExistsBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
 	return p
 }
 func (b Builder) SetParam(fs ...*Field) *SetParam {
@@ -226,12 +226,12 @@ func (s Scene) Is(target Scene) bool {
 }
 
 const (
-	SCENE_SQL_INIT     Scene = "init" // 场景初始化，常用于清除前期设置，如当前字段只用于搜索(入参用于在2个字段上搜索)，其它场景不存在
-	SCENE_SQL_INSERT   Scene = "insert"
-	SCENE_SQL_UPDATE   Scene = "update"
-	SCENE_SQL_DELETE   Scene = "delete"
-	SCENE_SQL_SELECT   Scene = "select"
-	SCENE_SQL_EXISTS   Scene = "exists"
+	SCENE_SQL_INIT   Scene = "init" // 场景初始化，常用于清除前期设置，如当前字段只用于搜索(入参用于在2个字段上搜索)，其它场景不存在
+	SCENE_SQL_INSERT Scene = "insert"
+	SCENE_SQL_UPDATE Scene = "update"
+	SCENE_SQL_DELETE Scene = "delete"
+	SCENE_SQL_SELECT Scene = "select"
+	//SCENE_SQL_EXISTS   Scene = "exists"
 	SCENE_SQL_VIEW     Scene = "view"
 	SCENE_SQL_INCREASE Scene = "increse" // 字段递增
 	SCENE_SQL_DECREASE Scene = "decrese" // 字段递减
@@ -1025,7 +1025,7 @@ type ExistsParam struct {
 	_Fields                  Fields
 	_log                     LogI
 	allowEmptyWhereCondition bool
-	existsHandler            ExistsHandler
+	handler                  Handler
 	builderFns               SelectBuilderFns
 	context                  context.Context
 }
@@ -1042,8 +1042,8 @@ func (p *ExistsParam) WithContext(ctx context.Context) *ExistsParam {
 	p.context = ctx
 	return p
 }
-func (p *ExistsParam) WithHandler(existsHandler ExistsHandler) *ExistsParam {
-	p.existsHandler = existsHandler
+func (p *ExistsParam) WithHandler(handler Handler) *ExistsParam {
+	p.handler = handler
 	return p
 }
 func (p *ExistsParam) WithAllowEmptyWhereCondition(allowEmptyWhereCondition bool) *ExistsParam {
@@ -1070,11 +1070,23 @@ func NewExistsBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *E
 
 func (p ExistsParam) ToSQL() (sql string, err error) {
 	tableConfig := p._Table.TableConfig()
-	fs := p._Fields.Builder() // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
-	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_EXISTS, fs...)
+	fs := p._Fields.Builder()                                                    // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs = tableConfig.RunTableLevelFieldsHook(p.context, SCENE_SQL_SELECT, fs...) //后续启用SCENE_SQL_EXISTS 时，这里也要改
 	errWithMsg := fmt.Sprintf("ExistsParam.ToSQL(),table:%s", tableConfig.Name)
-	fs.SetTable(tableConfig)             // 将表名设置到字段中,方便在ValueFn 中使用table变量
-	fs.SetSceneIfEmpty(SCENE_SQL_EXISTS) // 存在场景，和SCENE_SQL_SELECT场景不一样，在set中，这个exists 必须实时查询数据，另外部分查询条件也和查询数据场景不一致，所以独立分开处理
+	fs.SetTable(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
+	//fs.SetSceneIfEmpty(SCENE_SQL_EXISTS) // 存在场景，和SCENE_SQL_SELECT场景不一样，在set中，这个exists 必须实时查询数据，另外部分查询条件也和查询数据场景不一致，所以独立分开处理
+	/*
+		* 2025-05-21 10:46 SCENE_SQL_EXISTS 场景不存在.
+		1. exists 必须实时查询，解决方案不在构造sql语句，而是在existsHandler 中处理，明确说明不使用缓存才是好的解决方案
+		2. 部分是否存在 的查询条件和 查询数据场景不一致，这种情况可以再构造ExistsParam时删除 预定义的SCENE_SQL_SELECT 场景条件，再手动添加条件,这样就可以再现有场景下处理特殊场景
+		为什么要否定SCENE_SQL_EXISTS场景：
+		1. 保持公共包的简洁性，简洁意味着易用
+		2. 预设场景条件时 insert、update、select、delete 容易想到，exists 场景容易忽略，增加使用负担
+		3. 历史项目中使用select场景，exists场景都没设置，这回导致包升级不兼容，会引起重大升级陷阱，不利于包迭代发展
+		处理方案：
+		暂时注销SCENE_SQL_EXISTS场景，后续确实需要exists场景，再重构SCENE_SQL_EXISTS场景处理逻辑
+	*/
+	fs.SetSceneIfEmpty(SCENE_SQL_SELECT)
 
 	where, err := fs.Where()
 	if err != nil {
@@ -1110,16 +1122,18 @@ func (p ExistsParam) Exists() (exists bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	return p.existsHandler(sql)
+	// 删除SCENE_SQL_EXISTS场景后需要确保确保exitsHandler 不会走缓存
+	existsHandler := WithSingleflightDoOnce(p.handler.OriginalHandler()).Exists // 屏蔽缓存中间件，同时防止单实例并发问题
+	return existsHandler(sql)
 }
 
 type TotalParam struct {
-	_Table       TableI
-	_Fields      Fields
-	_log         LogI
-	countHandler CountHandler
-	builderFns   SelectBuilderFns
-	context      context.Context
+	_Table     TableI
+	_Fields    Fields
+	_log       LogI
+	handler    Handler
+	builderFns SelectBuilderFns
+	context    context.Context
 }
 
 func NewTotalBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *TotalParam {
@@ -1138,8 +1152,8 @@ func (p *TotalParam) WithContext(ctx context.Context) *TotalParam {
 	p.context = ctx
 	return p
 }
-func (p *TotalParam) WithHandler(countHandler CountHandler) *TotalParam {
-	p.countHandler = countHandler
+func (p *TotalParam) WithHandler(handler Handler) *TotalParam {
+	p.handler = handler
 	return p
 }
 
@@ -1189,7 +1203,7 @@ func (p TotalParam) Count() (total int64, err error) {
 	if err != nil {
 		return -1, err
 	}
-	return p.countHandler(sql)
+	return p.handler.Count(sql)
 }
 
 type PaginationParam struct {

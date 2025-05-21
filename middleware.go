@@ -193,7 +193,7 @@ var ApplyFnValueEmpty2Nil ApplyFn = func(f *Field, fs ...*Field) {
 	f.ValueFns.Append(ValueFnEmpty2Nil)
 }
 
-func ValueFnMustNotExists(existsFn ExistsHandler) ValueFn {
+func ValueFnMustNotExists(handler Handler) ValueFn {
 	var valueFn ValueFn
 	valueFn = ValueFn{
 		Name:  "mustnotexists",
@@ -205,7 +205,7 @@ func ValueFnMustNotExists(existsFn ExistsHandler) ValueFn {
 			}
 			cp := f.Copy()
 			cp.ValueFns.Remove(valueFn)
-			exitstsParam := NewExistsBuilder(f.GetTable()).WithHandler(existsFn).AppendFields(cp)
+			exitstsParam := NewExistsBuilder(f.GetTable()).WithHandler(handler).AppendFields(cp)
 			exists, err := exitstsParam.Exists()
 			if err != nil {
 				return nil, err
@@ -220,7 +220,7 @@ func ValueFnMustNotExists(existsFn ExistsHandler) ValueFn {
 	return valueFn
 }
 
-func ValueFnMustExists(existsFn ExistsHandler) ValueFn {
+func ValueFnMustExists(handler Handler) ValueFn {
 	var valueFn ValueFn
 	valueFn = ValueFn{
 		Name:  "mustexists",
@@ -232,7 +232,7 @@ func ValueFnMustExists(existsFn ExistsHandler) ValueFn {
 			}
 			cp := f.Copy()
 			cp.ValueFns.Remove(valueFn)
-			exitstsParam := NewExistsBuilder(f.GetTable()).WithHandler(existsFn).AppendFields(cp)
+			exitstsParam := NewExistsBuilder(f.GetTable()).WithHandler(handler).AppendFields(cp)
 			exists, err := exitstsParam.Exists()
 			if err != nil {
 				return nil, err
@@ -252,7 +252,7 @@ var ERROR_COLUMN_VALUE_EXISTS = errors.New("column value exists")
 var ERROR_Unique = errors.New("unique error")
 
 // Deprecated ApplyFnUnique use tableConfig.Indexs 设置unique index 代替，无需手动添加中间件
-func ApplyFnUnique(existsFn ExistsHandler) ApplyFn { // 复合索引，给一列应用该中间件即可
+func ApplyFnUnique(handler Handler) ApplyFn { // 复合索引，给一列应用该中间件即可
 	return func(f *Field, fs ...*Field) {
 		sceneFnName := "checkexists"
 		sceneFn := SceneFn{
@@ -272,7 +272,7 @@ func ApplyFnUnique(existsFn ExistsHandler) ApplyFn { // 复合索引，给一列
 				})
 				f.ValueFns.Append(ValueFn{
 					Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
-						exitstsParam := NewExistsBuilder(table).WithHandler(existsFn).AppendFields(uniqueFields...)
+						exitstsParam := NewExistsBuilder(table).WithHandler(handler).AppendFields(uniqueFields...)
 						exists, err := exitstsParam.Exists()
 						if err != nil {
 							return nil, err
@@ -302,8 +302,8 @@ func ApplyFnUnique(existsFn ExistsHandler) ApplyFn { // 复合索引，给一列
 }
 
 // Deprecated ApplyFnUniqueField 单列唯一索引键,新增场景中间件
-func ApplyFnUniqueField(existsFn ExistsHandler) ApplyFn {
-	return ApplyFnUnique(existsFn)
+func ApplyFnUniqueField(handler Handler) ApplyFn {
+	return ApplyFnUnique(handler)
 }
 
 func ApplyFnUpdateIfNull(table TableConfig, handler Handler) ApplyFn {

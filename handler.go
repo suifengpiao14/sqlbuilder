@@ -23,12 +23,14 @@ type EventUpdateTrigger func(rowsAffected int64) (err error)                    
 type EventDeletedTrigger EventUpdateTrigger                                       // 删除事件触发器
 
 type CountHandler func(sql string) (count int64, err error)
-type QueryHandler func(context context.Context, sql string, result any) (err error)
-type FirstHandler func(context context.Context, sql string, result any) (exists bool, err error)
-type ExecHandler func(sql string) (err error)
-type ExistsHandler func(sql string) (exists bool, err error)
-type ExecWithRowsAffectedHandler func(sql string) (rowsAffected int64, err error)
-type InsertWithLastIdHandler func(sql string) (lastInsertId uint64, rowsAffected int64, err error)
+
+//type QueryHandler func(context context.Context, sql string, result any) (err error)
+//type FirstHandler func(context context.Context, sql string, result any) (exists bool, err error)
+//type ExecHandler func(sql string) (err error)
+
+// type ExistsHandler func(sql string) (exists bool, err error)
+//type ExecWithRowsAffectedHandler func(sql string) (rowsAffected int64, err error)
+//type InsertWithLastIdHandler func(sql string) (lastInsertId uint64, rowsAffected int64, err error)
 
 // func WarpUpdateWithEventTrigger(updateHander ExecWithRowsAffectedHandler, eventUpdateTrigger EventUpdateTrigger) ExecWithRowsAffectedHandler {
 // 	return func(sql string) (rowsAffected int64, err error) {
@@ -194,10 +196,10 @@ func (h Compiler) Delete() *DeleteParam {
 	return NewDeleteBuilder(h.Table()).WithHandler(h.Handler()).AppendFields(h.Fields()...)
 }
 func (h Compiler) Exists() *ExistsParam {
-	return NewExistsBuilder(h.Table()).WithHandler(h.Handler().Exists).AppendFields(h.Fields()...)
+	return NewExistsBuilder(h.Table()).WithHandler(h.Handler()).AppendFields(h.Fields()...)
 }
 func (h Compiler) Count() *TotalParam {
-	return NewTotalBuilder(h.Table()).WithHandler(h.Handler().Count).AppendFields(h.Fields()...)
+	return NewTotalBuilder(h.Table()).WithHandler(h.Handler()).AppendFields(h.Fields()...)
 }
 func (h Compiler) First() *FirstParam {
 	return NewFirstBuilder(h.Table()).WithHandler(h.Handler()).AppendFields(h.Fields()...)

@@ -1003,8 +1003,10 @@ func (f *Field) SceneSelect(middlewareFn ApplyFn) *Field {
 	f.Scene(NewScenes(SCENE_SQL_SELECT), middlewareFn)
 	return f
 }
+
+// Deprecated: 废弃，设置 SceneSelect 即可，目前保留函数签名，方便迭代升级，后续会删除此函数签名
 func (f *Field) SceneExists(middlewareFn ApplyFn) *Field {
-	f.Scene(NewScenes(SCENE_SQL_EXISTS), middlewareFn)
+	// f.Scene(NewScenes(SCENE_SQL_EXISTS), middlewareFn)
 	return f
 }
 
