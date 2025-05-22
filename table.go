@@ -102,7 +102,7 @@ func NewTableConfig(name string) TableConfig {
 	return TableConfig{
 		DBName: DBName{Name: name},
 		TableLevelFieldsHook: func(ctx context.Context, fs ...*Field) (hookedFields Fields) {
-			return fs
+			return
 		},
 	}
 }
@@ -146,11 +146,12 @@ func (t TableConfig) GetDBNameByFieldName(fieldName string) (dbName string) {
 }
 
 func (t TableConfig) MergeTableLevelFields(ctx context.Context, fs ...*Field) Fields {
+	fs1 := Fields(fs) //修改类型
 	if t.TableLevelFieldsHook != nil {
-		moreFields := t.TableLevelFieldsHook(ctx, fs...)
-		fs = append(fs, moreFields...)
+		moreFields := t.TableLevelFieldsHook(ctx, fs1...)
+		fs1.Append(moreFields...)
 	}
-	return fs
+	return fs1
 }
 
 func (t TableConfig) CheckUniqueIndex(fs ...*Field) (err error) {

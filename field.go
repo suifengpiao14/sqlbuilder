@@ -1,6 +1,7 @@
 package sqlbuilder
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -647,8 +648,60 @@ func (f *Field) SetDBName(dbName string) *Field {
 	f.dbName = dbName
 	return f
 }
+
+func ColumnToString(col any) string {
+	s := ""
+	switch v := col.(type) {
+	case string:
+		s = v
+	case exp.AliasedExpression:
+		s = identifierExpression2String(v.GetAs())
+	case exp.IdentifierExpression:
+		s = identifierExpression2String(v)
+	default:
+		s = cast.ToString(v)
+	}
+
+	return s
+}
+
+func identifierExpression2String(v exp.IdentifierExpression) string {
+	var w bytes.Buffer
+	schema := v.GetSchema()
+	if schema != "" {
+		w.WriteString(schema)
+		w.WriteString(".")
+	}
+	table := v.GetTable()
+	if table != "" {
+		w.WriteString(table)
+		w.WriteString(".")
+	}
+	col := v.GetCol()
+	if col != "" {
+		w.WriteString(cast.ToString(col))
+	}
+	s := w.String()
+	return s
+}
+
 func (f *Field) SetSelectColumns(columns ...any) *Field {
-	f.selectColumns = columns
+	colMap := make(map[any]string, 0)
+	for _, column := range columns {
+		colMap[column] = ColumnToString(column)
+	}
+
+	existsKeyMap := make(map[string]struct{}, 0)
+	for _, column := range f.selectColumns {
+		existsKeyMap[ColumnToString(column)] = struct{}{}
+	}
+	for _, col := range columns { // 保持稳定顺序
+		key := colMap[col]
+		if _, ok := existsKeyMap[key]; !ok {
+			existsKeyMap[key] = struct{}{}
+			f.selectColumns = append(f.selectColumns, col)
+		}
+	}
 	return f
 }
 
@@ -1747,13 +1800,25 @@ func (fs Fields) ApplyDelay() Fields {
 	return fields
 }
 
-func (fs *Fields) Append(fields ...*Field) *Fields {
+func (fs *Fields) Append(moreFields ...*Field) *Fields {
 	if *fs == nil {
 		*fs = make(Fields, 0)
 	}
-	*fs = append(*fs, fields...)
+	for _, f := range moreFields {
+		exists := false
+		for i := range *fs {
+			if (*fs)[i].Name == f.Name {
+				(*fs)[i].Combine(f) // 合并配置
+				break
+			}
+		}
+		if !exists {
+			*fs = append(*fs, f)
+		}
+	}
 	return fs
 }
+
 func (fs *Fields) Replace(fields ...*Field) *Fields {
 	if *fs == nil {
 		*fs = make(Fields, 0)
