@@ -95,13 +95,13 @@ type TableConfig struct {
 	handler                  Handler
 	Indexs                   Indexs // 索引信息，唯一索引，在新增时会自动校验是否存在,更新时会自动保护
 	// 表级别的字段（值产生方式和实际数据无关），比如创建时间、更新时间、删除字段等，这些字段设置好后，相关操作可从此获取字段信息,增加该字段，方便封装delete操作、冗余字段自动填充等操作, 增加ctx 入参 方便使用ctx专递数据，比如 业务扩展多租户，只需表增加相关字段，在ctx中传递租户信息，并设置表级别字段场景即可
-	TableLevelFieldsHook func(ctx context.Context, scene Scene, fs ...*Field) (hookedFields Fields)
+	TableLevelFieldsHook func(ctx context.Context, fs ...*Field) (hookedFields Fields)
 }
 
 func NewTableConfig(name string) TableConfig {
 	return TableConfig{
 		DBName: DBName{Name: name},
-		TableLevelFieldsHook: func(ctx context.Context, scene Scene, fs ...*Field) (hookedFields Fields) {
+		TableLevelFieldsHook: func(ctx context.Context, fs ...*Field) (hookedFields Fields) {
 			return fs
 		},
 	}
@@ -145,9 +145,10 @@ func (t TableConfig) GetDBNameByFieldName(fieldName string) (dbName string) {
 	return col.DbName
 }
 
-func (t TableConfig) RunTableLevelFieldsHook(ctx context.Context, scene Scene, fs ...*Field) Fields {
+func (t TableConfig) MergeTableLevelFields(ctx context.Context, fs ...*Field) Fields {
 	if t.TableLevelFieldsHook != nil {
-		fs = t.TableLevelFieldsHook(ctx, scene, fs...)
+		moreFields := t.TableLevelFieldsHook(ctx, fs...)
+		fs = append(fs, moreFields...)
 	}
 	return fs
 }

@@ -21,6 +21,12 @@ func (oFns ApplyFns) Apply(f *Field, fs ...*Field) {
 		oFn(f, fs...)
 	}
 }
+func (oFns *ApplyFns) Append(applyFns ...ApplyFn) {
+	if *oFns == nil {
+		*oFns = make(ApplyFns, 0)
+	}
+	*oFns = append(*oFns, applyFns...)
+}
 
 type SceneFn struct {
 	Name  string

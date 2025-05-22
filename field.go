@@ -1,6 +1,7 @@
 package sqlbuilder
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -371,8 +372,10 @@ type Field struct {
 	tags          Tags        // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
 	dbName        string
 	docName       string
-	selectColumns []any  // 查询时列
-	fieldName     string //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
+	selectColumns []any    // 查询时列
+	fieldName     string   //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
+	delayApplies  ApplyFns // 延迟执行函数
+
 	//indexs        Indexs // 索引(索引跟表走，不在领域语言上)
 	//applyFns      ApplyFns // apply 必须当场执行，因为存在apply函数嵌套apply函数,
 }
@@ -963,6 +966,12 @@ func (f *Field) Apply(applyFns ...ApplyFn) *Field {
 	return f
 }
 
+// SetDelayApply 延迟执行中间件,在 xxx.ToSQL()中调用，在执行后才执行中间件(如在设置f.SetSelectColumns 时需要获取 f.Table().Columns 信息时，就需要延迟执行中间件)
+func (f *Field) SetDelayApply(applyFns ...ApplyFn) *Field {
+	f.delayApplies.Append(applyFns...)
+	return f
+}
+
 func (f *Field) SceneInit(middlewareFns ...ApplyFn) *Field {
 	f.Scene(NewScenes(SCENE_SQL_INIT), middlewareFns...)
 	return f
@@ -1151,7 +1160,8 @@ func (f Field) GetDocName() string {
 	return f.docName
 }
 
-func (f *Field) Init(fs ...*Field) *Field {
+// InitBeforeCalValue 实际执行，计算值前的初始化
+func (f *Field) InitBeforeCalValue(fs ...*Field) *Field {
 	if f.sceneFns != nil {
 
 		initFns := f.sceneFns.GetByScene(SCENE_SQL_INIT) //init 场景每次都运行
@@ -1218,7 +1228,7 @@ func (f Field) getValue(layers []Layer, fs ...*Field) (value any, err error) {
 // WhereData 获取Where 值
 func (f1 Field) WhereData(layers []Layer, fs ...*Field) (value any, err error) {
 	f := *f1.Copy()
-	f.Init(fs...)
+	f.InitBeforeCalValue(fs...)
 	if len(f.WhereFns) == 0 {
 		return nil, nil
 	}
@@ -1337,7 +1347,7 @@ func (c Field) formatSingleType(val any) any {
 
 func (f1 Field) Data(layers []Layer, fs ...*Field) (data any, err error) {
 	f := *f1.Copy() // 复制一份,不影响其它场景
-	f.Init(fs...)
+	f.InitBeforeCalValue(fs...)
 
 	val, err := f.GetValue(layers, fs...)
 	if IsErrorValueNil(err) {
@@ -1578,15 +1588,26 @@ func (fs Fields) Copy() (fields Fields) {
 	return fields
 }
 
-func (fs Fields) Builder() (fields Fields) {
-	fields = fs.Copy() // 使用复制版本，后续调整部分初始化函数到这里
+func (fs Fields) Builder(ctx context.Context, scene Scene, tableConfig TableConfig, customFn CustomFieldsFn) (fields Fields) {
+	fields = fs.Copy()                    // 使用复制版本，后续调整部分初始化函数到这里
+	fields = fields.SetTable(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
+	fields = fields.ApplyCunstomFn(customFn)
+
+	fields = fields.SetTable(tableConfig) // 确保新增字段有table信息
+	fields = tableConfig.MergeTableLevelFields(ctx, fields...)
+
+	fields = fields.SetTable(tableConfig) // 确保新增字段有table信息
+	fields = fields.ApplyDelay()          // 复制完成后再执行延迟中间件，因为Builder可能运行多次，不能污染最初的fs 变量
+
+	fields = fields.SetTable(tableConfig)  // 最后确保所有字段有table信息
+	fields = fields.SetSceneIfEmpty(scene) // 确保所有字段有场景信息
 	return fields
 }
 
 // Validate 方便前期校验
 func (fs Fields) Validate() (err error) {
 	for _, f := range fs {
-		f.Init(fs...)
+		f.InitBeforeCalValue(fs...)
 		_, err = f.GetValue(Layer_Validate, fs...)
 		if err != nil {
 			return err
@@ -1715,6 +1736,15 @@ func (fs *Fields) Apply(applyFns ...ApplyFn) *Fields {
 		(*fs)[i] = (*fs)[i].Apply(applyFns...)
 	}
 	return fs
+}
+
+// ApplyDelay 执行延迟中间件，不影响已有的Feilds
+func (fs Fields) ApplyDelay() Fields {
+	fields := make(Fields, 0)
+	for _, f := range fs {
+		fields = append(fields, f.Apply(f.delayApplies...))
+	}
+	return fields
 }
 
 func (fs *Fields) Append(fields ...*Field) *Fields {
