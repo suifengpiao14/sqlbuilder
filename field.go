@@ -385,25 +385,36 @@ type Index struct {
 	IsPrimary bool `json:"isPrimary"` // 是否主键索引
 	Unique    bool `json:"unique"`    // 是否唯一索引
 	//Name        string   `json:"name"`   // 索引名称
-	ColumnNames []string //和 field.Name 对应,方便通过索引找到列
+	ColumnNames func(tableColumns ColumnConfigs) (columnNames []string) //在实际封装模块时,已知 Field.Name ,DB.Column.Name 未知，需要支持通过 Field.Name 转DB.Column.Name,所以设计成函数格式
+
 	//Order       int      `json:"order"` // 复合索引时,需要指定顺序,数字小的排前面
 }
 
-func (i Index) IndexName() string {
+func (i Index) GetColumnNames(tableColumns ColumnConfigs) []string {
+	if i.ColumnNames == nil {
+		err := errors.Errorf("Index.ColumnNames is nil")
+		panic(err)
+	}
+	columnNames := i.ColumnNames(tableColumns)
+	return columnNames
+}
+
+func (i Index) IndexName(tableColumns ColumnConfigs) string {
 	prefix := "idx"
 	if i.Unique {
 		prefix = "uniq"
 	}
-	arr := append([]string{prefix}, i.ColumnNames...)
+	arr := append([]string{prefix}, i.GetColumnNames(tableColumns)...)
 	indexName := strings.Join(arr, "_")
 	return indexName
 
 }
 
-func (i Index) Fields(allFields Fields) (fields Fields) {
+func (i Index) Fields(tableColumns ColumnConfigs, allFields Fields) (fields Fields) {
+	alldbCoumns := i.GetColumnNames(tableColumns)
 	for _, field := range allFields {
 		dbName := field.DBColumnName().BaseName()
-		ok := slices.Contains(i.ColumnNames, dbName)
+		ok := slices.Contains(alldbCoumns, dbName)
 		if ok {
 			fields = append(fields, field)
 		}
@@ -415,20 +426,20 @@ func (i Index) Fields(allFields Fields) (fields Fields) {
 
 type Indexs []Index
 
-func (indexs *Indexs) Append(subIndexs ...Index) {
+func (indexs *Indexs) Append(tableColumns ColumnConfigs, subIndexs ...Index) {
 	if *indexs == nil {
 		*indexs = make(Indexs, 0)
 	}
 	for _, index := range subIndexs {
-		if indexs.HasIndex(index) {
+		if indexs.HasIndex(index, tableColumns) {
 			continue
 		}
 		*indexs = append(*indexs, index)
 	}
 }
-func (indexs Indexs) HasIndex(index Index) bool {
+func (indexs Indexs) HasIndex(index Index, tableColumns ColumnConfigs) bool {
 	for _, i := range indexs {
-		if index.IndexName() == i.IndexName() && index.Unique == i.Unique {
+		if index.IndexName(tableColumns) == i.IndexName(tableColumns) && index.Unique == i.Unique {
 			return true
 		}
 	}
@@ -1025,6 +1036,19 @@ func IsGenericByFieldFn(rt reflect.Type) bool {
 	returnT := rt.Out(0)
 	canConvert := returnT.ConvertibleTo(reflect.TypeOf((*Field)(nil)))
 	return canConvert
+}
+
+// GetName 获取字段名称, 是NewXXXField("").Name 的便捷函数
+func (fn FieldFn[T]) GetName() string {
+	valueRf := new(T)
+	f := fn(*valueRf)
+	name := f.Name
+	return name
+}
+
+// GetFieldName 快捷获取字段名，结合 ColumnConfigs.FieldName2ColumnName 可快速获取字段名对应的数据库列名，用于创建索引
+func GetFieldName[T any](fn FieldFn[T]) (fieldName string) {
+	return fn.GetName()
 }
 
 func (fn FieldFn[T]) Apply(value T) *Field {
@@ -1756,6 +1780,14 @@ func (fs Fields) AppendWhereValueFn(whereValueFns ...ValueFn) Fields {
 	}
 
 	return fs
+}
+
+func (fs Fields) Names() (names []string) {
+	names = make([]string, 0)
+	for _, f := range fs {
+		names = append(names, f.Name)
+	}
+	return names
 }
 
 // DocNameWrapArrFn 将文档列名称前增加数组符号

@@ -107,8 +107,23 @@ func NewTableConfig(name string) TableConfig {
 	}
 }
 
+func (t TableConfig) WithTableName(name string) TableConfig {
+	t.DBName = DBName{Name: name}
+	return t
+}
+
 func (t TableConfig) AddColumns(columns ...ColumnConfig) TableConfig {
 	t.Columns.AddColumns(columns...)
+	return t
+}
+
+func (t TableConfig) WalkColumn(walkColumnFn func(columnConfig ColumnConfig) ColumnConfig) TableConfig {
+	t.Columns.WalkColumn(walkColumnFn)
+	return t
+}
+
+func (t TableConfig) AddIndexs(indexs ...Index) TableConfig {
+	t.Indexs.Append(t.Columns, indexs...)
 	return t
 }
 
@@ -140,8 +155,9 @@ func (t TableConfig) RunTableLevelFieldsHook(ctx context.Context, scene Scene, f
 func (t TableConfig) CheckUniqueIndex(fs ...*Field) (err error) {
 	indexs := t.Indexs.GetUnique()
 	for _, index := range indexs {
-		uFs := index.Fields(fs).AppendWhereValueFn(ValueFnForward) // 变成查询条件
-		if len(uFs) != len(index.ColumnNames) {                    // 如果唯一标识字段数量和筛选条件字段数量不一致，则忽略该唯一索引校验（如 update 时不涉及到指定唯一索引）
+		uFs := index.Fields(t.Columns, fs).AppendWhereValueFn(ValueFnForward) // 变成查询条件
+		columnNames := index.GetColumnNames(t.Columns)
+		if len(uFs) != len(columnNames) { // 如果唯一标识字段数量和筛选条件字段数量不一致，则忽略该唯一索引校验（如 update 时不涉及到指定唯一索引）
 			continue
 		}
 		exists, err := NewExistsBuilder(t).AppendFields(uFs...).Exists()
@@ -294,6 +310,15 @@ func (cs *ColumnConfigs) AddColumns(cols ...ColumnConfig) {
 	*cs = append(*cs, cols...)
 }
 
+func (cs ColumnConfigs) WalkColumn(walkFn func(columnConfig ColumnConfig) ColumnConfig) {
+	if walkFn == nil {
+		return
+	}
+	for i := range cs {
+		(cs)[i] = walkFn((cs)[i])
+	}
+}
+
 func (cs ColumnConfigs) Merge(others ...ColumnConfig) ColumnConfigs {
 	cs = append(cs, others...)
 	return cs
@@ -308,6 +333,17 @@ func (cs ColumnConfigs) GetByFieldNameMust(fieldName string) (c ColumnConfig) {
 	}
 	return c
 }
+
+func (cs ColumnConfigs) FieldName2ColumnName(fieldNames ...string) (columnNames []string) {
+	columnNames = make([]string, len(fieldNames))
+
+	for i, fieldName := range fieldNames {
+		c := cs.GetByFieldNameMust(fieldName)
+		columnNames[i] = c.DbName
+	}
+	return columnNames
+}
+
 func (cs ColumnConfigs) GetByFieldName(fieldName string) (c ColumnConfig, exists bool) {
 	for _, c := range cs {
 		if strings.EqualFold(c.FieldName, fieldName) {
