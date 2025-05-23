@@ -354,3 +354,31 @@ func (cs ColumnConfigs) GetByFieldName(fieldName string) (c ColumnConfig, exists
 	}
 	return c, false
 }
+
+func (cs ColumnConfigs) FilterByFieldName(fieldNames ...string) (result ColumnConfigs) {
+	for _, c := range cs {
+		if slices.Contains(fieldNames, c.FieldName) {
+			result.AddColumns(c)
+		}
+	}
+	return result
+}
+
+type AliasedExpressions []exp.AliasedExpression
+
+// AsAny 转成任意类型，主要用于Field.SetSelectColumns
+func (a AliasedExpressions) AsAny() []any {
+	var result []any
+	for _, a := range a {
+		result = append(result, a)
+	}
+	return result
+}
+
+func (cs ColumnConfigs) DbNameWithAlias() AliasedExpressions {
+	var result AliasedExpressions
+	for _, c := range cs {
+		result = append(result, goqu.I(c.DbName).As(c.FieldName))
+	}
+	return result
+}

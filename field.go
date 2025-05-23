@@ -1597,6 +1597,14 @@ func (fs Fields) Fields() Fields {
 	return fs
 }
 
+func (fs Fields) FirstMust() *Field {
+	if len(fs) == 0 {
+		err := errors.Errorf("Fields is empty")
+		panic(err)
+	}
+	return fs[0]
+}
+
 //GetBySampleField 根据样板(未完全配置的初始化字段)获取对应的配置完备的字段，如果没有则返回样板本身，常用于从fields集合中筛选字段
 
 func (fs Fields) GetBySampleField(field *Field) (f *Field) {
@@ -1628,7 +1636,7 @@ func (fs Fields) Each(fn func(f *Field) error) error {
 
 func (fs Fields) ApplyCunstomFn(customFn CustomFieldsFn) (newFs Fields) {
 	if customFn != nil {
-		fs = customFn(fs...)
+		fs = customFn(fs)
 	}
 	return fs
 }
@@ -1948,13 +1956,22 @@ func (fs Fields) GetByFieldName(fieldName string) (*Field, bool) {
 
 // GetByName 通过名称获取field, 也可用户判断指定name是否存在
 func (fs Fields) GetByName(name string) (*Field, bool) {
-	for i := 0; i < len(fs); i++ {
-		f := fs[i]
-		if strings.EqualFold(name, f.Name) {
-			return f, true
+	for i := range fs {
+		if strings.EqualFold(name, fs[i].Name) {
+			return fs[i], true
 		}
 	}
 	return nil, false
+}
+
+func (fs Fields) GetByNameMust(name string) *Field {
+	for i := range fs {
+		if strings.EqualFold(name, fs[i].Name) {
+			return fs[i]
+		}
+	}
+	err := errors.Errorf("not found Field by name:%s", name)
+	panic(err)
 }
 
 func (fs Fields) DBNames() (dbNames []string, err error) {

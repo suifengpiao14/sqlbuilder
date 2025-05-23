@@ -263,7 +263,7 @@ func ConcatExpression(expressions ...exp.Expression) Expressions {
 }
 
 // 设置字段支持多阶段设置，(比如 最初的调用入口、封装的服务固定字段、以及表级别的字段)CustomFieldsFn 用于在所有字段合并后给用户一个入口修改最终字段列表的机会(可扩展性更强)
-type CustomFieldsFn func(inputFs ...*Field) (fs Fields)
+type CustomFieldsFn func(fs Fields) (customedFs Fields)
 
 // InsertParam 供子类复用,修改数据
 type InsertParam struct {
