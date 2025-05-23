@@ -68,7 +68,7 @@ type CountHandler func(sql string) (count int64, err error)
 
 type CompilerConfig struct {
 	Table       TableConfig
-	Handler     Handler `json:"-"`
+	Handler     Handler `json:"-"` // 支持事务句柄
 	FieldsApply ApplyFn `json:"-"`
 }
 

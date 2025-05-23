@@ -271,7 +271,7 @@ type InsertParam struct {
 	_Fields Fields
 	_log    LogI
 	//execHandler             ExecHandler
-	handler             Handler
+	handler             Handler // 支持事务句柄
 	_triggerInsertEvent EventInsertTrigger
 	context             context.Context
 	customFieldsFn      CustomFieldsFn
@@ -399,7 +399,7 @@ type BatchInsertParam struct {
 	_TableI   TableI
 	_log      LogI
 	//execHandler             ExecHandler
-	handler             Handler
+	handler             Handler // 支持事务句柄
 	_triggerInsertEvent EventInsertTrigger
 	context             context.Context
 	customFieldsFn      CustomFieldsFn
@@ -511,7 +511,7 @@ type DeleteParam struct {
 	_TableI              TableI
 	_Fields              Fields
 	_log                 LogI
-	handler              Handler
+	handler              Handler // 支持事务句柄
 	_triggerDeletedEvent EventDeletedTrigger
 	context              context.Context
 	customFieldsFn       CustomFieldsFn
@@ -621,7 +621,7 @@ type UpdateParam struct {
 	_TableI              TableI
 	_Fields              Fields
 	_log                 LogI
-	handler              Handler
+	handler              Handler // 支持事务句柄
 	_triggerUpdatedEvent EventUpdateTrigger
 	context              context.Context
 	customFieldsFn       CustomFieldsFn
@@ -796,7 +796,7 @@ type FirstParam struct {
 	_Table         TableI
 	_Fields        Fields
 	_log           LogI
-	handler        Handler
+	handler        Handler // 支持事务句柄
 	builderFns     SelectBuilderFns
 	context        context.Context
 	customFieldsFn CustomFieldsFn
@@ -914,7 +914,7 @@ type ListParam struct {
 	_Table         TableI
 	_Fields        Fields
 	_log           LogI
-	handler        Handler
+	handler        Handler // 支持事务句柄
 	builderFns     SelectBuilderFns
 	context        context.Context
 	customFieldsFn CustomFieldsFn
@@ -1040,7 +1040,7 @@ type ExistsParam struct {
 	_Fields                  Fields
 	_log                     LogI
 	allowEmptyWhereCondition bool
-	handler                  Handler
+	handler                  Handler // 支持事务句柄
 	builderFns               SelectBuilderFns
 	context                  context.Context
 	customFieldsFn           CustomFieldsFn
@@ -1148,7 +1148,7 @@ type TotalParam struct {
 	_Table         TableI
 	_Fields        Fields
 	_log           LogI
-	handler        Handler
+	handler        Handler // 支持事务句柄
 	builderFns     SelectBuilderFns
 	context        context.Context
 	customFieldsFn CustomFieldsFn
@@ -1228,7 +1228,7 @@ func (p TotalParam) Count() (total int64, err error) {
 type PaginationParam struct {
 	_Table         TableI
 	_Fields        Fields
-	handler        Handler
+	handler        Handler // 支持事务句柄
 	builderFns     SelectBuilderFns
 	context        context.Context
 	customFieldsFn CustomFieldsFn
@@ -1330,7 +1330,7 @@ const (
 type SetParam struct {
 	_Table                TableI
 	_Fields               Fields
-	handler               Handler
+	handler               Handler   // 支持事务句柄
 	setPolicy             SetPolicy // 更新策略,默认根据主键判断是否需要更新
 	_triggerInsertedEvent EventInsertTrigger
 	_triggerUpdatedEvent  EventUpdateTrigger
@@ -1407,11 +1407,12 @@ func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string,
 }
 
 func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
-	table := p._Table.TableConfig()
-	err = table.CheckUniqueIndex(p._Fields...)
-	if err != nil {
-		return false, 0, 0, err
-	}
+	// 因为自带 exists 查询，所以不需要校验唯一索引了，否则 存在 table.CheckUniqueIndex 就会报错，达不到update 效果
+	// table := p._Table.TableConfig()
+	// err = table.CheckUniqueIndex(p._Fields...)
+	// if err != nil {
+	// 	return false, 0, 0, err
+	// }
 	existsSql, insertSql, updateSql, err := p.ToSQL()
 	if err != nil {
 		return false, 0, 0, err

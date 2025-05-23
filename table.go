@@ -154,6 +154,8 @@ func (t TableConfig) MergeTableLevelFields(ctx context.Context, fs ...*Field) Fi
 	return fs1
 }
 
+var Error_UniqueIndexAlreadyExist = errors.New("unique index already exist")
+
 func (t TableConfig) CheckUniqueIndex(fs ...*Field) (err error) {
 	indexs := t.Indexs.GetUnique()
 	for _, index := range indexs {
@@ -162,7 +164,7 @@ func (t TableConfig) CheckUniqueIndex(fs ...*Field) (err error) {
 		if len(uFs) != len(columnNames) { // 如果唯一标识字段数量和筛选条件字段数量不一致，则忽略该唯一索引校验（如 update 时不涉及到指定唯一索引）
 			continue
 		}
-		exists, err := NewExistsBuilder(t).AppendFields(uFs...).Exists()
+		exists, err := NewExistsBuilder(t).WithHandler(t.handler).AppendFields(uFs...).Exists()
 		if err != nil {
 			return err
 		}
@@ -170,7 +172,7 @@ func (t TableConfig) CheckUniqueIndex(fs ...*Field) (err error) {
 			data, _ := uFs.Data()
 			b, _ := json.Marshal(data)
 			s := string(b)
-			err := errors.Errorf("ExistsUniqueIndex unique index already exist table:%s,value%s ", t.Name, s)
+			err := errors.WithMessagef(Error_UniqueIndexAlreadyExist, "table:%s,value%s ", t.Name, s)
 			return err
 		}
 	}

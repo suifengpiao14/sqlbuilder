@@ -2004,6 +2004,9 @@ func (fs Fields) Order() (orderedExpressions []exp.OrderedExpression) {
 }
 
 func (fs Fields) Data(layers ...Layer) (data any, err error) {
+	if len(layers) == 0 {
+		layers = append(layers, Value_Layer_SetValue)
+	}
 	dataMap := make(map[string]any, 0)
 	for _, f := range fs {
 		data, err := f.Data(layers, fs...)
