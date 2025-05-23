@@ -6,20 +6,17 @@ type SelectBuilderFnsI interface {
 
 type RepositoryCommand struct {
 	tableConfig TableConfig
-	handler     Handler
 }
 
 func NewRepositoryCommand(tableConfig TableConfig) RepositoryCommand {
 	return RepositoryCommand{
 		tableConfig: tableConfig,
-		handler:     tableConfig.handler,
 	}
 }
 
-//GetHandler 返回当前操作的 Handler 对象。增加handler 返回，方便外部调用handler 进行其他操作 比如事务处理、值验证的 唯一验证等操作。
-
+// Deprecated  use GetTableConfig.GetHander() instead.
 func (s RepositoryCommand) GetHandler() Handler {
-	return s.handler
+	return s.tableConfig.GetHandler()
 }
 
 func (s RepositoryCommand) GetTableConfig() TableConfig {
@@ -27,7 +24,7 @@ func (s RepositoryCommand) GetTableConfig() TableConfig {
 }
 
 func (s RepositoryCommand) getConfig() CompilerConfig {
-	cfg := CompilerConfig{}.WithHandlerIgnore(s.handler).WithTableIgnore(s.tableConfig)
+	cfg := CompilerConfig{}.WithHandlerIgnore(s.tableConfig.handler).WithTableIgnore(s.tableConfig)
 	return cfg
 }
 
@@ -101,20 +98,24 @@ func (s RepositoryCommand) Delete(fields Fields, customFn CustomFnDeleteParam) (
 
 type RepositoryQuery[Model any] struct {
 	tableConfig TableConfig
-	handler     Handler
 }
 
 func NewRepositoryQuery[Model any](tableConfig TableConfig) RepositoryQuery[Model] {
 	return RepositoryQuery[Model]{
 		tableConfig: tableConfig,
-		handler:     tableConfig.handler,
 	}
 }
+
+func (s RepositoryQuery[Model]) GetTableConfig() TableConfig {
+	return s.tableConfig
+}
+
+// Deprecated  use GetTableConfig.GetHander() instead.
 func (s RepositoryQuery[Model]) GetHandler() Handler {
-	return s.handler
+	return s.tableConfig.GetHandler()
 }
 func (s RepositoryQuery[Model]) getConfig() CompilerConfig {
-	cfg := CompilerConfig{}.WithHandlerIgnore(s.handler).WithTableIgnore(s.tableConfig)
+	cfg := CompilerConfig{}.WithHandlerIgnore(s.tableConfig.handler).WithTableIgnore(s.tableConfig)
 	return cfg
 }
 
@@ -127,6 +128,14 @@ func (s RepositoryQuery[Model]) First(fields Fields, customFn CustomFnFirstParam
 	}
 	exists, err = builder.First(&model)
 	return model, exists, err
+}
+func (s RepositoryQuery[Model]) FirstMustExists(fields Fields, customFn CustomFnFirstParam) (model Model, err error) {
+	builder := NewCompiler(s.getConfig(), fields...).First()
+	if customFn != nil {
+		customFn(builder)
+	}
+	err = builder.FirstMustExists(&model)
+	return model, err
 }
 
 type CustomFnPaginationParam func(pagination *PaginationParam)

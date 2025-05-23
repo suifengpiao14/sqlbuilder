@@ -894,7 +894,7 @@ func (p FirstParam) FirstMustExists(result any) (err error) {
 		return err
 	}
 	if !exists {
-		return errors.New("record not found")
+		return ERROR_NOT_FOUND
 	}
 	return nil
 }
