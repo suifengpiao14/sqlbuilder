@@ -22,7 +22,7 @@ type EventInsertTrigger func(lastInsertId uint64, rowsAffected int64) (err error
 type EventUpdateTrigger func(rowsAffected int64) (err error)                      // 更新事件触发器
 type EventDeletedTrigger EventUpdateTrigger                                       // 删除事件触发器
 
-type CountHandler func(sql string) (count int64, err error)
+//type CountHandler func(sql string) (count int64, err error)
 
 //type QueryHandler func(context context.Context, sql string, result any) (err error)
 //type FirstHandler func(context context.Context, sql string, result any) (exists bool, err error)
