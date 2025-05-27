@@ -128,7 +128,8 @@ func (t TableConfig) AddIndexs(indexs ...Index) TableConfig {
 }
 
 func (t TableConfig) WithHandler(handler Handler) TableConfig {
-	t.handler = handler
+	t.handler = handler // 此处需要兼容事务句柄设置，不可影响已有的handler设置,所以不能使用地址引用方式覆盖，而是返回一个新的TableConfig实例
+
 	return t
 }
 
