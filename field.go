@@ -2318,12 +2318,12 @@ func toLowerFirst(s string) string {
 type StructFieldSource string
 
 const (
-	StructFieldSource_StructAttr = "structAttr"
-	StructFieldSource_JsonTag    = "jsonTag"
-	StructFieldSource_GormTag    = "gormTag"
+	StructFieldSource_StructAttr StructFieldSource = "structAttr"
+	StructFieldSource_JsonTag    StructFieldSource = "jsonTag"
+	StructFieldSource_GormTag    StructFieldSource = "gormTag"
 )
 
-// MakeFieldsFromStruct 从结构体字段,gorm tag,json tag 生成字段信息
+// MakeFieldsFromStruct 从结构体字段,gorm tag,json tag 生成字段信息 主要用于新增记录场景(大表字段太多，直接复用query 的model)
 func MakeFieldsFromStruct(m any, source StructFieldSource, table TableConfig) (fs Fields) {
 	if m == nil {
 		return fs
