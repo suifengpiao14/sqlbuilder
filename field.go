@@ -2334,6 +2334,7 @@ func MakeFieldsFromStruct(m any, source StructFieldSource, table TableConfig) (f
 	case reflect.Struct:
 		for i := range typ.NumField() {
 			attr := typ.Field(i)
+			value := val.Field(i).Interface()
 			fieldName := ""
 			switch source {
 			case StructFieldSource_StructAttr:
@@ -2360,7 +2361,7 @@ func MakeFieldsFromStruct(m any, source StructFieldSource, table TableConfig) (f
 				ValueFns: ValueFns{
 					ValueFn{
 						Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
-							return val.Interface(), nil
+							return value, nil
 						},
 					},
 				},
