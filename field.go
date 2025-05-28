@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/doug-martin/goqu/v9/exp"
@@ -2302,4 +2304,89 @@ func structToFields(val reflect.Value,
 		m[docName] = true
 	}
 	return uFs
+}
+
+func toLowerFirst(s string) string {
+	if s == "" {
+		return ""
+	}
+	runes := []rune(s)
+	runes[0] = unicode.ToLower(runes[0])
+	return string(runes)
+}
+
+type StructFieldSource string
+
+const (
+	StructFieldSource_StructAttr = "structAttr"
+	StructFieldSource_JsonTag    = "jsonTag"
+	StructFieldSource_GormTag    = "gormTag"
+)
+
+// MakeFieldsFromStruct 从结构体字段,gorm tag,json tag 生成字段信息
+func MakeFieldsFromStruct(m any, source StructFieldSource, table TableConfig) (fs Fields) {
+	if m == nil {
+		return fs
+	}
+	val := reflect.Indirect(reflect.ValueOf(m))
+	typ := val.Type()
+	switch typ.Kind() {
+	case reflect.Struct:
+		for i := range typ.NumField() {
+			attr := typ.Field(i)
+			fieldName := ""
+			switch source {
+			case StructFieldSource_StructAttr:
+				fieldName = toLowerFirst(attr.Name)
+			case StructFieldSource_JsonTag:
+				jsonTag := attr.Tag.Get("json")
+				if jsonTag != "-" {
+					fieldName = jsonTag
+				}
+			case StructFieldSource_GormTag:
+				dbColumnName := extractGormColumn(attr.Tag)
+				if dbColumnName == "" {
+					continue
+				}
+				fieldName = table.Columns.GetByDbNameMust(dbColumnName).FieldName
+			}
+
+			if fieldName == "" {
+				continue
+			}
+
+			f := &Field{
+				Name: fieldName,
+				ValueFns: ValueFns{
+					ValueFn{
+						Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
+							return val.Interface(), nil
+						},
+					},
+				},
+			}
+			fs.Append(f)
+		}
+	default:
+		err := errors.New("MakeFieldsFromAttrName m require struct type")
+		panic(err)
+	}
+	return fs
+
+}
+
+// 提取字段中的 gorm:"column:xxx" 值
+func extractGormColumn(tag reflect.StructTag) string {
+	gormTag := tag.Get("gorm")
+	// 使用正则匹配 column:<字段名>
+	re := regexp.MustCompile(`column:([a-zA-Z0-9_]+)`)
+	matches := re.FindStringSubmatch(gormTag)
+	if len(matches) == 2 {
+		fieldName := matches[1] // 返回字段名
+		if fieldName == "-" {
+			fieldName = ""
+		}
+		return fieldName
+	}
+	return ""
 }

@@ -339,6 +339,15 @@ func (cs ColumnConfigs) GetByFieldNameMust(fieldName string) (c ColumnConfig) {
 	return c
 }
 
+func (cs ColumnConfigs) GetByDbNameMust(dbName string) (c ColumnConfig) {
+	c, exists := cs.GetByDbName(dbName)
+	if !exists {
+		err := errors.Errorf("ColumnConfig not found by dbName: " + string(dbName))
+		panic(err)
+	}
+	return c
+}
+
 func (cs ColumnConfigs) FieldName2ColumnName(fieldNames ...string) (columnNames []string) {
 	columnNames = make([]string, len(fieldNames))
 
@@ -352,6 +361,14 @@ func (cs ColumnConfigs) FieldName2ColumnName(fieldNames ...string) (columnNames 
 func (cs ColumnConfigs) GetByFieldName(fieldName string) (c ColumnConfig, exists bool) {
 	for _, c := range cs {
 		if strings.EqualFold(c.FieldName, fieldName) {
+			return c, true
+		}
+	}
+	return c, false
+}
+func (cs ColumnConfigs) GetByDbName(dbName string) (c ColumnConfig, exists bool) {
+	for _, c := range cs {
+		if strings.EqualFold(c.DbName, dbName) {
 			return c, true
 		}
 	}
