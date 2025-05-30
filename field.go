@@ -2378,7 +2378,6 @@ func MakeFieldsFromStruct(m any, source StructFieldSource, table TableConfig) (f
 		panic(err)
 	}
 	return fs
-
 }
 
 // 提取字段中的 gorm:"column:xxx" 值
