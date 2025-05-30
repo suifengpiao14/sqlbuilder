@@ -2325,6 +2325,10 @@ const (
 
 // MakeFieldsFromStruct 从结构体字段,gorm tag,json tag 生成字段信息 主要用于新增记录场景(大表字段太多，直接复用query 的model)
 func MakeFieldsFromStruct(m any, source StructFieldSource, table TableConfig) (fs Fields) {
+	if table.Columns == nil {
+		err := errors.Errorf("MakeFieldsFromStruct table.Columns is nil")
+		panic(err)
+	}
 	if m == nil {
 		return fs
 	}
@@ -2334,7 +2338,7 @@ func MakeFieldsFromStruct(m any, source StructFieldSource, table TableConfig) (f
 	case reflect.Struct:
 		for i := range typ.NumField() {
 			attr := typ.Field(i)
-			value := val.Field(i).Interface()
+			fieldValue := val.Field(i).Interface()
 			fieldName := ""
 			switch source {
 			case StructFieldSource_StructAttr:
@@ -2360,8 +2364,9 @@ func MakeFieldsFromStruct(m any, source StructFieldSource, table TableConfig) (f
 				Name: fieldName,
 				ValueFns: ValueFns{
 					ValueFn{
+						Layer: Value_Layer_SetValue,
 						Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
-							return value, nil
+							return fieldValue, nil
 						},
 					},
 				},

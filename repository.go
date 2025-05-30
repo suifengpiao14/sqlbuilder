@@ -192,3 +192,17 @@ func (s RepositoryQuery[Model]) GetByIdentities(fields Fields, customFn CustomFn
 	err = builder.List(models)
 	return models, err
 }
+
+type Repository[T any] struct {
+	TableConfig
+	RepositoryCommand
+	RepositoryQuery[T]
+}
+
+func NewRepository[T any](tableConfig TableConfig) Repository[T] {
+	return Repository[T]{
+		TableConfig:       tableConfig,
+		RepositoryCommand: NewRepositoryCommand(tableConfig),
+		RepositoryQuery:   NewRepositoryQuery[T](tableConfig),
+	}
+}

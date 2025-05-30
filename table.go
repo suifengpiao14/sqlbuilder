@@ -388,11 +388,7 @@ type AliasedExpressions []exp.AliasedExpression
 
 // AsAny 转成任意类型，主要用于Field.SetSelectColumns
 func (a AliasedExpressions) AsAny() []any {
-	var result []any
-	for _, a := range a {
-		result = append(result, a)
-	}
-	return result
+	return Slice2Any(a)
 }
 
 func (cs ColumnConfigs) DbNameWithAlias() AliasedExpressions {
@@ -401,4 +397,15 @@ func (cs ColumnConfigs) DbNameWithAlias() AliasedExpressions {
 		result = append(result, goqu.I(c.DbName).As(c.FieldName))
 	}
 	return result
+}
+
+func Slice2Any[T any](arr []T) (out []any) {
+	if arr == nil {
+		return nil
+	}
+	out = make([]any, len(arr))
+	for i, v := range arr {
+		out[i] = v
+	}
+	return out
 }
