@@ -777,7 +777,7 @@ func ValueFnBetween(left any, right any) ValueFn {
 			if IsNil(in) {
 				return nil, nil
 			}
-			return Between{left, in, right}, nil
+			return Between{left, right}, nil
 		},
 		Layer: Value_Layer_DBFormat,
 	}
