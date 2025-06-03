@@ -331,10 +331,10 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 	tableConfig := p._TableI.TableConfig()
 	fs := p._Fields.Builder(p.context, SCENE_SQL_INSERT, tableConfig, p.customFieldsFn) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 
-	err = tableConfig.CheckUniqueIndex(fs...)
-	if err != nil {
-		return "", err
-	}
+	// err = tableConfig.CheckUniqueIndex(fs...) // 不能内置，直接检测，应为 setParam 需要生成insert 语句，这段代码直接执行，会导致生成insert语句时报错
+	// if err != nil {
+	// 	return "", err
+	// }
 
 	rowData, err := fs.Data(layer_order...)
 	if err != nil {
@@ -917,7 +917,8 @@ type ListParam struct {
 	handler        Handler // 支持事务句柄
 	builderFns     SelectBuilderFns
 	context        context.Context
-	customFieldsFn CustomFieldsFn
+	customFieldsFn CustomFieldsFn // 定制化字段处理函数，可用于局部封装字段处理逻辑，比如通用模型中，用于设置查询字段的别名
+
 }
 
 func (p *ListParam) WithContext(ctx context.Context) *ListParam {

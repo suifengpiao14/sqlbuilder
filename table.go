@@ -87,6 +87,16 @@ type SchemaConfig struct {
 	DBName
 }
 
+type CustomTableConfigFn[T any] func(original T) (customd T)
+
+func (fn CustomTableConfigFn[T]) Apply(original T) (customd T) {
+	if IsNil(fn) {
+		return original
+	}
+	customd = fn(original)
+	return customd
+}
+
 type TableConfig struct {
 	DBName
 	Columns                  ColumnConfigs            // 后续吧table 纳入，通过 Column.Identity 生成 Field 操作
@@ -157,10 +167,10 @@ func (t TableConfig) MergeTableLevelFields(ctx context.Context, fs ...*Field) Fi
 
 var Error_UniqueIndexAlreadyExist = errors.New("unique index already exist")
 
-func (t TableConfig) CheckUniqueIndex(fs ...*Field) (err error) {
+func (t TableConfig) CheckUniqueIndex(allFields ...*Field) (err error) {
 	indexs := t.Indexs.GetUnique()
 	for _, index := range indexs {
-		uFs := index.Fields(t.Columns, fs).AppendWhereValueFn(ValueFnForward) // 变成查询条件
+		uFs := index.Fields(t.Columns, allFields).AppendWhereValueFn(ValueFnForward) // 变成查询条件
 		columnNames := index.GetColumnNames(t.Columns)
 		if len(uFs) != len(columnNames) { // 如果唯一标识字段数量和筛选条件字段数量不一致，则忽略该唯一索引校验（如 update 时不涉及到指定唯一索引）
 			continue

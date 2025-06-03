@@ -258,46 +258,15 @@ var ERROR_COLUMN_VALUE_EXISTS = errors.New("column value exists")
 var ERROR_Unique = errors.New("unique error")
 
 // Deprecated ApplyFnUnique use tableConfig.Indexs 设置unique index 代替，无需手动添加中间件
-/*
+
 func ApplyFnUnique(handler Handler) ApplyFn { // 复合索引，给一列应用该中间件即可
 	return func(f *Field, fs ...*Field) {
-		sceneFnName := "checkexists"
-		sceneFn := SceneFn{
-			Name:  sceneFnName,
-			Scene: SCENE_SQL_INSERT,
-			Fn: func(f *Field, fs ...*Field) {
-				allFields := Fields(fs)
-				f1 := f.Copy() //复制不影响外部,在内部copy 是运行时 copy,确保 builder阶段的设置都能考呗到
-				table := f1.GetTable()
-				f1.SetRequired(true) // 新增场景 设置必填
-				uniqueFields := allFields.GetByIndex(f1.GetIndexs().GetUnique()...).Copy()
-				uniqueFields.Replace(f1) //替换成当前 f1 字段
-				uniqueFields.Apply(func(f *Field, fs ...*Field) {
-					f.ShieldUpdate(true)
-					f.SceneFnRmove(sceneFnName) // 避免死循环
-					f.WhereFns.Append(ValueFnForward)
-				})
-				f.ValueFns.Append(ValueFn{
-					Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
-						exitstsParam := NewExistsBuilder(table).WithHandler(handler).AppendFields(uniqueFields...)
-						exists, err := exitstsParam.Exists()
-						if err != nil {
-							return nil, err
-						}
-						if exists {
-							err = errors.WithMessagef(ERROR_Unique, "unique column %s value %s exists", f1.DBColumnName().FullName(), inputValue) // 有时存在，需要返回指定错误，方便业务自主处理错误（如批量新增，存在忽略即可）
-							return nil, err
-						}
-						return inputValue, nil
-					},
-					Layer: Value_Layer_ApiValidate,
-					Order: 1, //schemna 验证完后再执行，避免提前校验导致错误信息不准确
-
-				})
-
-			},
-		}
-		f.SceneFn(sceneFn)
+		f.SceneInsert(func(f *Field, fs ...*Field) {
+			f.ValueFns.Append(ValueFnApiValidate(func(inputValue any, f *Field, fs ...*Field) (any, error) {
+				err := f.GetTable().CheckUniqueIndex(fs...)
+				return inputValue, err
+			}))
+		})
 		f.SceneUpdate(func(f *Field, fs ...*Field) {
 			f.ShieldUpdate(true)
 			f.WhereFns.Append(ValueFnForward)
@@ -307,7 +276,7 @@ func ApplyFnUnique(handler Handler) ApplyFn { // 复合索引，给一列应用�
 		})
 	}
 }
-*/
+
 // Deprecated ApplyFnUniqueField 单列唯一索引键,新增场景中间件
 // func ApplyFnUniqueField(handler Handler) ApplyFn {
 // 	return ApplyFnUnique(handler)
