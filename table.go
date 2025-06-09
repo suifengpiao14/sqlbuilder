@@ -323,6 +323,22 @@ func (cs *ColumnConfigs) AddColumns(cols ...ColumnConfig) {
 
 	}
 	*cs = append(*cs, cols...)
+	cs.UniqueueByFieldName() //根据FieldName 去重,同名覆盖，由于预先写模型时，fieldName 是固定的，dbName是后期根据业务定义的，所以这里支持fieldName覆盖
+}
+
+// Uniqueue 去重,同名覆盖（保留最后设置）,由于预先写模型时，fieldName 是固定的，dbName是后期根据业务定义的，所以这里支持fieldName覆盖
+func (cs *ColumnConfigs) UniqueueByFieldName() *ColumnConfigs {
+	m := make(map[string]ColumnConfig)
+	arr := make([]ColumnConfig, 0)
+	for i := len(*cs) - 1; i > 0; i-- {
+		if _, exists := m[(*cs)[i].FieldName]; !exists {
+			arr = append(arr, (*cs)[i])
+			m[(*cs)[i].FieldName] = (*cs)[i]
+		}
+	}
+	slices.Reverse(arr)
+	*cs = arr
+	return cs
 }
 
 func (cs ColumnConfigs) WalkColumn(walkFn func(columnConfig ColumnConfig) ColumnConfig) {
