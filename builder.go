@@ -863,6 +863,7 @@ func (p *FirstParam) WithBuilderFns(builderFns ...SelectBuilderFn) *FirstParam {
 	return p
 }
 
+// GetTable 获取表配置信息，增加获取表配置信息方法，方便在xxxBuilderFns 中能获取到表配置信息
 func (p FirstParam) GetTable() TableConfig {
 	return p._Table.TableConfig()
 }
