@@ -267,7 +267,7 @@ type CustomFieldsFn func(fs Fields) (customedFs Fields)
 
 // InsertParam 供子类复用,修改数据
 type InsertParam struct {
-	_TableI TableI
+	_Table  TableI
 	_Fields Fields
 	_log    LogI
 	//execHandler             ExecHandler
@@ -312,7 +312,7 @@ func (p *InsertParam) WithHandler(handler Handler) *InsertParam {
 
 func NewInsertBuilder(tableConfig TableConfig) *InsertParam {
 	return &InsertParam{
-		_TableI: TableFn(func() TableConfig { return tableConfig }),
+		_Table:  TableFn(func() TableConfig { return tableConfig }),
 		_Fields: make(Fields, 0),
 		_log:    DefaultLog,
 	}
@@ -322,13 +322,16 @@ func (p *InsertParam) AppendFields(fields ...*Field) *InsertParam {
 	p._Fields.Append(fields...)
 	return p
 }
+func (p InsertParam) GetTable() (table TableConfig) {
+	return p._Table.TableConfig()
+}
 
 func (p InsertParam) ToSQL() (sql string, err error) {
-	if p._TableI == nil {
+	if p._Table == nil {
 		err = errors.Errorf("InsertParam._Table required")
 		return "", err
 	}
-	tableConfig := p._TableI.TableConfig()
+	tableConfig := p.GetTable()
 	fs := p._Fields.Builder(p.context, SCENE_SQL_INSERT, tableConfig, p.customFieldsFn) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 
 	// err = tableConfig.CheckUniqueIndex(fs...) // 不能内置，直接检测，应为 setParam 需要生成insert 语句，这段代码直接执行，会导致生成insert语句时报错
@@ -396,7 +399,7 @@ func (p InsertParam) Insert() (lastInsertId uint64, rowsAffected int64, err erro
 
 type BatchInsertParam struct {
 	rowFields []Fields
-	_TableI   TableI
+	_Table    TableI
 	_log      LogI
 	//execHandler             ExecHandler
 	handler             Handler // 支持事务句柄
@@ -429,7 +432,7 @@ func (p *BatchInsertParam) getEventHandler() (triggerInsertEvent EventInsertTrig
 
 func NewBatchInsertBuilder(tableConfig TableConfig) *BatchInsertParam {
 	return &BatchInsertParam{
-		_TableI:   TableFn(func() TableConfig { return tableConfig }),
+		_Table:    TableFn(func() TableConfig { return tableConfig }),
 		rowFields: make([]Fields, 0),
 		_log:      DefaultLog,
 	}
@@ -456,10 +459,14 @@ func (p *BatchInsertParam) AppendFields(fields ...Fields) *BatchInsertParam {
 var ERROR_BATCH_INSERT_DATA_IS_NIL = errors.New("batch insert err: data is nil")
 var ERROR_NOT_FOUND = errors.New("not found record")
 
+func (is BatchInsertParam) GetTable() TableConfig {
+	return is._Table.TableConfig()
+}
+
 func (is BatchInsertParam) ToSQL() (sql string, err error) {
 	data := make([]any, 0)
 
-	tableConfig := is._TableI.TableConfig()
+	tableConfig := is.GetTable()
 	for _, fields := range is.rowFields {
 		fs := fields.Builder(is.context, SCENE_SQL_INSERT, tableConfig, is.customFieldsFn) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 		rowData, err := fs.Data(layer_order...)
@@ -508,7 +515,7 @@ func (p BatchInsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected 
 }
 
 type DeleteParam struct {
-	_TableI              TableI
+	_Table               TableI
 	_Fields              Fields
 	_log                 LogI
 	handler              Handler // 支持事务句柄
@@ -550,7 +557,7 @@ func (p *DeleteParam) WithHandler(handler Handler) *DeleteParam {
 
 func NewDeleteBuilder(tableConfig TableConfig) *DeleteParam {
 	return &DeleteParam{
-		_TableI: TableFn(func() TableConfig { return tableConfig }),
+		_Table:  TableFn(func() TableConfig { return tableConfig }),
 		_Fields: make(Fields, 0),
 		_log:    DefaultLog,
 	}
@@ -561,8 +568,12 @@ func (p *DeleteParam) AppendFields(fields ...*Field) *DeleteParam {
 	return p
 }
 
+func (p DeleteParam) GetTable() TableConfig {
+	return p._Table.TableConfig()
+}
+
 func (p DeleteParam) ToSQL() (sql string, err error) {
-	tableConfig := p._TableI.TableConfig()
+	tableConfig := p.GetTable()
 	fs := p._Fields.Builder(p.context, SCENE_SQL_DELETE, tableConfig, p.customFieldsFn) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	f, err := fs.DeletedAt()
 	if err != nil {
@@ -618,7 +629,7 @@ func (p DeleteParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
 }
 
 type UpdateParam struct {
-	_TableI              TableI
+	_Table               TableI
 	_Fields              Fields
 	_log                 LogI
 	handler              Handler // 支持事务句柄
@@ -660,7 +671,7 @@ func (p *UpdateParam) WithHandler(handler Handler) *UpdateParam {
 
 func NewUpdateBuilder(tableConfig TableConfig) *UpdateParam {
 	return &UpdateParam{
-		_TableI: TableFn(func() TableConfig { return tableConfig }),
+		_Table:  TableFn(func() TableConfig { return tableConfig }),
 		_Fields: make(Fields, 0),
 		_log:    DefaultLog,
 	}
@@ -671,8 +682,12 @@ func (p *UpdateParam) AppendFields(fields ...*Field) *UpdateParam {
 	return p
 }
 
+func (p UpdateParam) GetTable() TableConfig {
+	return p._Table.TableConfig()
+}
+
 func (p UpdateParam) ToSQL() (sql string, err error) {
-	tableConfig := p._TableI.TableConfig()
+	tableConfig := p.GetTable()
 	fs := p._Fields.Builder(p.context, SCENE_SQL_UPDATE, tableConfig, p.customFieldsFn) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	data, err := fs.Data(layer_order...)
 	if err != nil {
@@ -745,7 +760,7 @@ func (p UpdateParam) Update() (rowsAffected int64, err error) {
 func (p UpdateParam) UpdateMustExists() (rowsAffected int64, err error) {
 
 	cp := p._Fields.Copy()
-	existsParam := NewExistsBuilder(p._TableI.TableConfig()).AppendFields(cp...)
+	existsParam := NewExistsBuilder(p.GetTable()).AppendFields(cp...)
 	exists, err := existsParam.Exists()
 	if err != nil {
 		return 0, err
@@ -848,8 +863,12 @@ func (p *FirstParam) WithBuilderFns(builderFns ...SelectBuilderFn) *FirstParam {
 	return p
 }
 
+func (p FirstParam) GetTable() TableConfig {
+	return p._Table.TableConfig()
+}
+
 func (p FirstParam) ToSQL() (sql string, err error) {
-	tableConfig := p._Table.TableConfig()
+	tableConfig := p.GetTable()
 	fs := p._Fields.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFn) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	errWithMsg := fmt.Sprintf("FirstParam.ToSQL(),table:%s", tableConfig.Name)
 	where, err := fs.Where()
@@ -962,9 +981,11 @@ func NewListBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *Lis
 		builderFns: builderFns,
 	}
 }
-
+func (p ListParam) GetTable() TableConfig {
+	return p._Table.TableConfig()
+}
 func (p ListParam) ToSQL() (sql string, err error) {
-	tableConfig := p._Table.TableConfig()
+	tableConfig := p.GetTable()
 	fs := p._Fields.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFn) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	errWithMsg := fmt.Sprintf("ListParam.ToSQL(),table:%s", tableConfig.Name)
 	where, err := fs.Where()
@@ -1089,8 +1110,12 @@ func NewExistsBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *E
 	}
 }
 
+func (p ExistsParam) GetTable() TableConfig {
+	return p._Table.TableConfig()
+}
+
 func (p ExistsParam) ToSQL() (sql string, err error) {
-	tableConfig := p._Table.TableConfig()
+	tableConfig := p.GetTable()
 	fs := p._Fields.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFn) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	errWithMsg := fmt.Sprintf("ExistsParam.ToSQL(),table:%s", tableConfig.Name)
 	//fs.SetSceneIfEmpty(SCENE_SQL_EXISTS) // 存在场景，和SCENE_SQL_SELECT场景不一样，在set中，这个exists 必须实时查询数据，另外部分查询条件也和查询数据场景不一致，所以独立分开处理
@@ -1193,8 +1218,12 @@ func (p *TotalParam) AppendFields(fields ...*Field) *TotalParam {
 	return p
 }
 
+func (p TotalParam) GetTable() TableConfig {
+	return p._Table.TableConfig()
+}
+
 func (p TotalParam) ToSQL() (sql string, err error) {
-	tableConfig := p._Table.TableConfig()
+	tableConfig := p.GetTable()
 	fs := p._Fields.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFn) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	errWithMsg := fmt.Sprintf("TotalParam.ToSQL(),table:%s", tableConfig.Name)
 	where, err := fs.Where()
@@ -1271,8 +1300,11 @@ func (p *PaginationParam) WithBuilderFns(builderFns ...SelectBuilderFn) *Paginat
 	return p
 }
 
+func (p PaginationParam) GetTable() TableConfig {
+	return p._Table.TableConfig()
+}
 func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
-	table := p._Table.TableConfig()
+	table := p.GetTable()
 	totalSql, err = NewTotalBuilder(table).WithCustomFieldsFn(p.customFieldsFn).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).ToSQL()
 	if err != nil {
 		return "", "", err
@@ -1389,9 +1421,13 @@ func (p *SetParam) WithHandler(handler Handler) *SetParam {
 	return p
 }
 
+func (p SetParam) GetTable() TableConfig {
+	return p._Table.TableConfig()
+}
+
 // ToSQL 一次生成 查询、新增、修改 sql,若查询后记录存在,并且需要根据数据库记录值修改数据,则可以重新赋值后生成sql
 func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string, err error) {
-	table := p._Table.TableConfig()
+	table := p.GetTable()
 	existsSql, err = NewExistsBuilder(table).WithCustomFieldsFn(p.customFieldsFn).AppendFields(p._Fields...).ToSQL() // 有些根据场景设置 如枚举值 ""，所有需要复制
 	if err != nil {
 		return "", "", "", err
@@ -1409,7 +1445,7 @@ func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string,
 
 func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
 	// 因为自带 exists 查询，所以不需要校验唯一索引了，否则 存在 table.CheckUniqueIndex 就会报错，达不到update 效果
-	// table := p._Table.TableConfig()
+	// table := p.GetTable()
 	// err = table.CheckUniqueIndex(p._Fields...)
 	// if err != nil {
 	// 	return false, 0, 0, err
