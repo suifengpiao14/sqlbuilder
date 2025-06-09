@@ -2,6 +2,7 @@ package sqlbuilder
 
 import (
 	"database/sql"
+	"fmt"
 	"sync"
 
 	_ "github.com/doug-martin/goqu/v9/dialect/mysql"
@@ -45,3 +46,22 @@ var GormDB func() *gorm.DB = sync.OnceValue(func() (db *gorm.DB) {
 	}
 	return db
 })
+
+func NewGormDBExample(userName string, password string, host string, port int, database string) func() *gorm.DB {
+	gormDB := sync.OnceValue(func() (db *gorm.DB) {
+		dsn := fmt.Sprintf(
+			"%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=False&timeout=300s&loc=Local",
+			userName,
+			password,
+			host,
+			port,
+			database,
+		)
+		db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+		if err != nil {
+			panic(err)
+		}
+		return db
+	})
+	return gormDB
+}

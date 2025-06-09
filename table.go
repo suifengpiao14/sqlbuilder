@@ -330,7 +330,7 @@ func (cs *ColumnConfigs) AddColumns(cols ...ColumnConfig) {
 func (cs *ColumnConfigs) UniqueueByFieldName() *ColumnConfigs {
 	m := make(map[string]ColumnConfig)
 	arr := make([]ColumnConfig, 0)
-	for i := len(*cs) - 1; i > 0; i-- {
+	for i := len(*cs) - 1; i >= 0; i-- {
 		if _, exists := m[(*cs)[i].FieldName]; !exists {
 			arr = append(arr, (*cs)[i])
 			m[(*cs)[i].FieldName] = (*cs)[i]
@@ -351,7 +351,8 @@ func (cs ColumnConfigs) WalkColumn(walkFn func(columnConfig ColumnConfig) Column
 }
 
 func (cs ColumnConfigs) Merge(others ...ColumnConfig) ColumnConfigs {
-	cs = append(cs, others...)
+	//cs = append(cs, others...)
+	cs.AddColumns(others...) // 这里使用AddColumns，是为了支持同名覆盖
 	return cs
 }
 

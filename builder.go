@@ -326,6 +326,13 @@ func (p InsertParam) GetTable() (table TableConfig) {
 	return p._Table.TableConfig()
 }
 
+func (p *InsertParam) ApplyCustomFn(customFn CustomFnInsertParam) *InsertParam {
+	if customFn != nil {
+		customFn(p)
+	}
+	return p
+}
+
 func (p InsertParam) ToSQL() (sql string, err error) {
 	if p._Table == nil {
 		err = errors.Errorf("InsertParam._Table required")
@@ -462,6 +469,12 @@ var ERROR_NOT_FOUND = errors.New("not found record")
 func (is BatchInsertParam) GetTable() TableConfig {
 	return is._Table.TableConfig()
 }
+func (p *BatchInsertParam) ApplyCustomFn(customFn CustomFnBatchInsertParam) *BatchInsertParam {
+	if customFn != nil {
+		customFn(p)
+	}
+	return p
+}
 
 func (is BatchInsertParam) ToSQL() (sql string, err error) {
 	data := make([]any, 0)
@@ -570,6 +583,12 @@ func (p *DeleteParam) AppendFields(fields ...*Field) *DeleteParam {
 
 func (p DeleteParam) GetTable() TableConfig {
 	return p._Table.TableConfig()
+}
+func (p *DeleteParam) ApplyCustomFn(customFn CustomFnDeleteParam) *DeleteParam {
+	if customFn != nil {
+		customFn(p)
+	}
+	return p
 }
 
 func (p DeleteParam) ToSQL() (sql string, err error) {
@@ -684,6 +703,13 @@ func (p *UpdateParam) AppendFields(fields ...*Field) *UpdateParam {
 
 func (p UpdateParam) GetTable() TableConfig {
 	return p._Table.TableConfig()
+}
+
+func (p *UpdateParam) ApplyCustomFn(customFn CustomFnUpdateParam) *UpdateParam {
+	if customFn != nil {
+		customFn(p)
+	}
+	return p
 }
 
 func (p UpdateParam) ToSQL() (sql string, err error) {
@@ -868,6 +894,13 @@ func (p FirstParam) GetTable() TableConfig {
 	return p._Table.TableConfig()
 }
 
+func (p *FirstParam) ApplyCustomFn(customFn CustomFnFirstParam) *FirstParam {
+	if customFn != nil {
+		customFn(p)
+	}
+	return p
+}
+
 func (p FirstParam) ToSQL() (sql string, err error) {
 	tableConfig := p.GetTable()
 	fs := p._Fields.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFn) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
@@ -975,6 +1008,12 @@ func (p *ListParam) AppendFields(fields ...*Field) *ListParam {
 	return p
 }
 
+func (p *ListParam) ApplyCustomFn(customFn CustomFnListParam) *ListParam {
+	if customFn != nil {
+		customFn(p)
+	}
+	return p
+}
 func NewListBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *ListParam {
 	return &ListParam{
 		_Table:     TableFn(func() TableConfig { return tableConfig }),
@@ -1304,6 +1343,13 @@ func (p *PaginationParam) WithBuilderFns(builderFns ...SelectBuilderFn) *Paginat
 func (p PaginationParam) GetTable() TableConfig {
 	return p._Table.TableConfig()
 }
+func (p *PaginationParam) ApplyCustomFn(customFn CustomFnPaginationParam) *PaginationParam {
+	if customFn != nil {
+		customFn(p)
+	}
+	return p
+}
+
 func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 	table := p.GetTable()
 	totalSql, err = NewTotalBuilder(table).WithCustomFieldsFn(p.customFieldsFn).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).ToSQL()
