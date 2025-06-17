@@ -526,9 +526,9 @@ func (f *Field) SetOrderFn(orderFn OrderFn) *Field {
 	return f
 }
 
-// SetTable 设置表配置信息，不存在则设置,存在则合并,合并策略: Field.Table 优先级最高
+// SetTable 设置表配置信息，不存在则设置,存在则合并,合并策略: Field.Table 优先级最高,最早的Table.Name为基准表名
 func (f *Field) SetTable(table TableConfig) *Field {
-	f.table = table.Merge(f.table)
+	f.table = f.table.Merge(table)
 	return f
 }
 

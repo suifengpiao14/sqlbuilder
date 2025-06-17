@@ -256,7 +256,9 @@ func (t TableConfig) IsNil() bool {
 	return t.Name == ""
 }
 
-// Merge 合并表配置信息,同名覆盖，别名同名覆盖,a.Merge(b) 实现b覆盖a; b.Merge(a)、a.Merge(b,a) 可实现a 覆盖b
+// join 是Field设置时会固定表名，builder 时会设置表别名，所以需要保留最早table 的表名，后面同表名的别名
+// Merge 合并表配置信息,同名覆盖，别名同名覆盖,a.Merge(b) 实现b覆盖a; b.Merge(a)、a.Merge(b,a) 可实现a 覆盖b,t.Name 不能覆盖，并且合并的table只有和t.Name 相同才会被合并，否则忽略合并操作
+
 func (t TableConfig) Merge(tables ...TableConfig) TableConfig {
 	for _, table := range tables {
 		if t.Name != "" && table.Name != t.Name { //表名存在并且不同，忽略合并操作，表名不存在，使用第一个表名作为基准表名
