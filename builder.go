@@ -289,6 +289,9 @@ func (p *InsertParam) WithCustomFieldsFn(customFields ...CustomFieldsFn) *Insert
 	p.customFieldsFns = customFields
 	return p
 }
+func (p InsertParam) Fields() Fields {
+	return p._Fields
+}
 
 func (p *InsertParam) WithTriggerEvent(triggerInsertEvent EventInsertTrigger) *InsertParam {
 	p._triggerInsertEvent = triggerInsertEvent
@@ -427,6 +430,9 @@ func (p *BatchInsertParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn)
 	p.customFieldsFns = customFieldsFns
 	return p
 }
+func (p BatchInsertParam) Fields() []Fields {
+	return p.rowFields
+}
 
 func (p *BatchInsertParam) WithTriggerEvent(triggerInsertEvent EventInsertTrigger) *BatchInsertParam {
 	p._triggerInsertEvent = triggerInsertEvent
@@ -549,6 +555,9 @@ func (p *DeleteParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *Del
 	p.customFieldsFns = customFieldsFns
 	return p
 }
+func (p DeleteParam) Fields() Fields {
+	return p._Fields
+}
 
 func (p *DeleteParam) WithTriggerEvent(triggerDeletedEvent EventDeletedTrigger) *DeleteParam {
 	p._triggerDeletedEvent = triggerDeletedEvent
@@ -668,6 +677,9 @@ func (p *UpdateParam) WithContext(ctx context.Context) *UpdateParam {
 func (p *UpdateParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *UpdateParam {
 	p.customFieldsFns = customFieldsFns
 	return p
+}
+func (p UpdateParam) Fields() Fields {
+	return p._Fields
 }
 
 func (p *UpdateParam) WithTriggerEvent(triggerUpdateEvent EventUpdateTrigger) *UpdateParam {
@@ -855,6 +867,9 @@ func (p *FirstParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *Firs
 	p.customFieldsFns = customFieldsFns
 	return p
 }
+func (p FirstParam) Fields() Fields {
+	return p._Fields
+}
 
 func NewFirstBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *FirstParam {
 	return &FirstParam{
@@ -984,6 +999,9 @@ func (p *ListParam) WithContext(ctx context.Context) *ListParam {
 func (p *ListParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *ListParam {
 	p.customFieldsFns = customFieldsFns
 	return p
+}
+func (p ListParam) Fields() Fields {
+	return p._Fields
 }
 
 func (p *ListParam) SetLog(log LogI) ListParam {
@@ -1127,6 +1145,10 @@ func (p *ExistsParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *Exi
 	p.customFieldsFns = customFieldsFns
 	return p
 }
+func (p ExistsParam) Fields() Fields {
+	return p._Fields
+}
+
 func (p *ExistsParam) WithHandler(handler Handler) *ExistsParam {
 	p.handler = handler
 	return p
@@ -1243,6 +1265,10 @@ func (p *TotalParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *Tota
 	p.customFieldsFns = customFieldsFns
 	return p
 }
+
+func (p TotalParam) Fields() Fields {
+	return p._Fields
+}
 func (p *TotalParam) WithHandler(handler Handler) *TotalParam {
 	p.handler = handler
 	return p
@@ -1324,6 +1350,10 @@ func (p *PaginationParam) WithContext(ctx context.Context) *PaginationParam {
 func (p *PaginationParam) WithCustomFieldsFn(customFieldsFns CustomFieldsFns) *PaginationParam {
 	p.customFieldsFns = customFieldsFns
 	return p
+}
+
+func (p PaginationParam) Fields() Fields {
+	return p._Fields
 }
 func (p *PaginationParam) WithHandler(handler Handler) *PaginationParam {
 	p.handler = handler
@@ -1450,7 +1480,9 @@ func (p *SetParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *SetPar
 	p.customFieldsFns = customFieldsFns
 	return p
 }
-
+func (p SetParam) Fields() Fields {
+	return p._Fields
+}
 func (p *SetParam) WithTriggerEvent(triggerInsertdEvent EventInsertTrigger, triggerUpdateEvent EventUpdateTrigger) *SetParam {
 	p._triggerInsertedEvent = triggerInsertdEvent
 	p._triggerUpdatedEvent = triggerUpdateEvent
