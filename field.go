@@ -698,6 +698,9 @@ func (f *Field) SetSelectColumns(columns ...any) *Field {
 		existsKeyMap[ColumnToString(column)] = struct{}{}
 	}
 	for _, col := range columns { // 保持稳定顺序
+		if str, ok := col.(string); ok && str == "" { // 删除空字符串字段，避免错误（如未使用 ColumnConfig.FilterByEmptyDbName 过滤场景）
+			continue
+		}
 		key := colMap[col]
 		if _, ok := existsKeyMap[key]; !ok {
 			existsKeyMap[key] = struct{}{}

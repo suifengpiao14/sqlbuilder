@@ -193,6 +193,17 @@ func (s RepositoryQuery[Model]) GetByIdentities(fields Fields, customFn CustomFn
 	return models, err
 }
 
+type CustomFnExistsParam func(existsParam *ExistsParam)
+
+func (s RepositoryQuery[Model]) Exists(fields Fields, customFn CustomFnExistsParam) (exists bool, err error) {
+	builder := NewCompiler(s.getConfig(), fields...).Exists()
+	if customFn != nil {
+		customFn(builder)
+	}
+	exists, err = builder.Exists()
+	return exists, err
+}
+
 type Repository[T any] struct {
 	TableConfig
 	RepositoryCommand

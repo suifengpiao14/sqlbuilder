@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -1404,10 +1405,14 @@ func (p PaginationParam) Pagination(result any) (count int64, err error) {
 type SetPolicy string
 
 const (
-	SetPolicy_only_Insert      SetPolicy = "onlyInsert"       //只新增说明使用最早数据
-	SetPolicy_only_Update      SetPolicy = "onlyUpdate"       //只更新说明不存在时不处理
-	SetPolicy_Insert_or_Update SetPolicy = "insert_or_Update" //不存在新增,存在更新，使用最新数据覆盖
+	SetPolicy_only_Insert      SetPolicy = "onlyInsert" //只新增说明使用最早数据
+	SetPolicy_only_Update      SetPolicy = "onlyUpdate" //只更新说明不存在时不处理
+	SetPolicy_Insert_or_Update SetPolicy = ""           //不存在新增,存在更新，使用最新数据覆盖
+
 )
+
+var setPolicy_need_insert_sql = []SetPolicy{SetPolicy_only_Insert, SetPolicy_Insert_or_Update}
+var setPolicy_need_update_sql = []SetPolicy{SetPolicy_only_Update, SetPolicy_Insert_or_Update}
 
 type SetParam struct {
 	_Table                TableI
@@ -1481,14 +1486,20 @@ func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string,
 	if err != nil {
 		return "", "", "", err
 	}
-	insertSql, err = NewInsertBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL()
-	if err != nil {
-		return "", "", "", err
+	if slices.Contains(setPolicy_need_insert_sql, p.setPolicy) {
+		insertSql, err = NewInsertBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL()
+		if err != nil {
+			return "", "", "", err
+		}
 	}
-	updateSql, err = NewUpdateBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL()
-	if err != nil {
-		return "", "", "", err
+
+	if slices.Contains(setPolicy_need_update_sql, p.setPolicy) { // 不加条件判断 当 setPolicy 为 SetPolicy_only_Insert 可能报错，比如：只有唯一键一列，更新时屏蔽唯一键更新，此时更新字段就为空，会报错，所以增加if 判断
+		updateSql, err = NewUpdateBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL()
+		if err != nil {
+			return "", "", "", err
+		}
 	}
+
 	return existsSql, insertSql, updateSql, nil
 }
 
