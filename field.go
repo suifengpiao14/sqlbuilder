@@ -1636,9 +1636,11 @@ func (fs Fields) Each(fn func(f *Field) error) error {
 	return nil
 }
 
-func (fs Fields) ApplyCunstomFn(customFn CustomFieldsFn) (newFs Fields) {
-	if customFn != nil {
-		fs = customFn(fs)
+func (fs Fields) ApplyCunstomFn(customFns ...CustomFieldsFn) (newFs Fields) {
+	for _, customFn := range customFns {
+		if customFns != nil {
+			fs = customFn(fs)
+		}
 	}
 	return fs
 }
@@ -1651,10 +1653,10 @@ func (fs Fields) Copy() (fields Fields) {
 	return fields
 }
 
-func (fs Fields) Builder(ctx context.Context, scene Scene, tableConfig TableConfig, customFn CustomFieldsFn) (fields Fields) {
+func (fs Fields) Builder(ctx context.Context, scene Scene, tableConfig TableConfig, customFns CustomFieldsFns) (fields Fields) {
 	fields = fs.Copy()                    // 使用复制版本，后续调整部分初始化函数到这里
 	fields = fields.SetTable(tableConfig) // 将表名设置到字段中,方便在ValueFn 中使用table变量
-	fields = fields.ApplyCunstomFn(customFn)
+	fields = fields.ApplyCunstomFn(customFns...)
 
 	fields = fields.SetTable(tableConfig) // 确保新增字段有table信息
 	fields = tableConfig.MergeTableLevelFields(ctx, fields...)

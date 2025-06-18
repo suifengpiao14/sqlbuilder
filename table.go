@@ -301,6 +301,11 @@ func NewColumnConfig(dbName, fieldName string) ColumnConfig {
 	}
 }
 
+// DbNameIsEmpty 字段DbName 为空，对数据表操作来说，是无效字段，但是业务层面封装的模型支持退化，比如keyvalue 模型正常2个字段，但是只保留key 也是常见模型，这是将value映射为""，即可实现key模型，于是诞生 了DbName 为空的数据，此函数协助过滤
+func (c ColumnConfig) DbNameIsEmpty() bool {
+	return c.DbName == ""
+}
+
 func (c ColumnConfig) CamelName() string {
 	return funcs.CamelCase(c.DbName, false, false)
 }
@@ -325,7 +330,11 @@ func (cs *ColumnConfigs) AddColumns(cols ...ColumnConfig) {
 
 	}
 	*cs = append(*cs, cols...)
-	cs.UniqueueByFieldName() //根据FieldName 去重,同名覆盖，由于预先写模型时，fieldName 是固定的，dbName是后期根据业务定义的，所以这里支持fieldName覆盖
+	//2025-06-18 09:50 注释去重，将 数据库字段和业务字段改为1:N关系，理由：
+	// 1. 业务上存在多个字段对应数据库一个字段，比如id,ids
+	// 2. 改成1:N 关系后,提前封装的业务模型内数据表字段映射不会影响实际业务字段表映射的完整性，相当于站在各自的领域角度，操作同一个字段，能有效解耦提前封装的业务模块和实际扩展的模型
+	// 3. 改成1:N 关系后,基本没有副作用，在通过Columns 生成ddl时可以根据dbName 去重即可
+	//cs.UniqueueByFieldName() //根据FieldName 去重,同名覆盖，由于预先写模型时，fieldName 是固定的，dbName是后期根据业务定义的，所以这里支持fieldName覆盖
 }
 
 // Uniqueue 去重,同名覆盖（保留最后设置）,由于预先写模型时，fieldName 是固定的，dbName是后期根据业务定义的，所以这里支持fieldName覆盖
@@ -407,6 +416,15 @@ func (cs ColumnConfigs) GetByDbName(dbName string) (c ColumnConfig, exists bool)
 func (cs ColumnConfigs) FilterByFieldName(fieldNames ...string) (result ColumnConfigs) {
 	for _, c := range cs {
 		if slices.Contains(fieldNames, c.FieldName) {
+			result.AddColumns(c)
+		}
+	}
+	return result
+}
+
+func (cs ColumnConfigs) FilterByEmptyDbName(fieldNames ...string) (result ColumnConfigs) {
+	for _, c := range cs {
+		if c.DbName != "" {
 			result.AddColumns(c)
 		}
 	}
