@@ -628,9 +628,13 @@ func (f *Field) DBColumnName() (dbName DBColumnName) {
 	}
 }
 
+var Use_Filed_column_map = false // 开启后，只能使用映射字段名，目前为了兼容性，默认关闭，后续会默认开启
+
 // _DBName 转换为DB字段,此处增加该,方法方便跨字段设置(如 polygon 设置外接四边形,使用Between)
 func (f *Field) _DBName() (dbName string) { // 改为私有方法，外部使用DBColumnName().Fullname()
-
+	if Use_Filed_column_map {
+		return f.table.GetDBNameByFieldNameMust(f.Name)
+	}
 	if f.dbName != "" { // 后续要废弃dbName字段，使用 f.table.GetDBNameByFieldName(f.Name) 获取
 		return f.dbName
 	}
@@ -1341,9 +1345,10 @@ func (c Field) Validate(val any) (err error) {
 	if c.Schema == nil {
 		return nil
 	}
-	if IsNil(val) {
-		return nil
-	}
+	// nil 值也需要校验，当 c.Schema.Required 为 true 时，需要返回false（数组类型容易出现nil, c.Schema.Required =true）
+	// if IsNil(val) {
+	// 	return nil
+	// }
 
 	rv := reflect.Indirect(reflect.ValueOf(val))
 	err = c.Schema.Validate(c.Name, rv)

@@ -150,7 +150,10 @@ func (t TableConfig) GetHandler() (handler Handler) {
 	}
 	return t.handler
 }
-
+func (t TableConfig) GetDBNameByFieldNameMust(fieldName string) (dbName string) {
+	col := t.Columns.GetByFieldNameMust(fieldName)
+	return col.DbName
+}
 func (t TableConfig) GetDBNameByFieldName(fieldName string) (dbName string) {
 	col, _ := t.Columns.GetByFieldName(fieldName)
 	return col.DbName
