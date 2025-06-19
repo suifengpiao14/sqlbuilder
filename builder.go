@@ -332,10 +332,11 @@ func (p InsertParam) GetTable() (table TableConfig) {
 	return p._Table.TableConfig()
 }
 
-func (p *InsertParam) ApplyCustomFn(customFn CustomFnInsertParam) *InsertParam {
-	if customFn != nil {
-		customFn(p)
-	}
+type CustomFnInsertParam = CustomFn[InsertParam]
+type CustomFnInsertParams = CustomFns[InsertParam]
+
+func (p *InsertParam) ApplyCustomFn(customFns ...CustomFnInsertParam) *InsertParam {
+	p = CustomFns[InsertParam](customFns).Apply(p)
 	return p
 }
 
@@ -478,10 +479,12 @@ var ERROR_NOT_FOUND = errors.New("not found record")
 func (is BatchInsertParam) GetTable() TableConfig {
 	return is._Table.TableConfig()
 }
-func (p *BatchInsertParam) ApplyCustomFn(customFn CustomFnBatchInsertParam) *BatchInsertParam {
-	if customFn != nil {
-		customFn(p)
-	}
+
+type CustomFnBatchInsertParam = CustomFn[BatchInsertParam]
+type CustomFnBatchInsertParams = CustomFns[BatchInsertParam]
+
+func (p *BatchInsertParam) ApplyCustomFn(customFns ...CustomFnBatchInsertParam) *BatchInsertParam {
+	p = CustomFns[BatchInsertParam](customFns).Apply(p)
 	return p
 }
 
@@ -596,10 +599,12 @@ func (p *DeleteParam) AppendFields(fields ...*Field) *DeleteParam {
 func (p DeleteParam) GetTable() TableConfig {
 	return p._Table.TableConfig()
 }
-func (p *DeleteParam) ApplyCustomFn(customFn CustomFnDeleteParam) *DeleteParam {
-	if customFn != nil {
-		customFn(p)
-	}
+
+type CustomFnDeleteParam = CustomFn[DeleteParam]
+type CustomFnDeleteParams = CustomFns[DeleteParam]
+
+func (p *DeleteParam) ApplyCustomFn(customFns ...CustomFnDeleteParam) *DeleteParam {
+	p = CustomFns[DeleteParam](customFns).Apply(p)
 	return p
 }
 
@@ -720,10 +725,11 @@ func (p UpdateParam) GetTable() TableConfig {
 	return p._Table.TableConfig()
 }
 
-func (p *UpdateParam) ApplyCustomFn(customFn CustomFnUpdateParam) *UpdateParam {
-	if customFn != nil {
-		customFn(p)
-	}
+type CustomFnUpdateParam = CustomFn[UpdateParam]
+type CustomFnUpdateParams = CustomFns[UpdateParam]
+
+func (p *UpdateParam) ApplyCustomFn(customFns ...CustomFnUpdateParam) *UpdateParam {
+	p = CustomFns[UpdateParam](customFns).Apply(p)
 	return p
 }
 
@@ -912,10 +918,11 @@ func (p FirstParam) GetTable() TableConfig {
 	return p._Table.TableConfig()
 }
 
-func (p *FirstParam) ApplyCustomFn(customFn CustomFnFirstParam) *FirstParam {
-	if customFn != nil {
-		customFn(p)
-	}
+type CustomFnFirstParam = CustomFn[FirstParam]
+type CustomFnFirstParams = CustomFns[FirstParam]
+
+func (p *FirstParam) ApplyCustomFn(customFns ...CustomFnFirstParam) *FirstParam {
+	p = CustomFns[FirstParam](customFns).Apply(p)
 	return p
 }
 
@@ -1029,10 +1036,11 @@ func (p *ListParam) AppendFields(fields ...*Field) *ListParam {
 	return p
 }
 
-func (p *ListParam) ApplyCustomFn(customFn CustomFnListParam) *ListParam {
-	if customFn != nil {
-		customFn(p)
-	}
+type CustomFnListParam = CustomFn[ListParam]
+type CustomFnListParams = CustomFns[ListParam]
+
+func (p *ListParam) ApplyCustomFn(customFns ...CustomFnListParam) *ListParam {
+	p = CustomFns[ListParam](customFns).Apply(p)
 	return p
 }
 func NewListBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *ListParam {
@@ -1179,6 +1187,14 @@ func (p ExistsParam) GetTable() TableConfig {
 	return p._Table.TableConfig()
 }
 
+type CustomFnExistsParam = CustomFn[ExistsParam]
+type CustomFnExistsParams = CustomFns[ExistsParam]
+
+func (p *ExistsParam) ApplyCustomFn(customFns ...CustomFnExistsParam) *ExistsParam {
+	p = CustomFns[ExistsParam](customFns).Apply(p)
+	return p
+}
+
 func (p ExistsParam) ToSQL() (sql string, err error) {
 	tableConfig := p.GetTable()
 	fs := p._Fields.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
@@ -1264,6 +1280,38 @@ func (p *TotalParam) WithContext(ctx context.Context) *TotalParam {
 func (p *TotalParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *TotalParam {
 	p.customFieldsFns = customFieldsFns
 	return p
+}
+
+type CustomFnTotalParam = CustomFn[TotalParam]
+type CustomFnTotalParams = CustomFns[TotalParam]
+
+func (p *TotalParam) ApplyCustomFn(customFns ...CustomFnTotalParam) *TotalParam {
+	p = CustomFns[TotalParam](customFns).Apply(p)
+	return p
+}
+
+type CustomFn[P any] func(p *P)
+
+func (fn CustomFn[P]) Apply(p *P) *P {
+	if fn != nil {
+		fn(p)
+	}
+	return p
+}
+
+type CustomFns[P any] []CustomFn[P]
+
+func (fns CustomFns[P]) Apply(p *P) *P {
+	for _, fn := range fns {
+		p = fn.Apply(p)
+	}
+	return p
+}
+func (fns CustomFns[P]) Append(fn CustomFn[P]) CustomFns[P] {
+	if fns == nil {
+		fns = make([]CustomFn[P], 0)
+	}
+	return append(fns, fn)
 }
 
 func (p TotalParam) Fields() Fields {
@@ -1376,10 +1424,12 @@ func (p *PaginationParam) WithBuilderFns(builderFns ...SelectBuilderFn) *Paginat
 func (p PaginationParam) GetTable() TableConfig {
 	return p._Table.TableConfig()
 }
-func (p *PaginationParam) ApplyCustomFn(customFn CustomFnPaginationParam) *PaginationParam {
-	if customFn != nil {
-		customFn(p)
-	}
+
+type CustomFnPaginationParam = CustomFn[PaginationParam]
+type CustomFnPaginationParams = CustomFns[PaginationParam]
+
+func (p *PaginationParam) ApplyCustomFn(customFns ...CustomFnPaginationParam) *PaginationParam {
+	p = CustomFns[PaginationParam](customFns).Apply(p)
 	return p
 }
 
@@ -1509,6 +1559,14 @@ func (p *SetParam) WithHandler(handler Handler) *SetParam {
 
 func (p SetParam) GetTable() TableConfig {
 	return p._Table.TableConfig()
+}
+
+type CustomFnSetParam = CustomFn[SetParam]
+type CustomFnSetParams = CustomFns[SetParam]
+
+func (p *SetParam) ApplyCustomFn(customFns ...CustomFnSetParam) *SetParam {
+	p = CustomFns[SetParam](customFns).Apply(p)
+	return p
 }
 
 // ToSQL 一次生成 查询、新增、修改 sql,若查询后记录存在,并且需要根据数据库记录值修改数据,则可以重新赋值后生成sql

@@ -28,33 +28,22 @@ func (s RepositoryCommand) getConfig() CompilerConfig {
 	return cfg
 }
 
-type CustomFnInsertParam func(insert *InsertParam)
-type CustomFnBatchInsertParam func(insert *BatchInsertParam)
-
-func (s RepositoryCommand) Insert(fields Fields, customFn CustomFnInsertParam) (err error) {
+func (s RepositoryCommand) Insert(fields Fields, customFns ...CustomFnInsertParam) (err error) {
 	builder := NewCompiler(s.getConfig(), fields...).Insert()
-	if customFn != nil {
-		customFn(builder)
-
-	}
+	builder.ApplyCustomFn(customFns...)
 	err = builder.Exec()
 	return err
 }
-func (s RepositoryCommand) BatchInsert(fieldsList []Fields, customFn CustomFnBatchInsertParam) (err error) {
+func (s RepositoryCommand) BatchInsert(fieldsList []Fields, customFns ...CustomFnBatchInsertParam) (err error) {
 	builder := NewCompiler(s.getConfig()).WithBatchFields(fieldsList...).InsertBatch()
-	if customFn != nil {
-		customFn(builder)
-
-	}
+	builder.ApplyCustomFn(customFns...)
 	err = builder.Exec()
 	return err
 }
 
-func (s RepositoryCommand) InsertWithLastId(fields Fields, customFn CustomFnInsertParam) (lastInsertId uint64, err error) {
+func (s RepositoryCommand) InsertWithLastId(fields Fields, customFns ...CustomFnInsertParam) (lastInsertId uint64, err error) {
 	builder := NewCompiler(s.getConfig(), fields...).Insert()
-	if customFn != nil {
-		customFn(builder)
-	}
+	builder.ApplyCustomFn(customFns...)
 	lastInsertId, _, err = builder.Insert()
 	if err != nil {
 		return 0, err
@@ -62,36 +51,23 @@ func (s RepositoryCommand) InsertWithLastId(fields Fields, customFn CustomFnInse
 	return lastInsertId, nil
 }
 
-type CustomFnUpdateParam func(insert *UpdateParam)
-
-func (s RepositoryCommand) Update(fields Fields, customFn CustomFnUpdateParam) (err error) {
+func (s RepositoryCommand) Update(fields Fields, customFns ...CustomFnUpdateParam) (err error) {
 	builder := NewCompiler(s.getConfig(), fields...).Update()
-	if customFn != nil {
-		customFn(builder)
-	}
+	builder.ApplyCustomFn(customFns...)
 	err = builder.Exec()
 	return err
 }
 
-type CustomFnSetParam func(set *SetParam)
-
-func (s RepositoryCommand) Set(fields Fields, custom CustomFnSetParam) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
+func (s RepositoryCommand) Set(fields Fields, customFns ...CustomFnSetParam) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
 	builder := NewCompiler(s.getConfig(), fields...).Set()
-	if custom != nil {
-		custom(builder)
-
-	}
+	builder.ApplyCustomFn(customFns...)
 	isInsert, lastInsertId, rowsAffected, err = builder.Set()
 	return isInsert, lastInsertId, rowsAffected, err
 }
 
-type CustomFnDeleteParam func(delete *DeleteParam)
-
-func (s RepositoryCommand) Delete(fields Fields, customFn CustomFnDeleteParam) (err error) {
+func (s RepositoryCommand) Delete(fields Fields, customFns ...CustomFnDeleteParam) (err error) {
 	builder := NewCompiler(s.getConfig(), fields...).Delete()
-	if customFn != nil {
-		customFn(builder)
-	}
+	builder.ApplyCustomFn(customFns...)
 	err = builder.Exec()
 	return err
 }
@@ -119,89 +95,68 @@ func (s RepositoryQuery[Model]) getConfig() CompilerConfig {
 	return cfg
 }
 
-type CustomFnFirstParam func(first *FirstParam)
-
-func (s RepositoryQuery[Model]) First(fields Fields, customFn CustomFnFirstParam) (model Model, exists bool, err error) {
+func (s RepositoryQuery[Model]) First(fields Fields, customFns ...CustomFnFirstParam) (model Model, exists bool, err error) {
 	builder := NewCompiler(s.getConfig(), fields...).First()
-	if customFn != nil {
-		customFn(builder)
-	}
+	builder.ApplyCustomFn(customFns...)
 	exists, err = builder.First(&model)
 	return model, exists, err
 }
-func (s RepositoryQuery[Model]) FirstMustExists(fields Fields, customFn CustomFnFirstParam) (model Model, err error) {
+func (s RepositoryQuery[Model]) FirstMustExists(fields Fields, customFns ...CustomFnFirstParam) (model Model, err error) {
 	builder := NewCompiler(s.getConfig(), fields...).First()
-	if customFn != nil {
-		customFn(builder)
-	}
+	builder.ApplyCustomFn(customFns...)
 	err = builder.FirstMustExists(&model)
 	return model, err
 }
 
-type CustomFnPaginationParam func(pagination *PaginationParam)
-
-func (s RepositoryQuery[Model]) Pagination(fields Fields, customFn CustomFnPaginationParam) (models []Model, total int64, err error) {
+func (s RepositoryQuery[Model]) Pagination(fields Fields, customFns ...CustomFnPaginationParam) (models []Model, total int64, err error) {
 	builder := NewCompiler(s.getConfig(), fields...).Pagination()
-	if customFn != nil {
-		customFn(builder)
-
-	}
+	builder.ApplyCustomFn(customFns...)
 	models = make([]Model, 0)
 	total, err = builder.Pagination(&models)
 	return models, total, err
 }
 
-type CustomFnListParam func(listParam *ListParam)
-
-func (s RepositoryQuery[Model]) All(fields Fields, customFn CustomFnListParam) (models []Model, err error) {
+func (s RepositoryQuery[Model]) All(fields Fields, customFns ...CustomFnListParam) (models []Model, err error) {
 	builder := NewCompiler(s.getConfig(), fields...).List()
-	if customFn != nil {
-		customFn(builder)
-
-	}
+	builder.ApplyCustomFn(customFns...)
 	models = make([]Model, 0)
 	err = builder.List(&models)
 	return models, err
 }
-func (s RepositoryQuery[Model]) GetByIdentityMust(fields Fields, customFn CustomFnFirstParam) (model Model, err error) {
+func (s RepositoryQuery[Model]) GetByIdentityMust(fields Fields, customFns ...CustomFnFirstParam) (model Model, err error) {
 	builder := NewCompiler(s.getConfig(), fields...).First()
-	if customFn != nil {
-		customFn(builder)
-	}
+	builder.ApplyCustomFn(customFns...)
 
 	err = builder.FirstMustExists(&model)
 	return model, err
 }
 
-func (s RepositoryQuery[Model]) GetByIdentity(fields Fields, customFn CustomFnFirstParam) (model Model, exists bool, err error) {
+func (s RepositoryQuery[Model]) GetByIdentity(fields Fields, customFns ...CustomFnFirstParam) (model Model, exists bool, err error) {
 	builder := NewCompiler(s.getConfig(), fields...).First()
-	if customFn != nil {
-		customFn(builder)
-
-	}
+	builder.ApplyCustomFn(customFns...)
 	exists, err = builder.First(&model)
 	return model, exists, err
 }
 
-func (s RepositoryQuery[Model]) GetByIdentities(fields Fields, customFn CustomFnListParam) (models []Model, err error) {
+func (s RepositoryQuery[Model]) GetByIdentities(fields Fields, customFns ...CustomFnListParam) (models []Model, err error) {
 	builder := NewCompiler(s.getConfig(), fields...).List()
-	if customFn != nil {
-		customFn(builder)
-
-	}
+	builder.ApplyCustomFn(customFns...)
 	err = builder.List(models)
 	return models, err
 }
 
-type CustomFnExistsParam func(existsParam *ExistsParam)
-
-func (s RepositoryQuery[Model]) Exists(fields Fields, customFn CustomFnExistsParam) (exists bool, err error) {
+func (s RepositoryQuery[Model]) Exists(fields Fields, customFns ...CustomFnExistsParam) (exists bool, err error) {
 	builder := NewCompiler(s.getConfig(), fields...).Exists()
-	if customFn != nil {
-		customFn(builder)
-	}
+	builder.ApplyCustomFn(customFns...)
 	exists, err = builder.Exists()
 	return exists, err
+}
+
+func (s RepositoryQuery[Model]) Count(fields Fields, customFns ...CustomFnTotalParam) (total int64, err error) {
+	builder := NewCompiler(s.getConfig(), fields...).Count()
+	builder.ApplyCustomFn(customFns...)
+	total, err = builder.Count()
+	return total, err
 }
 
 type Repository[T any] struct {
