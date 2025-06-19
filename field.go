@@ -1820,6 +1820,12 @@ func (fs Fields) ApplyDelay() Fields {
 	return fields
 }
 
+// Add 新增列，Append 被占用，使用add
+func (fs Fields) Add(moreFs ...*Field) Fields {
+	return append(fs, moreFs...)
+}
+
+// Deprecated: 废弃，使用 Append 方法代替 Fields 容许重复
 func (fs *Fields) Append(moreFields ...*Field) *Fields {
 	if *fs == nil {
 		*fs = make(Fields, 0)
