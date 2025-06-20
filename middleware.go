@@ -277,11 +277,14 @@ func ApplyFnUnique(handler Handler) ApplyFn { // 复合索引，给一列应用�
 	}
 }
 
-// Deprecated ApplyFnUniqueField 单列唯一索引键,新增场景中间件
-// func ApplyFnUniqueField(handler Handler) ApplyFn {
-// 	return ApplyFnUnique(handler)
-// }
-
+// Deprecated ApplyFnUniqueField 废弃，直接使用 ApplyFnUnique 即可
+//
+//	func ApplyFnUniqueField(handler Handler) ApplyFn {
+//		return ApplyFnUnique(handler)
+//	}
+//
+// ApplyFnUpdateIfNull 数据表记录字段为null时，更新为输入值,否则不更新，后续改成 set `feild_x`=if(`feild_x`,`feild_x`,?)
+// Deprecated 废弃，直接使用 ValueFnUpdateIfFalse 代替
 func ApplyFnUpdateIfNull(table TableConfig, handler Handler) ApplyFn {
 	return func(f *Field, fs ...*Field) {
 		f.SceneUpdate(func(f *Field, fs ...*Field) {

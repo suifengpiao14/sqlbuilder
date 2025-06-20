@@ -694,6 +694,20 @@ var ValueFnEmpty2Nil = ValueFn{ // 空字符串改成nil,值改成nil后,sql语�
 	Layer: Value_Layer_SetFormat,
 }
 
+// ValueFnUpdateIfFalse 更新字段 数据库值为false时，更新该字段,否则不更新为输入值（字段值保持已有值,即存在忽略更新）
+var ValueFnUpdateIfFalse = ValueFn{
+	Layer: Value_Layer_DBFormat,
+	Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
+		if IsNil(inputValue) {
+			return inputValue, nil
+		}
+		columnName := f.DBColumnName().FullNameWithQuotes()
+		sql := fmt.Sprintf("if(%s,%s,?)", columnName, columnName)
+		val := goqu.L(sql, inputValue)
+		return val, nil
+	},
+}
+
 func Empty2Nil(in any) (out any) {
 	switch val := in.(type) {
 	case string:

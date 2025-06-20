@@ -112,11 +112,6 @@ func (values ValueFns) Value(val any, f *Field, fs ...*Field) (value any, err er
 
 			cf := f.Copy()
 			cfs := Fields(fs).Copy()
-			//此处为了避免循环调用,此处移除当前字段,避免循环调用，但是代码没生效，暂时未解决，暂时注释掉
-			// cf.ValueFns.Remove(v)
-			// if scf, exists := cfs.GetByName(f.Name); exists {
-			// 	scf.ValueFns.Remove(v)
-			// }
 			value, err = v.Fn(value, cf, cfs...) //格式化值,后面2个参数移除当前的字段,避免循环调用
 			if err != nil {
 				return value, err
@@ -136,46 +131,6 @@ func (vFns ValueFns) Sort() {
 		return vFns[i].Order < vFns[j].Order
 	})
 }
-
-// // Insert 追加元素,不建议使用,建议用InsertAsFirst,InsertAsSecond
-// func (fns *ValueFns) Insert(index int, subFns ...ValueFn) {
-// 	if *fns == nil {
-// 		*fns = make(ValueFns, 0)
-// 	}
-// 	l := len(*fns)
-// 	if l == 0 || index < 0 || l <= index { // 本身没有,直接添加,或者计划添加到结尾,或者指定位置比现有数组长,直接追加
-// 		*fns = append(*fns, subFns...)
-// 		return
-// 	}
-// 	if index == 0 { // index =0 插入第一个
-// 		tmp := make(ValueFns, 0)
-// 		tmp = append(tmp, subFns...)
-// 		tmp = append(tmp, *fns...)
-// 		*fns = tmp
-// 		return
-// 	}
-// 	pre, after := (*fns)[:index], (*fns)[index:]
-// 	tmp := make(ValueFns, 0)
-// 	tmp = append(tmp, pre...)
-// 	tmp = append(tmp, subFns...)
-// 	tmp = append(tmp, after...)
-// 	*fns = tmp
-// }
-
-// // InsertAsFirst 作为第一个元素插入,一般用于将数据导入到whereFn 中
-// func (fns *ValueFns) InsertAsFirst(subFns ...ValueFn) {
-// 	fns.Insert(0, subFns...)
-// }
-
-// // InsertAsSecond 作为第二个元素插入,一般用于在获取数据后立即验证器插入
-// func (fns *ValueFns) InsertAsSecond(subFns ...ValueFn) {
-// 	fns.Insert(1, subFns...)
-// }
-
-// // Append 常规添加
-// func (fns *ValueFns) Append(subFns ...ValueFn) {
-// 	fns.Insert(-1, subFns...)
-// }
 
 func (fns *ValueFns) Reset(subFns ...ValueFn) {
 	*fns = make(ValueFns, 0)
@@ -221,48 +176,6 @@ func (vs ValueFns) Filter(fn func(fn ValueFn) bool) (subFns ValueFns) {
 	}
 	return subFns
 }
-
-// _ExcludeOnlyForDataValueFn 排除不适用于where条件的值函数
-// func _ExcludeOnlyForDataValueFn(vs ValueFns) (subFns ValueFns) {
-// 	if len(vs) == 0 {
-// 		return vs
-// 	}
-// 	return vs.Filter(func(fn ValueFn) bool {
-// 		return !fn.Layer.EqualFold(Value_Layer_OnlyForData)
-// 	})
-// }
-
-// // ExcludeOnlyForWhereValueFn 排除仅用于where条件的值函数
-// func ExcludeOnlyForWhereValueFn(vs ValueFns) (subFns ValueFns) {
-// 	if len(vs) == 0 {
-// 		return vs
-// 	}
-// 	return vs.Filter(func(fn ValueFn) bool {
-// 		return !fn.Layer.EqualFold(Value_Layer_OnlyForWhere)
-// 	})
-// }
-
-// // AppendIfNotFirst 追加到最后,但是不能是第一个,一般用于生成SQL时格式化数据
-// func (fns *ValueFns) AppendIfNotFirst(subFns ...ValueFn) {
-// 	if len(*fns) == 0 {
-// 		return
-// 	}
-// 	fns.Append(subFns...)
-// }
-
-// func (fns *ValueFns) Value(val any) (value any, err error) {
-// 	value = val
-// 	for _, fn := range *fns {
-// 		if fn.Fn == nil {
-// 			continue
-// 		}
-// 		value, err = fn.Fn(value) //格式化值
-// 		if err != nil {
-// 			return value, err
-// 		}
-// 	}
-// 	return value, nil
-// }
 
 var ValueFnWhereLike = ValueFn{
 	Fn: func(val any, f *Field, fs ...*Field) (value any, err error) {
@@ -1949,18 +1862,6 @@ func (fs Fields) GetByTags(tags ...string) (subFs Fields) {
 	}
 	return subFs
 }
-
-// func (fs Fields) GetByIndex(indexs ...Index) (subFs Fields) {
-// 	subFs = make(Fields, 0)
-// 	for i := 0; i < len(fs); i++ {
-// 		for _, index := range indexs {
-// 			if fs[i].HasIndex(index) {
-// 				subFs = append(subFs, fs[i])
-// 			}
-// 		}
-// 	}
-// 	return subFs
-// }
 
 func (fs Fields) GetByFieldName(fieldName string) (*Field, bool) {
 	for i := 0; i < len(fs); i++ {

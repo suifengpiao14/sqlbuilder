@@ -1255,8 +1255,6 @@ func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64,
 	}
 
 	existsHandler := WithSingleflightDoOnce(p.handler.OriginalHandler()).Exists // 屏蔽缓存中间件，同时防止单实例并发问题
-	// insertWithLastIdHandler := p.handler.InsertWithLastIdHandler
-	// execWithRowsAffectedHandler := p.handler.ExecWithRowsAffected
 	triggerInsertdEvent, triggerUpdateEvent := p.getEventHandler()
 	withInsertEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
 		triggerInsertdEvent(event.LastInsertId, event.RowsAffected)

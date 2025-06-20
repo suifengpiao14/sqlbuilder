@@ -13,58 +13,9 @@ import (
 
 var CacheInstance = cache.MemeryCache()
 
-// type Context struct {
-// 	CacheDuration time.Duration
-// 	Context       context.Context
-// }
-
 type EventInsertTrigger func(lastInsertId uint64, rowsAffected int64) (err error) // 新增事件触发器
 type EventUpdateTrigger func(rowsAffected int64) (err error)                      // 更新事件触发器
 type EventDeletedTrigger EventUpdateTrigger                                       // 删除事件触发器
-
-//type CountHandler func(sql string) (count int64, err error)
-
-//type QueryHandler func(context context.Context, sql string, result any) (err error)
-//type FirstHandler func(context context.Context, sql string, result any) (exists bool, err error)
-//type ExecHandler func(sql string) (err error)
-
-// type ExistsHandler func(sql string) (exists bool, err error)
-//type ExecWithRowsAffectedHandler func(sql string) (rowsAffected int64, err error)
-//type InsertWithLastIdHandler func(sql string) (lastInsertId uint64, rowsAffected int64, err error)
-
-// func WarpUpdateWithEventTrigger(updateHander ExecWithRowsAffectedHandler, eventUpdateTrigger EventUpdateTrigger) ExecWithRowsAffectedHandler {
-// 	return func(sql string) (rowsAffected int64, err error) {
-// 		rowsAffected, err = updateHander(sql)
-// 		if err != nil {
-// 			return
-// 		}
-
-// 		if eventUpdateTrigger != nil {
-// 			err = eventUpdateTrigger(rowsAffected)
-// 			if err != nil {
-// 				return rowsAffected, err
-// 			}
-// 		}
-// 		return rowsAffected, nil
-// 	}
-// }
-
-// func WarpInsertWithEventTrigger(insertHander InsertWithLastIdHandler, eventInsertTrigger EventInsertTrigger) InsertWithLastIdHandler {
-// 	return func(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
-// 		lastInsertId, rowsAffected, err = insertHander(sql)
-// 		if err != nil {
-// 			return
-// 		}
-
-// 		if eventInsertTrigger != nil {
-// 			err = eventInsertTrigger(lastInsertId, rowsAffected)
-// 			if err != nil {
-// 				return lastInsertId, rowsAffected, err
-// 			}
-// 		}
-// 		return lastInsertId, rowsAffected, nil
-// 	}
-// }
 
 type CompilerConfig struct {
 	Table       TableConfig
