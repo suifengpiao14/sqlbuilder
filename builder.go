@@ -270,27 +270,8 @@ type CustomFieldsFns []CustomFieldsFn
 
 // InsertParam 供子类复用,修改数据
 type InsertParam struct {
-	_Table  TableI
-	_Fields Fields
-	_log    LogI
-	//execHandler             ExecHandler
-	handler             Handler // 支持事务句柄
+	SQLParam[InsertParam]
 	_triggerInsertEvent EventInsertTrigger
-	context             context.Context
-	customFieldsFns     CustomFieldsFns
-}
-
-func (p *InsertParam) WithContext(ctx context.Context) *InsertParam {
-	p.context = ctx
-	return p
-}
-
-func (p *InsertParam) WithCustomFieldsFn(customFields ...CustomFieldsFn) *InsertParam {
-	p.customFieldsFns = customFields
-	return p
-}
-func (p InsertParam) Fields() Fields {
-	return p._Fields
 }
 
 func (p *InsertParam) WithTriggerEvent(triggerInsertEvent EventInsertTrigger) *InsertParam {
@@ -305,31 +286,10 @@ func (p *InsertParam) getEventHandler() (triggerInsertEvent EventInsertTrigger) 
 	return triggerInsertEvent
 }
 
-func (p *InsertParam) SetLog(log LogI) InsertParam {
-	p._log = log
-	return *p
-}
-
-func (p *InsertParam) WithHandler(handler Handler) *InsertParam {
-	//p.execHandler = execHandler
-	p.handler = handler
-	return p
-}
-
 func NewInsertBuilder(tableConfig TableConfig) *InsertParam {
-	return &InsertParam{
-		_Table:  TableFn(func() TableConfig { return tableConfig }),
-		_Fields: make(Fields, 0),
-		_log:    DefaultLog,
-	}
-}
-
-func (p *InsertParam) AppendFields(fields ...*Field) *InsertParam {
-	p._Fields.Append(fields...)
+	p := &InsertParam{}
+	p.SQLParam = NewSQLParam(p, tableConfig)
 	return p
-}
-func (p InsertParam) GetTable() (table TableConfig) {
-	return p._Table.TableConfig()
 }
 
 type CustomFnInsertParam = CustomFn[InsertParam]
@@ -412,25 +372,11 @@ func (p InsertParam) Insert() (lastInsertId uint64, rowsAffected int64, err erro
 }
 
 type BatchInsertParam struct {
-	rowFields []Fields
-	_Table    TableI
-	_log      LogI
-	//execHandler             ExecHandler
-	handler             Handler // 支持事务句柄
+	rowFields           []Fields
 	_triggerInsertEvent EventInsertTrigger
-	context             context.Context
-	customFieldsFns     CustomFieldsFns
+	SQLParam[BatchInsertParam]
 }
 
-func (p *BatchInsertParam) WithContext(ctx context.Context) *BatchInsertParam {
-	p.context = ctx
-	return p
-}
-
-func (p *BatchInsertParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *BatchInsertParam {
-	p.customFieldsFns = customFieldsFns
-	return p
-}
 func (p BatchInsertParam) Fields() []Fields {
 	return p.rowFields
 }
@@ -448,20 +394,8 @@ func (p *BatchInsertParam) getEventHandler() (triggerInsertEvent EventInsertTrig
 }
 
 func NewBatchInsertBuilder(tableConfig TableConfig) *BatchInsertParam {
-	return &BatchInsertParam{
-		_Table:    TableFn(func() TableConfig { return tableConfig }),
-		rowFields: make([]Fields, 0),
-		_log:      DefaultLog,
-	}
-}
-
-func (p *BatchInsertParam) SetLog(log LogI) *BatchInsertParam {
-	p._log = log
-	return p
-}
-
-func (p *BatchInsertParam) WithHandler(handler Handler) *BatchInsertParam {
-	p.handler = handler
+	p := &BatchInsertParam{}
+	p.SQLParam = NewSQLParam(p, tableConfig)
 	return p
 }
 
@@ -475,10 +409,6 @@ func (p *BatchInsertParam) AppendFields(fields ...Fields) *BatchInsertParam {
 
 var ERROR_BATCH_INSERT_DATA_IS_NIL = errors.New("batch insert err: data is nil")
 var ERROR_NOT_FOUND = errors.New("not found record")
-
-func (is BatchInsertParam) GetTable() TableConfig {
-	return is._Table.TableConfig()
-}
 
 type CustomFnBatchInsertParam = CustomFn[BatchInsertParam]
 type CustomFnBatchInsertParams = CustomFns[BatchInsertParam]
@@ -540,26 +470,8 @@ func (p BatchInsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected 
 }
 
 type DeleteParam struct {
-	_Table               TableI
-	_Fields              Fields
-	_log                 LogI
-	handler              Handler // 支持事务句柄
 	_triggerDeletedEvent EventDeletedTrigger
-	context              context.Context
-	customFieldsFns      CustomFieldsFns
-}
-
-func (p *DeleteParam) WithContext(ctx context.Context) DeleteParam {
-	p.context = ctx
-	return *p
-}
-
-func (p *DeleteParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *DeleteParam {
-	p.customFieldsFns = customFieldsFns
-	return p
-}
-func (p DeleteParam) Fields() Fields {
-	return p._Fields
+	SQLParam[DeleteParam]
 }
 
 func (p *DeleteParam) WithTriggerEvent(triggerDeletedEvent EventDeletedTrigger) *DeleteParam {
@@ -574,30 +486,10 @@ func (p *DeleteParam) getEventHandler() (triggerDeletedEvent EventDeletedTrigger
 	return triggerDeletedEvent
 }
 
-func (p *DeleteParam) SetLog(log LogI) DeleteParam {
-	p._log = log
-	return *p
-}
-func (p *DeleteParam) WithHandler(handler Handler) *DeleteParam {
-	p.handler = handler
-	return p
-}
-
 func NewDeleteBuilder(tableConfig TableConfig) *DeleteParam {
-	return &DeleteParam{
-		_Table:  TableFn(func() TableConfig { return tableConfig }),
-		_Fields: make(Fields, 0),
-		_log:    DefaultLog,
-	}
-}
-
-func (p *DeleteParam) AppendFields(fields ...*Field) *DeleteParam {
-	p._Fields.Append(fields...)
+	p := &DeleteParam{}
+	p.SQLParam = NewSQLParam(p, tableConfig)
 	return p
-}
-
-func (p DeleteParam) GetTable() TableConfig {
-	return p._Table.TableConfig()
 }
 
 type CustomFnDeleteParam = CustomFn[DeleteParam]
@@ -665,26 +557,8 @@ func (p DeleteParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
 }
 
 type UpdateParam struct {
-	_Table               TableI
-	_Fields              Fields
-	_log                 LogI
-	handler              Handler // 支持事务句柄
 	_triggerUpdatedEvent EventUpdateTrigger
-	context              context.Context
-	customFieldsFns      CustomFieldsFns
-}
-
-func (p *UpdateParam) WithContext(ctx context.Context) *UpdateParam {
-	p.context = ctx
-	return p
-}
-
-func (p *UpdateParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *UpdateParam {
-	p.customFieldsFns = customFieldsFns
-	return p
-}
-func (p UpdateParam) Fields() Fields {
-	return p._Fields
+	SQLParam[UpdateParam]
 }
 
 func (p *UpdateParam) WithTriggerEvent(triggerUpdateEvent EventUpdateTrigger) *UpdateParam {
@@ -699,30 +573,10 @@ func (p *UpdateParam) getEventHandler() (triggerUpdateEvent EventUpdateTrigger) 
 	return triggerUpdateEvent
 }
 
-func (p *UpdateParam) SetLog(log LogI) UpdateParam {
-	p._log = log
-	return *p
-}
-func (p *UpdateParam) WithHandler(handler Handler) *UpdateParam {
-	p.handler = handler
-	return p
-}
-
 func NewUpdateBuilder(tableConfig TableConfig) *UpdateParam {
-	return &UpdateParam{
-		_Table:  TableFn(func() TableConfig { return tableConfig }),
-		_Fields: make(Fields, 0),
-		_log:    DefaultLog,
-	}
-}
-
-func (p *UpdateParam) AppendFields(fields ...*Field) *UpdateParam {
-	p._Fields.Append(fields...)
+	p := &UpdateParam{}
+	p.SQLParam = NewSQLParam(p, tableConfig)
 	return p
-}
-
-func (p UpdateParam) GetTable() TableConfig {
-	return p._Table.TableConfig()
 }
 
 type CustomFnUpdateParam = CustomFn[UpdateParam]
@@ -855,39 +709,13 @@ func GetCacheDuration(ctx context.Context) time.Duration {
 }
 
 type FirstParam struct {
-	_Table          TableI
-	_Fields         Fields
-	_log            LogI
-	handler         Handler // 支持事务句柄
-	builderFns      SelectBuilderFns
-	context         context.Context
-	customFieldsFns CustomFieldsFns
+	builderFns SelectBuilderFns
+	SQLParam[FirstParam]
 }
 
-func (p *FirstParam) WithContext(ctx context.Context) *FirstParam {
-	p.context = ctx
-	return p
-}
-
-func (p *FirstParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *FirstParam {
-	p.customFieldsFns = customFieldsFns
-	return p
-}
-func (p FirstParam) Fields() Fields {
-	return p._Fields
-}
-
-func NewFirstBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *FirstParam {
-	return &FirstParam{
-		_Table:     TableFn(func() TableConfig { return tableConfig }),
-		_Fields:    make(Fields, 0),
-		_log:       DefaultLog,
-		builderFns: builderFns,
-	}
-}
-
-func (p *FirstParam) SetLog(log LogI) *FirstParam {
-	p._log = log
+func NewFirstBuilder(tableConfig TableConfig) *FirstParam {
+	p := &FirstParam{}
+	p.SQLParam = NewSQLParam(p, tableConfig)
 	return p
 }
 
@@ -896,26 +724,12 @@ func (p *FirstParam) WithCacheDuration(duration time.Duration) *FirstParam {
 	return p
 }
 
-func (p *FirstParam) AppendFields(fields ...*Field) *FirstParam {
-	p._Fields.Append(fields...)
-	return p
-}
-
-func (p *FirstParam) WithHandler(handler Handler) *FirstParam {
-	p.handler = handler
-	return p
-}
 func (p *FirstParam) WithBuilderFns(builderFns ...SelectBuilderFn) *FirstParam {
 	if len(p.builderFns) == 0 {
 		p.builderFns = SelectBuilderFns{}
 	}
 	p.builderFns = append(p.builderFns, builderFns...)
 	return p
-}
-
-// GetTable 获取表配置信息，增加获取表配置信息方法，方便在xxxBuilderFns 中能获取到表配置信息
-func (p FirstParam) GetTable() TableConfig {
-	return p._Table.TableConfig()
 }
 
 type CustomFnFirstParam = CustomFn[FirstParam]
@@ -989,36 +803,10 @@ func (fns SelectBuilderFns) Apply(ds *goqu.SelectDataset) *goqu.SelectDataset {
 }
 
 type ListParam struct {
-	_Table          TableI
-	_Fields         Fields
-	_log            LogI
-	handler         Handler // 支持事务句柄
-	builderFns      SelectBuilderFns
-	context         context.Context
-	customFieldsFns CustomFieldsFns // 定制化字段处理函数，可用于局部封装字段处理逻辑，比如通用模型中，用于设置查询字段的别名
-
+	builderFns SelectBuilderFns
+	SQLParam[ListParam]
 }
 
-func (p *ListParam) WithContext(ctx context.Context) *ListParam {
-	p.context = ctx
-	return p
-}
-func (p *ListParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *ListParam {
-	p.customFieldsFns = customFieldsFns
-	return p
-}
-func (p ListParam) Fields() Fields {
-	return p._Fields
-}
-
-func (p *ListParam) SetLog(log LogI) ListParam {
-	p._log = log
-	return *p
-}
-func (p *ListParam) WithHandler(handler Handler) *ListParam {
-	p.handler = handler
-	return p
-}
 func (p *ListParam) WithCacheDuration(duration time.Duration) *ListParam {
 	p.context = WithCacheDuration(p.context, duration)
 	return p
@@ -1031,11 +819,6 @@ func (p *ListParam) WithBuilderFns(builderFns ...SelectBuilderFn) *ListParam {
 	return p
 }
 
-func (p *ListParam) AppendFields(fields ...*Field) *ListParam {
-	p._Fields.Append(fields...)
-	return p
-}
-
 type CustomFnListParam = CustomFn[ListParam]
 type CustomFnListParams = CustomFns[ListParam]
 
@@ -1043,16 +826,12 @@ func (p *ListParam) ApplyCustomFn(customFns ...CustomFnListParam) *ListParam {
 	p = CustomFns[ListParam](customFns).Apply(p)
 	return p
 }
-func NewListBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *ListParam {
-	return &ListParam{
-		_Table:     TableFn(func() TableConfig { return tableConfig }),
-		_log:       DefaultLog,
-		builderFns: builderFns,
-	}
+func NewListBuilder(tableConfig TableConfig) *ListParam {
+	p := &ListParam{}
+	p.SQLParam = NewSQLParam(p, tableConfig)
+	return p
 }
-func (p ListParam) GetTable() TableConfig {
-	return p._Table.TableConfig()
-}
+
 func (p ListParam) ToSQL() (sql string, err error) {
 	tableConfig := p.GetTable()
 	fs := p._Fields.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
@@ -1127,40 +906,12 @@ func (log EmptyLog) Log(sql string, args ...any) {
 var DefaultLog = ConsoleLog{}
 
 type ExistsParam struct {
-	_Table                   TableI
-	_Fields                  Fields
-	_log                     LogI
 	allowEmptyWhereCondition bool
 	handler                  Handler // 支持事务句柄
 	builderFns               SelectBuilderFns
-	context                  context.Context
-	customFieldsFns          CustomFieldsFns
+	SQLParam[ExistsParam]
 }
 
-func (p *ExistsParam) AppendFields(fields ...*Field) *ExistsParam {
-	p._Fields.Append(fields...)
-	return p
-}
-func (p *ExistsParam) SetLog(log LogI) ExistsParam {
-	p._log = log
-	return *p
-}
-func (p *ExistsParam) WithContext(ctx context.Context) *ExistsParam {
-	p.context = ctx
-	return p
-}
-func (p *ExistsParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *ExistsParam {
-	p.customFieldsFns = customFieldsFns
-	return p
-}
-func (p ExistsParam) Fields() Fields {
-	return p._Fields
-}
-
-func (p *ExistsParam) WithHandler(handler Handler) *ExistsParam {
-	p.handler = handler
-	return p
-}
 func (p *ExistsParam) WithAllowEmptyWhereCondition(allowEmptyWhereCondition bool) *ExistsParam {
 	p.allowEmptyWhereCondition = allowEmptyWhereCondition
 	return p
@@ -1175,16 +926,10 @@ func (p *ExistsParam) WithBuilderFns(builderFns ...SelectBuilderFn) *ExistsParam
 	return p
 }
 
-func NewExistsBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *ExistsParam {
-	return &ExistsParam{
-		_Table:     TableFn(func() TableConfig { return tableConfig }),
-		_log:       DefaultLog,
-		builderFns: builderFns,
-	}
-}
-
-func (p ExistsParam) GetTable() TableConfig {
-	return p._Table.TableConfig()
+func NewExistsBuilder(tableConfig TableConfig) *ExistsParam {
+	p := &ExistsParam{}
+	p.SQLParam = NewSQLParam(p, tableConfig)
+	return p
 }
 
 type CustomFnExistsParam = CustomFn[ExistsParam]
@@ -1252,33 +997,14 @@ func (p ExistsParam) Exists() (exists bool, err error) {
 }
 
 type TotalParam struct {
-	_Table          TableI
-	_Fields         Fields
-	_log            LogI
-	handler         Handler // 支持事务句柄
-	builderFns      SelectBuilderFns
-	context         context.Context
-	customFieldsFns CustomFieldsFns
+	handler    Handler // 支持事务句柄
+	builderFns SelectBuilderFns
+	SQLParam[TotalParam]
 }
 
-func NewTotalBuilder(tableConfig TableConfig, builderFns ...SelectBuilderFn) *TotalParam {
-	return &TotalParam{
-		_Table:     TableFn(func() TableConfig { return tableConfig }),
-		_log:       DefaultLog,
-		builderFns: builderFns,
-	}
-}
-func (p *TotalParam) SetLog(log LogI) *TotalParam {
-	p._log = log
-	return p
-}
-
-func (p *TotalParam) WithContext(ctx context.Context) *TotalParam {
-	p.context = ctx
-	return p
-}
-func (p *TotalParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *TotalParam {
-	p.customFieldsFns = customFieldsFns
+func NewTotalBuilder(tableConfig TableConfig) *TotalParam {
+	p := &TotalParam{}
+	p.SQLParam = NewSQLParam(p, tableConfig)
 	return p
 }
 
@@ -1314,29 +1040,12 @@ func (fns CustomFns[P]) Append(fn CustomFn[P]) CustomFns[P] {
 	return append(fns, fn)
 }
 
-func (p TotalParam) Fields() Fields {
-	return p._Fields
-}
-func (p *TotalParam) WithHandler(handler Handler) *TotalParam {
-	p.handler = handler
-	return p
-}
-
 func (p *TotalParam) WithBuilderFns(builderFns ...SelectBuilderFn) *TotalParam {
 	if len(p.builderFns) == 0 {
 		p.builderFns = SelectBuilderFns{}
 	}
 	p.builderFns = append(p.builderFns, builderFns...)
 	return p
-}
-
-func (p *TotalParam) AppendFields(fields ...*Field) *TotalParam {
-	p._Fields.Append(fields...)
-	return p
-}
-
-func (p TotalParam) GetTable() TableConfig {
-	return p._Table.TableConfig()
 }
 
 func (p TotalParam) ToSQL() (sql string, err error) {
@@ -1373,38 +1082,13 @@ func (p TotalParam) Count() (total int64, err error) {
 }
 
 type PaginationParam struct {
-	_Table          TableI
-	_Fields         Fields
-	handler         Handler // 支持事务句柄
-	builderFns      SelectBuilderFns
-	context         context.Context
-	customFieldsFns CustomFieldsFns
-}
-
-func (p *PaginationParam) AppendFields(fields ...*Field) *PaginationParam {
-	p._Fields.Append(fields...)
-	return p
+	builderFns SelectBuilderFns
+	SQLParam[PaginationParam]
 }
 
 func NewPaginationBuilder(tableConfig TableConfig) *PaginationParam {
-	return &PaginationParam{
-		_Table: TableFn(func() TableConfig { return tableConfig }),
-	}
-}
-func (p *PaginationParam) WithContext(ctx context.Context) *PaginationParam {
-	p.context = ctx
-	return p
-}
-func (p *PaginationParam) WithCustomFieldsFn(customFieldsFns CustomFieldsFns) *PaginationParam {
-	p.customFieldsFns = customFieldsFns
-	return p
-}
-
-func (p PaginationParam) Fields() Fields {
-	return p._Fields
-}
-func (p *PaginationParam) WithHandler(handler Handler) *PaginationParam {
-	p.handler = handler
+	p := &PaginationParam{}
+	p.SQLParam = NewSQLParam(p, tableConfig)
 	return p
 }
 
@@ -1419,10 +1103,6 @@ func (p *PaginationParam) WithBuilderFns(builderFns ...SelectBuilderFn) *Paginat
 	}
 	p.builderFns = append(p.builderFns, builderFns...)
 	return p
-}
-
-func (p PaginationParam) GetTable() TableConfig {
-	return p._Table.TableConfig()
 }
 
 type CustomFnPaginationParam = CustomFn[PaginationParam]
@@ -1495,25 +1175,16 @@ var setPolicy_need_insert_sql = []SetPolicy{SetPolicy_only_Insert, SetPolicy_Ins
 var setPolicy_need_update_sql = []SetPolicy{SetPolicy_only_Update, SetPolicy_Insert_or_Update}
 
 type SetParam struct {
-	_Table                TableI
-	_Fields               Fields
-	handler               Handler   // 支持事务句柄
 	setPolicy             SetPolicy // 更新策略,默认根据主键判断是否需要更新
 	_triggerInsertedEvent EventInsertTrigger
 	_triggerUpdatedEvent  EventUpdateTrigger
-	context               context.Context
-	customFieldsFns       CustomFieldsFns
-}
-
-func (p *SetParam) AppendFields(fields ...*Field) *SetParam {
-	p._Fields.Append(fields...)
-	return p
+	SQLParam[SetParam]
 }
 
 func NewSetBuilder(tableConfig TableConfig) *SetParam {
-	return &SetParam{
-		_Table: TableFn(func() TableConfig { return tableConfig }),
-	}
+	p := &SetParam{}
+	p.SQLParam = NewSQLParam(p, tableConfig)
+	return p
 }
 
 func (p *SetParam) WithPolicy(policy SetPolicy) *SetParam {
@@ -1521,18 +1192,6 @@ func (p *SetParam) WithPolicy(policy SetPolicy) *SetParam {
 	return p
 }
 
-func (p *SetParam) WithContext(ctx context.Context) *SetParam {
-	p.context = ctx
-	return p
-}
-
-func (p *SetParam) WithCustomFieldsFn(customFieldsFns ...CustomFieldsFn) *SetParam {
-	p.customFieldsFns = customFieldsFns
-	return p
-}
-func (p SetParam) Fields() Fields {
-	return p._Fields
-}
 func (p *SetParam) WithTriggerEvent(triggerInsertdEvent EventInsertTrigger, triggerUpdateEvent EventUpdateTrigger) *SetParam {
 	p._triggerInsertedEvent = triggerInsertdEvent
 	p._triggerUpdatedEvent = triggerUpdateEvent
@@ -1549,16 +1208,6 @@ func (p *SetParam) getEventHandler() (triggerInsertdEvent EventInsertTrigger, tr
 		triggerUpdateEvent = func(rowsAffected int64) (err error) { return nil }
 	}
 	return triggerInsertdEvent, triggerUpdateEvent
-}
-
-func (p *SetParam) WithHandler(handler Handler) *SetParam {
-	p.handler = handler
-
-	return p
-}
-
-func (p SetParam) GetTable() TableConfig {
-	return p._Table.TableConfig()
 }
 
 type CustomFnSetParam = CustomFn[SetParam]
@@ -1691,4 +1340,56 @@ func dataAny2Map(data any) (newData map[string]any, err error) {
 		return nil, errors.Errorf("unsupported update interface type %+v,got:%+v", rv.Type(), data)
 	}
 	return newData, nil
+}
+
+type SQLParam[T any] struct {
+	self            *T
+	_Table          TableI
+	_Fields         Fields
+	_log            LogI
+	handler         Handler
+	context         context.Context
+	customFieldsFns CustomFieldsFns // 定制化字段处理函数，可用于局部封装字段处理逻辑，比如通用模型中，用于设置查询字段的别名
+}
+
+func NewSQLParam[T any](self *T, table TableConfig) SQLParam[T] {
+	return SQLParam[T]{
+		self:    self,
+		_Table:  TableFn(func() TableConfig { return table }),
+		_Fields: make(Fields, 0),
+		_log:    DefaultLog,
+	}
+}
+
+func (p *SQLParam[T]) WithContext(ctx context.Context) *T {
+	p.context = ctx
+	return p.self
+}
+
+func (p *SQLParam[T]) WithCustomFieldsFn(fns ...CustomFieldsFn) *T {
+	p.customFieldsFns = fns
+	return p.self
+}
+
+func (p *SQLParam[T]) WithHandler(handler Handler) *T {
+	p.handler = handler
+	return p.self
+}
+
+func (p *SQLParam[T]) AppendFields(fs ...*Field) *T {
+	p._Fields.Append(fs...)
+	return p.self
+}
+
+func (p *SQLParam[T]) Fields() Fields {
+	return p._Fields
+}
+
+func (p *SQLParam[T]) GetTable() TableConfig {
+	return p._Table.TableConfig()
+}
+
+func (p *SQLParam[T]) SetLog(log LogI) *T {
+	p._log = log
+	return p.self
 }
