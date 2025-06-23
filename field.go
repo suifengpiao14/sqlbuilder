@@ -1064,15 +1064,10 @@ func GetFieldName[T FieldTypeI](fn FieldFn[T]) (fieldName string) {
 	return fn.GetName()
 }
 
-func GetField[T FieldTypeI, F FieldFn[T] | FieldFn2](fn F) (fieldName string) {
-	switch f := any(fn).(type) {
-	case FieldFn[T]:
-		return f.GetName()
-	case FieldFn2:
-		return f().Name
-	}
-	err := errors.New("fn 类型不正确")
-	panic(err)
+func GetField[T FieldTypeI](fn FieldFn[T]) *Field {
+	valueRf := new(T)
+	f := fn(*valueRf)
+	return f
 }
 
 func (fn FieldFn[T]) Apply(value T) *Field {
