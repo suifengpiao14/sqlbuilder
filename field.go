@@ -1025,6 +1025,14 @@ func (f *Field) SceneExists(middlewareFn ApplyFn) *Field {
 	return f
 }
 
+// SetValue  设置第一个valueFn
+func (f *Field) SetValue(value any) *Field {
+	f.ValueFns.ResetSetValueFn(func(_ any, f *Field, fs ...*Field) (any, error) {
+		return value, nil
+	})
+	return f
+}
+
 type FieldFn[T any] func(value T) *Field
 
 func IsGenericByFieldFn(rt reflect.Type) bool {
@@ -1064,8 +1072,12 @@ type AttributeI interface {
 	Builder() AttributeI
 }
 
+type FieldTypeI interface {
+	~int | ~int64 | ~uint64 | ~uint | ~uint8 | ~[]int | ~[]int64 | ~[]uint64 | ~[]uint | ~[]uint8 | ~string | ~[]string | ValueFn | ValueFnFn | func(inputValue any, f *Field, fs ...*Field) (any, error)
+}
+
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
-func NewField[T ~int | ~int64 | ~uint64 | ~uint | ~uint8 | ~[]int | ~[]int64 | ~[]uint64 | ~[]uint | ~[]uint8 | ~string | ~[]string | ValueFn | ValueFnFn | func(inputValue any, f *Field, fs ...*Field) (any, error)](value T, middlewareFns ...ApplyFn) (field *Field) {
+func NewField[T FieldTypeI](value T, middlewareFns ...ApplyFn) (field *Field) {
 	field = &Field{}
 	var valueFn ValueFn
 	switch v := any(value).(type) {
