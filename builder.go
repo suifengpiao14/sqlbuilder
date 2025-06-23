@@ -1374,6 +1374,11 @@ func (p *SQLParam[T]) WithHandler(handler Handler) *T {
 	return p.self
 }
 
+func (p *SQLParam[T]) WithHandlerMiddleware(middlewares ...HandlerMiddleware) *T {
+	p.handler = ChainHandler(p.handler, middlewares...)
+	return p.self
+}
+
 func (p *SQLParam[T]) AppendFields(fs ...*Field) *T {
 	p._Fields.Append(fs...)
 	return p.self
@@ -1381,6 +1386,10 @@ func (p *SQLParam[T]) AppendFields(fs ...*Field) *T {
 
 func (p *SQLParam[T]) Fields() Fields {
 	return p._Fields
+}
+
+func (p *SQLParam[T]) Handler() Handler {
+	return p.handler
 }
 
 func (p *SQLParam[T]) GetTable() TableConfig {

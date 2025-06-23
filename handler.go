@@ -193,6 +193,15 @@ func (r *DataReport) SetCacheDuration(duration time.Duration) {
 	r.cacheDuration = duration
 }
 
+type HandlerMiddleware func(Handler) Handler
+
+func ChainHandler(handler Handler, middlewares ...HandlerMiddleware) Handler {
+	for i := range middlewares {
+		handler = middlewares[i](handler)
+	}
+	return handler
+}
+
 type Handler interface {
 	Exec(sql string) (err error)
 	ExecWithRowsAffected(sql string) (rowsAffected int64, err error)
@@ -339,7 +348,15 @@ type _HandlerSingleflight struct {
 	group   *singleflight.Group
 }
 
+// Deprecated: 请使用 HandlerMiddlewareSingleflight 代替
 func WithSingleflight(handler Handler) Handler {
+	return _HandlerSingleflight{
+		handler: handler,
+		group:   &singleflight.Group{},
+	}
+}
+
+func HandlerMiddlewareSingleflight(handler Handler) Handler {
 	return _HandlerSingleflight{
 		handler: handler,
 		group:   &singleflight.Group{},
@@ -482,6 +499,10 @@ func _WithCache(handler Handler) Handler {
 	}
 }
 
+func HandlerMiddlewareCache(handler Handler) Handler {
+	return _WithCache(handler)
+}
+
 var Cache_sql_duration time.Duration = 1 * time.Minute
 
 func (hc _HandlerCache) OriginalHandler() Handler {
@@ -581,8 +602,14 @@ type _HandlerSingleflightDoOnce struct {
 	group   *singleflight.Group
 }
 
-// WithSingleflightDoOnce 单例执行一次，防止并发问题,目前用于Set 中的exists 查询，所以只实现 exists 查询
+// Deprecated: 请使用 HandlerMiddlewareSingleflightDoOnce 替代
 func WithSingleflightDoOnce(handler Handler) Handler {
+	return HandlerMiddlewareSingleflightDoOnce(handler)
+
+}
+
+// HandlerMiddlewareSingleflightDoOnce 单例执行一次，防止并发问题,目前用于Set 中的exists 查询，所以只实现 exists 查询
+func HandlerMiddlewareSingleflightDoOnce(handler Handler) Handler {
 	return _HandlerSingleflightDoOnce{
 		handler: handler,
 		group:   &singleflight.Group{},
