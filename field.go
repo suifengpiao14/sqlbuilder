@@ -1033,7 +1033,8 @@ func (f *Field) SetValue(value any) *Field {
 	return f
 }
 
-type FieldFn[T any] func(value T) *Field
+type FieldFn[T FieldTypeI] func(value T) *Field
+type FieldFn2 func() *Field
 
 func IsGenericByFieldFn(rt reflect.Type) bool {
 	if rt.Kind() != reflect.Func {
@@ -1058,18 +1059,24 @@ func (fn FieldFn[T]) GetName() string {
 	return name
 }
 
-// GetFieldName 快捷获取字段名，结合 ColumnConfigs.FieldName2ColumnName 可快速获取字段名对应的数据库列名，用于创建索引
-func GetFieldName[T any](fn FieldFn[T]) (fieldName string) {
+// Deprecated: GetFieldName 快捷获取字段名，结合 ColumnConfigs.FieldName2ColumnName 可快速获取字段名对应的数据库列名，用于创建索引
+func GetFieldName[T FieldTypeI](fn FieldFn[T]) (fieldName string) {
 	return fn.GetName()
+}
+
+func GetField[T FieldTypeI, F FieldFn[T] | FieldFn2](fn F) (fieldName string) {
+	switch f := any(fn).(type) {
+	case FieldFn[T]:
+		return f.GetName()
+	case FieldFn2:
+		return f().Name
+	}
+	err := errors.New("fn 类型不正确")
+	panic(err)
 }
 
 func (fn FieldFn[T]) Apply(value T) *Field {
 	return fn(value)
-}
-
-// AttributeI 领域对象属性接口
-type AttributeI interface {
-	Builder() AttributeI
 }
 
 type FieldTypeI interface {

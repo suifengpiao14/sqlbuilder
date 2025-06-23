@@ -297,10 +297,19 @@ type ColumnConfig struct {
 	Enums     Enums      `json:"enums"`
 }
 
+// Deprecated: use NewColumn instead
 func NewColumnConfig(dbName, fieldName string) ColumnConfig {
 	return ColumnConfig{
 		FieldName: fieldName,
 		DbName:    dbName,
+	}
+}
+
+// NewColumn 新建列配置，用于封装模型时，将字段映射为数据库字段,使用*Field作为参数，能减少硬编码，减少硬编码带来的维护成本
+func NewColumn(dbFieldName string, field *Field) ColumnConfig {
+	return ColumnConfig{
+		FieldName: field.Name,
+		DbName:    dbFieldName,
 	}
 }
 
