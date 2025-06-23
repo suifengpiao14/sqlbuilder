@@ -212,6 +212,13 @@ func OrderFieldFn(valueOrder ...any) OrderFn {
 
 type OrderFn func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression)
 
+type OrderFnWithSort struct {
+	Sort int
+	Fn   OrderFn
+}
+
+type OrderFnWithSorts []OrderFnWithSort
+
 type OnUnit struct {
 	Table       TableConfig
 	Field       *Field
@@ -277,10 +284,12 @@ func Join(ds *goqu.SelectDataset, jionConfigs ...OnUnit) *goqu.SelectDataset {
 
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Name          string      `json:"name"`
-	ValueFns      ValueFns    `json:"-"` // 增加error，方便封装字段验证规则
-	WhereFns      ValueFns    `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
-	_OrderFn      OrderFn     `json:"-"` // 排序函数
+	Name     string   `json:"name"`
+	ValueFns ValueFns `json:"-"` // 增加error，方便封装字段验证规则
+	WhereFns ValueFns `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	//_OrderFn          OrderFn         `json:"-"` //deprecated  排序函数
+	_OrderFnWithSort OrderFnWithSort `json:"-"` // 排序函数,支持多个排序规则
+
 	Schema        *Schema     // 可以为空，为空建议设置默认值
 	table         TableConfig // 关联表,方便收集Table全量信息
 	scene         Scene       // 场景
@@ -434,8 +443,19 @@ const (
 // 	return f
 // }
 
+//Deprecated: Use WithOrderFn instead.
+
 func (f *Field) SetOrderFn(orderFn OrderFn) *Field {
-	f._OrderFn = orderFn
+	f._OrderFnWithSort = OrderFnWithSort{
+		Fn: orderFn,
+	}
+	return f
+}
+func (f *Field) WithOrderFn(sort int, orderFn OrderFn) *Field {
+	f._OrderFnWithSort = OrderFnWithSort{
+		Sort: sort,
+		Fn:   orderFn,
+	}
 	return f
 }
 
@@ -852,8 +872,8 @@ func (f *Field) Combine(combinedFields ...*Field) *Field {
 		f.sceneFns.Append(combined.sceneFns...)
 		//	f.ValueFns.Append(combined.ValueFns...) value 不可写入
 		f.WhereFns.Append(combined.WhereFns...)
-		if f._OrderFn == nil {
-			f._OrderFn = combined._OrderFn
+		if f._OrderFnWithSort.Fn == nil {
+			f._OrderFnWithSort = combined._OrderFnWithSort
 		}
 		if combined.Schema != nil {
 			schema.Merge(*combined.Schema)
@@ -1362,8 +1382,8 @@ func (f Field) Where(fs ...*Field) (expressions Expressions, err error) {
 
 func (f Field) Order(fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
 	orderedExpressions = make([]exp.OrderedExpression, 0)
-	if f._OrderFn != nil {
-		exs := f._OrderFn(&f, fs...)
+	if f._OrderFnWithSort.Fn != nil {
+		exs := f._OrderFnWithSort.Fn(&f, fs...)
 		realExs := make([]exp.OrderedExpression, 0)
 		if len(exs) > 0 {
 			for _, v := range exs {
@@ -1913,8 +1933,17 @@ func (fs Fields) Where() (expressions Expressions, err error) {
 	return expressions, nil
 }
 
+func (fs Fields) sortByOrderField() Fields {
+	cp := fs.Copy()
+	slices.SortFunc(cp, func(a, b *Field) int {
+		return a._OrderFnWithSort.Sort - b._OrderFnWithSort.Sort
+	})
+	return cp
+}
+
 func (fs Fields) Order() (orderedExpressions []exp.OrderedExpression) {
 	orderedExpressions = make([]exp.OrderedExpression, 0)
+	fs = fs.sortByOrderField()
 	for _, field := range fs {
 		subExprs := field.Order(fs...)
 		orderedExpressions = append(orderedExpressions, subExprs...)

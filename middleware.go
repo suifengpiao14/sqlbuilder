@@ -115,15 +115,21 @@ var ApplyFnWhereIlike ApplyFn = func(f *Field, fs ...*Field) {
 }
 
 var ApplyFnOrderDesc ApplyFn = func(f *Field, fs ...*Field) {
-	f._OrderFn = OrderFnDesc
+	f._OrderFnWithSort = OrderFnWithSort{
+		Fn: OrderFnDesc,
+	}
 }
 var ApplyFnOrderAsc ApplyFn = func(f *Field, fs ...*Field) {
-	f._OrderFn = OrderFnAsc
+	f._OrderFnWithSort = OrderFnWithSort{
+		Fn: OrderFnAsc,
+	}
 }
 
 func ApplyFnOrderField(valueOrder ...any) ApplyFn {
 	return func(f *Field, fs ...*Field) {
-		f._OrderFn = OrderFieldFn(valueOrder...)
+		f._OrderFnWithSort = OrderFnWithSort{
+			Fn: OrderFieldFn(valueOrder...),
+		}
 	}
 }
 
