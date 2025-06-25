@@ -1370,6 +1370,9 @@ func (p *SQLParam[T]) WithCustomFieldsFn(fns ...CustomFieldsFn) *T {
 }
 
 func (p *SQLParam[T]) WithHandler(handler Handler) *T {
+	if IsNil(handler) {
+		return p.self
+	}
 	p.handler = handler
 	return p.self
 }

@@ -16,7 +16,7 @@ var CacheInstance = cache.MemeryCache()
 type EventInsertTrigger func(lastInsertId uint64, rowsAffected int64) (err error) // 新增事件触发器
 type EventUpdateTrigger func(rowsAffected int64) (err error)                      // 更新事件触发器
 type EventDeletedTrigger EventUpdateTrigger                                       // 删除事件触发器
-
+// Deprecated: 废弃，直接获取 Handler 即可
 type CompilerConfig struct {
 	Table       TableConfig
 	Handler     Handler `json:"-"` // 支持事务句柄
@@ -54,7 +54,7 @@ func (c CompilerConfig) CopyTableHandler() CompilerConfig {
 	return cp
 }
 
-// Compiler
+// Deprecated 弃用 ,直接获取handler和table即可。引入Compiler是未来解决事务问题，本质上只需要接收指定 dbHander 即可，所以只需明确传入handler,使用 p.WithHandler() 重置即可
 type Compiler struct {
 	handler     Handler
 	tableConfig TableConfig
