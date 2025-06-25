@@ -177,19 +177,34 @@ func (vs ValueFns) Filter(fn func(fn ValueFn) bool) (subFns ValueFns) {
 	return subFns
 }
 
-var ValueFnWhereLike = ValueFn{
-	Fn: func(val any, f *Field, fs ...*Field) (value any, err error) {
-		if val == nil {
-			return val, nil
-		}
-		str := cast.ToString(val)
-		if str == "" {
-			return val, nil
-		}
-		value = Ilike{"%", str, "%"}
-		return value, nil
-	},
-	Layer: Value_Layer_DBFormat,
+var ValueFnWhereLike = ValueFnWhereLikev2(true, true)
+
+func ValueFnWhereLikev2(left, right bool) ValueFn {
+	likeLeft := ""
+	if left {
+		likeLeft = "%"
+	}
+	likeRight := ""
+	if right {
+		likeRight = "%"
+	}
+	valueFn := ValueFn{
+		Fn: func(val any, f *Field, fs ...*Field) (value any, err error) {
+			if IsNil(val) {
+				return val, nil
+			}
+			str := cast.ToString(val)
+			if str == "" {
+				return val, nil
+			}
+			value = Ilike{likeLeft, str, likeRight}
+
+			return value, nil
+		},
+		Layer: Value_Layer_DBFormat,
+	}
+	return valueFn
+
 }
 
 var OrderFnDesc OrderFn = func(f *Field, fs ...*Field) (orderedExpressions []exp.OrderedExpression) {
