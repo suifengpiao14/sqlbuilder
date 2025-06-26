@@ -1165,19 +1165,22 @@ func (p PaginationParam) Pagination(result any) (count int64, err error) {
 type SetPolicy string
 
 const (
-	SetPolicy_only_Insert      SetPolicy = "onlyInsert" //只新增说明使用最早数据
-	SetPolicy_only_Update      SetPolicy = "onlyUpdate" //只更新说明不存在时不处理
-	SetPolicy_Insert_or_Update SetPolicy = ""           //不存在新增,存在更新，使用最新数据覆盖
+	SetPolicy_only_Insert       SetPolicy = "onlyInsert"      //只新增说明使用最早数据
+	SetPolicy_only_Update       SetPolicy = "onlyUpdate"      //只更新说明不存在时不处理
+	SetPolicy_Insert_or_Update  SetPolicy = ""                //不存在新增,存在更新，使用最新数据覆盖
+	SetPolicy_Delete_and_insert SetPolicy = "deleteAndInsert" //先删除再新增
 
 )
 
-var setPolicy_need_insert_sql = []SetPolicy{SetPolicy_only_Insert, SetPolicy_Insert_or_Update}
+var setPolicy_need_insert_sql = []SetPolicy{SetPolicy_only_Insert, SetPolicy_Insert_or_Update, SetPolicy_Delete_and_insert}
 var setPolicy_need_update_sql = []SetPolicy{SetPolicy_only_Update, SetPolicy_Insert_or_Update}
+var setPolicy_need_delete_sql = []SetPolicy{SetPolicy_Delete_and_insert}
 
 type SetParam struct {
 	setPolicy             SetPolicy // 更新策略,默认根据主键判断是否需要更新
 	_triggerInsertedEvent EventInsertTrigger
 	_triggerUpdatedEvent  EventUpdateTrigger
+	_triggerDeletedEvent  EventDeletedTrigger
 	SQLParam[SetParam]
 }
 
@@ -1198,7 +1201,7 @@ func (p *SetParam) WithTriggerEvent(triggerInsertdEvent EventInsertTrigger, trig
 	return p
 }
 
-func (p *SetParam) getEventHandler() (triggerInsertdEvent EventInsertTrigger, triggerUpdateEvent EventUpdateTrigger) {
+func (p *SetParam) getEventHandler() (triggerInsertdEvent EventInsertTrigger, triggerUpdateEvent EventUpdateTrigger, triggerDeleteEvent EventDeletedTrigger) {
 	triggerInsertdEvent = p._triggerInsertedEvent
 	if triggerInsertdEvent == nil {
 		triggerInsertdEvent = func(lastInsertId uint64, rowsAffected int64) (err error) { return nil }
@@ -1207,7 +1210,12 @@ func (p *SetParam) getEventHandler() (triggerInsertdEvent EventInsertTrigger, tr
 	if triggerUpdateEvent == nil {
 		triggerUpdateEvent = func(rowsAffected int64) (err error) { return nil }
 	}
-	return triggerInsertdEvent, triggerUpdateEvent
+	triggerDeleteEvent = p._triggerDeletedEvent
+	if triggerDeleteEvent == nil {
+		triggerDeleteEvent = func(rowsAffected int64) (err error) { return nil }
+	}
+
+	return triggerInsertdEvent, triggerUpdateEvent, triggerDeleteEvent
 }
 
 type CustomFnSetParam = CustomFn[SetParam]
@@ -1218,67 +1226,92 @@ func (p *SetParam) ApplyCustomFn(customFns ...CustomFnSetParam) *SetParam {
 	return p
 }
 
-// ToSQL 一次生成 查询、新增、修改 sql,若查询后记录存在,并且需要根据数据库记录值修改数据,则可以重新赋值后生成sql
+// Deprecated please use ToSQL2 ToSQL 一次生成 查询、新增、修改 sql,若查询后记录存在,并且需要根据数据库记录值修改数据,则可以重新赋值后生成sql
 func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string, err error) {
+	existsSql, insertSql, updateSql, _, err = p.ToSQLV2()
+	if err != nil {
+		return "", "", "", err
+	}
+	return existsSql, insertSql, updateSql, nil
+}
+
+func (p SetParam) ToSQLV2() (existsSql string, insertSql string, updateSql string, deleteSql string, err error) {
 	table := p.GetTable()
 	existsSql, err = NewExistsBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL() // 有些根据场景设置 如枚举值 ""，所有需要复制
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", "", err
 	}
 	if slices.Contains(setPolicy_need_insert_sql, p.setPolicy) {
 		insertSql, err = NewInsertBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL()
 		if err != nil {
-			return "", "", "", err
+			return "", "", "", "", err
 		}
 	}
 
 	if slices.Contains(setPolicy_need_update_sql, p.setPolicy) { // 不加条件判断 当 setPolicy 为 SetPolicy_only_Insert 可能报错，比如：只有唯一键一列，更新时屏蔽唯一键更新，此时更新字段就为空，会报错，所以增加if 判断
 		updateSql, err = NewUpdateBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL()
 		if err != nil {
-			return "", "", "", err
+			return "", "", "", "", err
 		}
 	}
-
-	return existsSql, insertSql, updateSql, nil
+	if slices.Contains(setPolicy_need_delete_sql, p.setPolicy) {
+		deleteSql, err = NewDeleteBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL()
+		if err != nil {
+			return "", "", "", "", err
+		}
+	}
+	return existsSql, insertSql, updateSql, deleteSql, nil
 }
 
-func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
+func (p SetParam) Set() (isNotExits bool, lastInsertId uint64, rowsAffected int64, err error) {
 	// 因为自带 exists 查询，所以不需要校验唯一索引了，否则 存在 table.CheckUniqueIndex 就会报错，达不到update 效果
 	// table := p.GetTable()
 	// err = table.CheckUniqueIndex(p._Fields...)
 	// if err != nil {
 	// 	return false, 0, 0, err
 	// }
-	existsSql, insertSql, updateSql, err := p.ToSQL()
+	existsSql, insertSql, updateSql, deleteSql, err := p.ToSQLV2()
 	if err != nil {
 		return false, 0, 0, err
 	}
 
 	existsHandler := WithSingleflightDoOnce(p.handler.OriginalHandler()).Exists // 屏蔽缓存中间件，同时防止单实例并发问题
-	triggerInsertdEvent, triggerUpdateEvent := p.getEventHandler()
+	triggerInsertdEvent, triggerUpdateEvent, triggerDeletedEvent := p.getEventHandler()
 	withInsertEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
 		triggerInsertdEvent(event.LastInsertId, event.RowsAffected)
 	})
 	withUpdateEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
 		triggerUpdateEvent(event.RowsAffected)
 	})
+	withDeletedEventHandler := WithTriggerAsyncEvent(p.handler, func(event *Event) {
+		triggerDeletedEvent(event.RowsAffected)
+	})
 
 	exists, err := existsHandler(existsSql)
 	if err != nil {
 		return false, 0, 0, err
 	}
-	isInsert = !exists
+	isNotExits = !exists
 	switch p.setPolicy {
 	case SetPolicy_only_Insert: // 只新增说明使用最早数据
 		if !exists {
 			lastInsertId, rowsAffected, err = withInsertEventHandler.InsertWithLastId(insertSql)
-			return isInsert, lastInsertId, rowsAffected, err
+			return isNotExits, lastInsertId, rowsAffected, err
 		}
 	case SetPolicy_only_Update: // 只更新说明不存在时不处理
 		if exists {
 			rowsAffected, err = withUpdateEventHandler.ExecWithRowsAffected(updateSql)
-			return isInsert, lastInsertId, rowsAffected, err
+			return isNotExits, lastInsertId, rowsAffected, err
 		}
+	case SetPolicy_Delete_and_insert:
+		if exists {
+			rowsAffected, err = withDeletedEventHandler.ExecWithRowsAffected(deleteSql)
+			if err != nil {
+				return isNotExits, lastInsertId, rowsAffected, err
+			}
+		}
+		lastInsertId, rowsAffected, err = withInsertEventHandler.InsertWithLastId(insertSql)
+		return isNotExits, lastInsertId, rowsAffected, err
 	default: // 默认执行 SetPolicy_Insert_or_Update 策略
 		if exists {
 			rowsAffected, err = withUpdateEventHandler.ExecWithRowsAffected(updateSql)
@@ -1286,7 +1319,7 @@ func (p SetParam) Set() (isInsert bool, lastInsertId uint64, rowsAffected int64,
 			lastInsertId, rowsAffected, err = withInsertEventHandler.InsertWithLastId(insertSql)
 		}
 	}
-	return isInsert, lastInsertId, rowsAffected, err
+	return isNotExits, lastInsertId, rowsAffected, err
 }
 
 func MergeData(dataFns ...func() (any, error)) (map[string]any, error) {
