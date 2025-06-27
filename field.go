@@ -1074,7 +1074,6 @@ func (fn FieldFn[T]) GetName() string {
 	return name
 }
 
-// Deprecated: GetFieldName 快捷获取字段名，结合 ColumnConfigs.FieldName2ColumnName 可快速获取字段名对应的数据库列名，用于创建索引
 func GetFieldName[T FieldTypeI](fn FieldFn[T]) (fieldName string) {
 	return fn.GetName()
 }
@@ -2299,11 +2298,7 @@ const (
 )
 
 // MakeFieldsFromStruct 从结构体字段,gorm tag,json tag 生成字段信息 主要用于新增记录场景(大表字段太多，直接复用query 的model)
-func MakeFieldsFromStruct(m any, source StructFieldSource, table TableConfig) (fs Fields) {
-	if table.Columns == nil {
-		err := errors.Errorf("MakeFieldsFromStruct table.Columns is nil")
-		panic(err)
-	}
+func MakeFieldsFromStruct(m any, source StructFieldSource, columnConfigs ...ColumnConfig) (fs Fields) {
 	if m == nil {
 		return fs
 	}
@@ -2324,11 +2319,15 @@ func MakeFieldsFromStruct(m any, source StructFieldSource, table TableConfig) (f
 					fieldName = jsonTag
 				}
 			case StructFieldSource_GormTag:
+				if len(columnConfigs) == 0 {
+					err := errors.Errorf("MakeFieldsFromStruct  tableColumns required when source is StructFieldSource_GormTag")
+					panic(err)
+				}
 				dbColumnName := extractGormColumn(attr.Tag)
 				if dbColumnName == "" {
 					continue
 				}
-				fieldName = table.Columns.GetByDbNameMust(dbColumnName).FieldName
+				fieldName = ColumnConfigs(columnConfigs).GetByDbNameMust(dbColumnName).FieldName
 			}
 
 			if fieldName == "" {
@@ -2369,4 +2368,39 @@ func extractGormColumn(tag reflect.StructTag) string {
 		return fieldName
 	}
 	return ""
+}
+
+// MakeColumnConfigFromStruct 从结构体字段,gorm tag 生成 ColumnConfigs 主要用于简化表配置TableConfig.AddColumns(...) 操作
+func MakeColumnConfigFromStruct(m any, dbNameSource StructFieldSource) (columnConfigs ColumnConfigs) {
+	if m == nil {
+		return columnConfigs
+	}
+	val := reflect.Indirect(reflect.ValueOf(m))
+	typ := val.Type()
+	switch typ.Kind() {
+	case reflect.Struct:
+		for i := range typ.NumField() {
+			attr := typ.Field(i)
+			fieldName := strings.Trim(attr.Tag.Get("json"), "-")
+			if fieldName == "" {
+				fieldName = toLowerFirst(attr.Name)
+			}
+			dbColumnName := ""
+			switch dbNameSource {
+			case StructFieldSource_GormTag:
+				dbColumnName = extractGormColumn(attr.Tag)
+			}
+			if dbColumnName == "" {
+				continue
+			}
+
+			columnConfig := newColumnConfig(dbColumnName, fieldName)
+			columnConfigs.AddColumns(columnConfig)
+		}
+	default:
+		err := errors.New("MakeColumnConfigFromStruct m require struct type")
+		panic(err)
+	}
+
+	return columnConfigs
 }

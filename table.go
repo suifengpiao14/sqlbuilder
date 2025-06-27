@@ -305,12 +305,17 @@ func NewColumnConfig(dbName, fieldName string) ColumnConfig {
 	}
 }
 
+// newColumnConfig 内部使用
+func newColumnConfig(dbName, fieldName string) ColumnConfig {
+	return ColumnConfig{
+		FieldName: fieldName,
+		DbName:    dbName,
+	}
+}
+
 // NewColumn 新建列配置，用于封装模型时，将字段映射为数据库字段,使用*Field作为参数，能减少硬编码，减少硬编码带来的维护成本
 func NewColumn(dbFieldName string, field *Field) ColumnConfig {
-	return ColumnConfig{
-		FieldName: field.Name,
-		DbName:    dbFieldName,
-	}
+	return newColumnConfig(dbFieldName, field.Name)
 }
 
 // DbNameIsEmpty 字段DbName 为空，对数据表操作来说，是无效字段，但是业务层面封装的模型支持退化，比如keyvalue 模型正常2个字段，但是只保留key 也是常见模型，这是将value映射为""，即可实现key模型，于是诞生 了DbName 为空的数据，此函数协助过滤

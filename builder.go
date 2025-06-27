@@ -46,90 +46,113 @@ func (b Builder) Handler() (handler Handler) { // 提供给外部使用
 	return b.table.handler
 }
 
-func (b Builder) TotalParam(fs ...*Field) *TotalParam {
+func (b Builder) TotalParam(fs Fields) *TotalParam {
 	p := NewTotalBuilder(b.table).AppendFields(fs...)
 	return p
 
 }
-func (b Builder) ListParam(fs ...*Field) *ListParam {
+func (b Builder) ListParam(fs Fields) *ListParam {
 	p := NewListBuilder(b.table).AppendFields(fs...)
 	return p
 
 }
 
-func (b Builder) PaginationParam(fs ...*Field) *PaginationParam {
+func (b Builder) PaginationParam(fs Fields) *PaginationParam {
 	p := NewPaginationBuilder(b.table).AppendFields(fs...)
 	return p
 }
-func (b Builder) FirstParam(fs ...*Field) *FirstParam {
+func (b Builder) FirstParam(fs Fields) *FirstParam {
 	p := NewFirstBuilder(b.table).AppendFields(fs...)
 	return p
 }
-func (b Builder) InsertParam(fs ...*Field) *InsertParam {
+func (b Builder) InsertParam(fs Fields) *InsertParam {
 	p := NewInsertBuilder(b.table).AppendFields(fs...)
 	return p
 }
-func (b Builder) BatchInsertParam(fss ...Fields) *BatchInsertParam {
+func (b Builder) BatchInsertParam(fss []Fields) *BatchInsertParam {
 	p := NewBatchInsertBuilder(b.table).AppendFields(fss...)
 	return p
 
 }
-func (b Builder) UpdateParam(fs ...*Field) *UpdateParam {
+func (b Builder) UpdateParam(fs Fields) *UpdateParam {
 	p := NewUpdateBuilder(b.table).AppendFields(fs...)
 	return p
 }
-func (b Builder) DeleteParam(fs ...*Field) *DeleteParam {
+func (b Builder) DeleteParam(fs Fields) *DeleteParam {
 	p := NewDeleteBuilder(b.table).AppendFields(fs...)
 	return p
 }
 
-func (b Builder) ExistsParam(fs ...*Field) *ExistsParam {
+func (b Builder) ExistsParam(fs Fields) *ExistsParam {
 	p := NewExistsBuilder(b.table).AppendFields(fs...)
 	return p
 }
-func (b Builder) SetParam(fs ...*Field) *SetParam {
+func (b Builder) SetParam(fs Fields) *SetParam {
 	p := NewSetBuilder(b.table).AppendFields(fs...)
 	return p
 }
 
-func (b Builder) Count(fields ...*Field) (count int64, err error) {
-	return b.TotalParam().AppendFields(fields...).Count()
-}
+/*
+// Deprecated: 废弃，使用 xxxParam 直接调用即可
 
-func (b Builder) List(result any, fields ...*Field) (err error) {
-	return b.ListParam().AppendFields(fields...).Query(result)
-}
+	func (b Builder) Count(fields Fields) (count int64, err error) {
+		return b.TotalParam(fields).Count()
+	}
 
-func (b Builder) Pagination(result any, fields ...*Field) (count int64, err error) {
-	return b.PaginationParam().AppendFields(fields...).Pagination(result)
-}
+// Deprecated: 废弃，使用 xxxParam 直接调用即可
 
-func (b Builder) First(result any, fields ...*Field) (exists bool, err error) {
-	return b.FirstParam().AppendFields(fields...).First(result)
-}
+	func (b Builder) List(result any, fields Fields) (err error) {
+		return b.ListParam(fields).Query(result)
+	}
 
-func (b Builder) Insert(fields ...*Field) (err error) {
-	return b.InsertParam().AppendFields(fields...).Exec()
-}
-func (b Builder) BatchInsert(fields ...Fields) (err error) {
-	return b.BatchInsertParam().AppendFields(fields...).Exec()
-}
+// Deprecated: 废弃，使用 xxxParam 直接调用即可
 
-func (b Builder) Update(fields ...*Field) (err error) {
-	return b.UpdateParam().AppendFields(fields...).Exec()
-}
+	func (b Builder) Pagination(result any, fields Fields) (count int64, err error) {
+		return b.PaginationParam(fields).Pagination(result)
+	}
 
-func (b Builder) Delete(fields ...*Field) (err error) {
-	return b.DeleteParam().AppendFields(fields...).Exec()
-}
+// Deprecated: 废弃，使用 xxxParam 直接调用即可
 
-func (b Builder) Exists(fields ...*Field) (exists bool, err error) {
-	return b.ExistsParam().AppendFields(fields...).Exists()
-}
-func (b Builder) Set(fields ...*Field) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
-	return b.SetParam().AppendFields(fields...).Set()
-}
+	func (b Builder) First(result any, fields Fields) (exists bool, err error) {
+		return b.FirstParam(fields).First(result)
+	}
 
+// Deprecated: 废弃，使用 xxxParam 直接调用即可
+
+	func (b Builder) Insert(fields Fields) (err error) {
+		return b.InsertParam(fields).Exec()
+	}
+
+// Deprecated: 废弃，使用 xxxParam 直接调用即可
+
+	func (b Builder) BatchInsert(fields []Fields) (err error) {
+		return b.BatchInsertParam(fields).Exec()
+	}
+
+// Deprecated: 废弃，使用 xxxParam 直接调用即可
+
+	func (b Builder) Update(fields Fields) (err error) {
+		return b.UpdateParam(fields).Exec()
+	}
+
+// Deprecated: 废弃，使用 xxxParam 直接调用即可
+
+	func (b Builder) Delete(fields Fields) (err error) {
+		return b.DeleteParam(fields).Exec()
+	}
+
+// Deprecated: 废弃，使用 xxxParam 直接调用即可
+
+	func (b Builder) Exists(fields Fields) (exists bool, err error) {
+		return b.ExistsParam(fields).Exists()
+	}
+
+// Deprecated: 废弃，使用 xxxParam 直接调用即可
+
+	func (b Builder) Set(fields Fields) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
+		return b.SetParam(fields).Set()
+	}
+*/
 type Driver string
 
 func (d Driver) String() string {
