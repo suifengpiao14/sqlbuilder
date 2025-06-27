@@ -23,12 +23,17 @@ type CompilerConfig struct {
 	FieldsApply ApplyFn `json:"-"`
 }
 
+// Deprecated: 废弃，直接获取 Handler 即可
+
 func (c CompilerConfig) WithTableIgnore(tableConfig TableConfig) CompilerConfig {
 	if c.Table.IsNil() { // 为空时才增加,即优先级低，用于设置默认值
 		c.Table = tableConfig
 	}
 	return c
 }
+
+// Deprecated: 废弃，直接获取 Handler 即可
+
 func (c CompilerConfig) WithHandlerIgnore(handler Handler) CompilerConfig {
 	if c.Handler == nil { // 为空时才增加,即优先级低，用于设置默认值
 		c.Handler = handler

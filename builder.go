@@ -1226,16 +1226,16 @@ func (p *SetParam) ApplyCustomFn(customFns ...CustomFnSetParam) *SetParam {
 	return p
 }
 
-// Deprecated please use ToSQL2 ToSQL 一次生成 查询、新增、修改 sql,若查询后记录存在,并且需要根据数据库记录值修改数据,则可以重新赋值后生成sql
-func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string, err error) {
-	existsSql, insertSql, updateSql, _, err = p.ToSQLV2()
+// 2026-06-26 14:57 这个修改不兼容，最开始 当下的ToSQLV0 是历史的 ToSQL, 为了和其它保持一致,让渡了ToSQL函数签名,ToSQLV0 保持原有函数签名
+func (p SetParam) ToSQLV0() (existsSql string, insertSql string, updateSql string, err error) {
+	existsSql, insertSql, updateSql, _, err = p.ToSQL()
 	if err != nil {
 		return "", "", "", err
 	}
 	return existsSql, insertSql, updateSql, nil
 }
 
-func (p SetParam) ToSQLV2() (existsSql string, insertSql string, updateSql string, deleteSql string, err error) {
+func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string, deleteSql string, err error) {
 	table := p.GetTable()
 	existsSql, err = NewExistsBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL() // 有些根据场景设置 如枚举值 ""，所有需要复制
 	if err != nil {
@@ -1270,7 +1270,7 @@ func (p SetParam) Set() (isNotExits bool, lastInsertId uint64, rowsAffected int6
 	// if err != nil {
 	// 	return false, 0, 0, err
 	// }
-	existsSql, insertSql, updateSql, deleteSql, err := p.ToSQLV2()
+	existsSql, insertSql, updateSql, deleteSql, err := p.ToSQL()
 	if err != nil {
 		return false, 0, 0, err
 	}
