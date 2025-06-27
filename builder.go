@@ -21,70 +21,74 @@ import (
 type BuilderFn func() Builder
 
 type Builder struct {
-	handler Handler
-	table   TableConfig
+	//handler Handler //2025-06-27  废弃，改为直接使用table.handler 虽然有不兼容场景，但是错误非常明显，改动不大，没有bug风险
+	table TableConfig
 }
+
+// Deprecated: 废弃，直接获取 NewBuilder 即可
 
 func NewGormBuilder(table TableConfig, getDB func() *gorm.DB) Builder {
 	handler := NewGormHandler(getDB)
-	return NewBuilder(table, handler)
+	table = table.WithHandler(handler)
+	return NewBuilder(table)
 }
 
-func NewBuilder(table TableConfig, handler Handler) Builder { // 因为 WithHandler 需要复制，所以这里统一不返回地址值
-	return Builder{handler: handler, table: table}
+func NewBuilder(table TableConfig) Builder { // 因为 WithHandler 需要复制，所以这里统一不返回地址值
+	return Builder{table: table}
 }
 
 func (b Builder) WithHandler(handler Handler) Builder { // transaction 时候需要重新设置handler
-	return Builder{table: b.table, handler: handler}
+	table := b.table.WithHandler(handler)
+	return Builder{table: table}
 }
 
 func (b Builder) Handler() (handler Handler) { // 提供给外部使用
-	return b.handler
+	return b.table.handler
 }
 
 func (b Builder) TotalParam(fs ...*Field) *TotalParam {
-	p := NewTotalBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
+	p := NewTotalBuilder(b.table).AppendFields(fs...)
 	return p
 
 }
 func (b Builder) ListParam(fs ...*Field) *ListParam {
-	p := NewListBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
+	p := NewListBuilder(b.table).AppendFields(fs...)
 	return p
 
 }
 
 func (b Builder) PaginationParam(fs ...*Field) *PaginationParam {
-	p := NewPaginationBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
+	p := NewPaginationBuilder(b.table).AppendFields(fs...)
 	return p
 }
 func (b Builder) FirstParam(fs ...*Field) *FirstParam {
-	p := NewFirstBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
+	p := NewFirstBuilder(b.table).AppendFields(fs...)
 	return p
 }
 func (b Builder) InsertParam(fs ...*Field) *InsertParam {
-	p := NewInsertBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
+	p := NewInsertBuilder(b.table).AppendFields(fs...)
 	return p
 }
 func (b Builder) BatchInsertParam(fss ...Fields) *BatchInsertParam {
-	p := NewBatchInsertBuilder(b.table).WithHandler(b.handler).AppendFields(fss...)
+	p := NewBatchInsertBuilder(b.table).AppendFields(fss...)
 	return p
 
 }
 func (b Builder) UpdateParam(fs ...*Field) *UpdateParam {
-	p := NewUpdateBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
+	p := NewUpdateBuilder(b.table).AppendFields(fs...)
 	return p
 }
 func (b Builder) DeleteParam(fs ...*Field) *DeleteParam {
-	p := NewDeleteBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
+	p := NewDeleteBuilder(b.table).AppendFields(fs...)
 	return p
 }
 
 func (b Builder) ExistsParam(fs ...*Field) *ExistsParam {
-	p := NewExistsBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
+	p := NewExistsBuilder(b.table).AppendFields(fs...)
 	return p
 }
 func (b Builder) SetParam(fs ...*Field) *SetParam {
-	p := NewSetBuilder(b.table).WithHandler(b.handler).AppendFields(fs...)
+	p := NewSetBuilder(b.table).AppendFields(fs...)
 	return p
 }
 
@@ -301,10 +305,6 @@ func (p *InsertParam) ApplyCustomFn(customFns ...CustomFnInsertParam) *InsertPar
 }
 
 func (p InsertParam) ToSQL() (sql string, err error) {
-	if p._Table == nil {
-		err = errors.Errorf("InsertParam._Table required")
-		return "", err
-	}
 	tableConfig := p.GetTable()
 	fs := p._Fields.Builder(p.context, SCENE_SQL_INSERT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 
@@ -1375,7 +1375,7 @@ func dataAny2Map(data any) (newData map[string]any, err error) {
 
 type SQLParam[T any] struct {
 	self            *T
-	_Table          TableI
+	_Table          TableConfig
 	_Fields         Fields
 	_log            LogI
 	handler         Handler
@@ -1386,7 +1386,7 @@ type SQLParam[T any] struct {
 func NewSQLParam[T any](self *T, table TableConfig) SQLParam[T] {
 	return SQLParam[T]{
 		self:    self,
-		_Table:  TableFn(func() TableConfig { return table }),
+		_Table:  table,
 		_Fields: make(Fields, 0),
 		_log:    DefaultLog,
 	}
@@ -1406,6 +1406,7 @@ func (p *SQLParam[T]) WithHandler(handler Handler) *T {
 	if IsNil(handler) {
 		return p.self
 	}
+	p._Table = p._Table.WithHandler(handler)
 	p.handler = handler
 	return p.self
 }
@@ -1429,7 +1430,7 @@ func (p *SQLParam[T]) Handler() Handler {
 }
 
 func (p *SQLParam[T]) GetTable() TableConfig {
-	return p._Table.TableConfig()
+	return p._Table
 }
 
 func (p *SQLParam[T]) SetLog(log LogI) *T {
