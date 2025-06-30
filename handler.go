@@ -528,48 +528,50 @@ func (hc _HandlerCache) InsertWithLastId(sql string) (lastInsertId uint64, rowsA
 	return hc.handler.InsertWithLastId(sql)
 }
 func (hc _HandlerCache) First(ctx context.Context, sql string, result any) (exists bool, err error) {
-	cacheResult := _DBQueryResult{
-		Data: result, //此处必须将类型传入，否则 json 反序列化时，类型不对
-	}
-	err = cache.RememberWithCacheInstance(CacheInstance, sql, &cacheResult, func(dst *_DBQueryResult) (duration time.Duration, err error) {
+	cacheResult, err := cache.RememberWithCacheInstance(CacheInstance, sql, func() (dst *_DBQueryResult, duration time.Duration, err error) {
+		dst = &_DBQueryResult{
+			Data: result, //此处必须将类型传入，否则 json 反序列化时，类型不对
+		}
 		dst.Exists, err = hc.handler.First(ctx, sql, dst.Data)
 		if err != nil {
-			return 0, err
+			return nil, 0, err
 		}
-		return GetCacheDuration(ctx), nil
+		return dst, GetCacheDuration(ctx), nil
 	})
 	if err != nil {
 		return false, err
 	}
+	cache.SetReflectValue(result, cacheResult.Data)
 	exists = cacheResult.Exists
 	return exists, nil
 }
 
 func (hc _HandlerCache) Query(ctx context.Context, sql string, result any) (err error) {
-	cacheResult := _DBQueryResult{
-		Data: result, //此处必须将类型传入，否则 json 反序列化时，类型不对
-	}
-	err = cache.RememberWithCacheInstance(CacheInstance, sql, &cacheResult, func(dst *_DBQueryResult) (duration time.Duration, err error) {
+
+	cacheResult, err := cache.RememberWithCacheInstance(CacheInstance, sql, func() (dst *_DBQueryResult, duration time.Duration, err error) {
+		dst = &_DBQueryResult{
+			Data: result, //此处必须将类型传入，否则 json 反序列化时，类型不对
+		}
 		err = hc.handler.Query(ctx, sql, dst.Data)
 		if err != nil {
-			return 0, err
+			return nil, 0, err
 		}
-		return GetCacheDuration(ctx), nil
+		return dst, GetCacheDuration(ctx), nil
 	})
 	if err != nil {
 		return err
 	}
+	cache.SetReflectValue(result, cacheResult.Data)
 	return nil
 }
 func (hc _HandlerCache) Count(sql string) (count int64, err error) {
-	err = cache.RememberWithCacheInstance(CacheInstance, sql, &count, func(dst *int64) (duration time.Duration, err error) {
-		count, err := hc.handler.Count(sql)
+	count, err = cache.RememberWithCacheInstance(CacheInstance, sql, func() (count int64, duration time.Duration, err error) {
+		count, err = hc.handler.Count(sql)
 		if err != nil {
-			return 0, err
+			return 0, 0, err
 		}
-		*dst = count
 
-		return Cache_sql_duration, nil
+		return count, Cache_sql_duration, nil
 	})
 	if err != nil {
 		return 0, err
@@ -577,13 +579,12 @@ func (hc _HandlerCache) Count(sql string) (count int64, err error) {
 	return count, nil
 }
 func (hc _HandlerCache) Exists(sql string) (exists bool, err error) {
-	err = cache.RememberWithCacheInstance(CacheInstance, sql, &exists, func(dst *bool) (duration time.Duration, err error) {
-		exists, err := hc.handler.Exists(sql)
+	exists, err = cache.RememberWithCacheInstance(CacheInstance, sql, func() (exists bool, duration time.Duration, err error) {
+		exists, err = hc.handler.Exists(sql)
 		if err != nil {
-			return 0, err
+			return false, 0, err
 		}
-		*dst = exists
-		return Cache_sql_duration, nil
+		return exists, Cache_sql_duration, nil
 	})
 	if err != nil {
 		return false, err
