@@ -930,7 +930,6 @@ var DefaultLog = ConsoleLog{}
 
 type ExistsParam struct {
 	allowEmptyWhereCondition bool
-	handler                  Handler // 支持事务句柄
 	builderFns               SelectBuilderFns
 	SQLParam[ExistsParam]
 }
