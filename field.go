@@ -625,25 +625,7 @@ func identifierExpression2String(v exp.IdentifierExpression) string {
 }
 
 func (f *Field) SetSelectColumns(columns ...any) *Field {
-	colMap := make(map[any]string, 0)
-	for _, column := range columns {
-		colMap[column] = ColumnToString(column)
-	}
-
-	existsKeyMap := make(map[string]struct{}, 0)
-	for _, column := range f.selectColumns {
-		existsKeyMap[ColumnToString(column)] = struct{}{}
-	}
-	for _, col := range columns { // 保持稳定顺序
-		if str, ok := col.(string); ok && str == "" { // 删除空字符串字段，避免错误（如未使用 ColumnConfig.FilterByEmptyDbName 过滤场景）
-			continue
-		}
-		key := colMap[col]
-		if _, ok := existsKeyMap[key]; !ok {
-			existsKeyMap[key] = struct{}{}
-			f.selectColumns = append(f.selectColumns, col)
-		}
-	}
+	f.selectColumns = append(f.selectColumns, columns...)
 	return f
 }
 
