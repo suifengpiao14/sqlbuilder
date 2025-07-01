@@ -603,6 +603,7 @@ func (f *Field) SetDBName(dbName string) *Field {
 	return f
 }
 
+/* 这个方法有bug
 func ColumnToString(col any) string {
 	s := ""
 	switch v := col.(type) {
@@ -618,6 +619,7 @@ func ColumnToString(col any) string {
 
 	return s
 }
+*/
 
 func identifierExpression2String(v exp.IdentifierExpression) string {
 	var w bytes.Buffer
@@ -640,7 +642,16 @@ func identifierExpression2String(v exp.IdentifierExpression) string {
 }
 
 func (f *Field) SetSelectColumns(columns ...any) *Field {
-	f.selectColumns = append(f.selectColumns, columns...)
+	colMap := make(map[any]struct{}, 0)
+	for _, col := range columns { // 保持稳定顺序
+		if str, ok := col.(string); ok && str == "" { // 删除空字符串字段，避免错误（如未使用 ColumnConfig.FilterByEmptyDbName 过滤场景）
+			continue
+		}
+		if _, ok := colMap[col]; !ok { // 去重
+			colMap[col] = struct{}{}
+			f.selectColumns = append(f.selectColumns, col)
+		}
+	}
 	return f
 }
 

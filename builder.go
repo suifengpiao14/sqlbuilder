@@ -1014,7 +1014,7 @@ func (p ExistsParam) Exists() (exists bool, err error) {
 		return false, err
 	}
 	// 删除SCENE_SQL_EXISTS场景后需要确保确保exitsHandler 不会走缓存
-	existsHandler := WithSingleflightDoOnce(p.handler.OriginalHandler()).Exists // 屏蔽缓存中间件，同时防止单实例并发问题
+	existsHandler := WithSingleflightDoOnce(p.GetHandler().OriginalHandler()).Exists // 屏蔽缓存中间件，同时防止单实例并发问题
 	return existsHandler(sql)
 }
 
@@ -1099,7 +1099,7 @@ func (p TotalParam) Count() (total int64, err error) {
 	if err != nil {
 		return -1, err
 	}
-	return p.handler.Count(sql)
+	return p.GetHandler().Count(sql)
 }
 
 type PaginationParam struct {
