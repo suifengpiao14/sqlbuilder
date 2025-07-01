@@ -907,7 +907,6 @@ var DefaultLog = ConsoleLog{}
 
 type ExistsParam struct {
 	allowEmptyWhereCondition bool
-	handler                  Handler // 支持事务句柄
 	builderFns               SelectBuilderFns
 	SQLParam[ExistsParam]
 }
@@ -997,7 +996,6 @@ func (p ExistsParam) Exists() (exists bool, err error) {
 }
 
 type TotalParam struct {
-	handler    Handler // 支持事务句柄
 	builderFns SelectBuilderFns
 	SQLParam[TotalParam]
 }
