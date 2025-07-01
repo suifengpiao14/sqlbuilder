@@ -642,13 +642,15 @@ func identifierExpression2String(v exp.IdentifierExpression) string {
 }
 
 func (f *Field) SetSelectColumns(columns ...any) *Field {
-	colMap := make(map[any]struct{}, 0)
+	//colMap := make(map[any]struct{}, 0)// 并非所有类型都可以作为map的key(runtime error: hash of unhashable type exp.sqlFunctionExpression)，此处使用string 作为key 更安全
+	colMap := make(map[string]struct{}, 0)
 	for _, col := range columns { // 保持稳定顺序
 		if str, ok := col.(string); ok && str == "" { // 删除空字符串字段，避免错误（如未使用 ColumnConfig.FilterByEmptyDbName 过滤场景）
 			continue
 		}
-		if _, ok := colMap[col]; !ok { // 去重
-			colMap[col] = struct{}{}
+		key := fmt.Sprint(col)
+		if _, ok := colMap[key]; !ok { // 去重
+			colMap[key] = struct{}{}
 			f.selectColumns = append(f.selectColumns, col)
 		}
 	}
