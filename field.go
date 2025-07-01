@@ -1,7 +1,6 @@
 package sqlbuilder
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -621,25 +620,25 @@ func ColumnToString(col any) string {
 }
 */
 
-func identifierExpression2String(v exp.IdentifierExpression) string {
-	var w bytes.Buffer
-	schema := v.GetSchema()
-	if schema != "" {
-		w.WriteString(schema)
-		w.WriteString(".")
-	}
-	table := v.GetTable()
-	if table != "" {
-		w.WriteString(table)
-		w.WriteString(".")
-	}
-	col := v.GetCol()
-	if col != "" {
-		w.WriteString(cast.ToString(col))
-	}
-	s := w.String()
-	return s
-}
+// func identifierExpression2String(v exp.IdentifierExpression) string {
+// 	var w bytes.Buffer
+// 	schema := v.GetSchema()
+// 	if schema != "" {
+// 		w.WriteString(schema)
+// 		w.WriteString(".")
+// 	}
+// 	table := v.GetTable()
+// 	if table != "" {
+// 		w.WriteString(table)
+// 		w.WriteString(".")
+// 	}
+// 	col := v.GetCol()
+// 	if col != "" {
+// 		w.WriteString(cast.ToString(col))
+// 	}
+// 	s := w.String()
+// 	return s
+// }
 
 func (f *Field) SetSelectColumns(columns ...any) *Field {
 	//colMap := make(map[any]struct{}, 0)// 并非所有类型都可以作为map的key(runtime error: hash of unhashable type exp.sqlFunctionExpression)，此处使用string 作为key 更安全
