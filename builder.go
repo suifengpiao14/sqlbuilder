@@ -1186,7 +1186,7 @@ func (p PaginationParam) Pagination(result any) (count int64, err error) {
 type SetPolicy string
 
 const (
-	SetPolicy_only_Insert       SetPolicy = "onlyInsert"      //只新增说明使用最早数据
+	SetPolicy_only_Insert       SetPolicy = "onlyInsert"      //只新增说明使用最早数据(场景: 1. 初始化数据表)
 	SetPolicy_only_Update       SetPolicy = "onlyUpdate"      //只更新说明不存在时不处理
 	SetPolicy_Insert_or_Update  SetPolicy = ""                //不存在新增,存在更新，使用最新数据覆盖
 	SetPolicy_Delete_and_insert SetPolicy = "deleteAndInsert" //先删除再新增
