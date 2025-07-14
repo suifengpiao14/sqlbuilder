@@ -309,11 +309,11 @@ func (h GormHandler) GetDB() *gorm.DB {
 	return h()
 }
 
-// Deprecated: 请使用 WithSingleflight 代替 WithCacheSingleflightHandler,cache 可以通过 FirstParam.WithCacheDuration 设置缓存时间来启用
+// Deprecated: 请使用 HandlerMiddlewareSingleflight 代替 WithCacheSingleflightHandler,cache 可以通过 FirstParam.WithCacheDuration 设置缓存时间来启用
 func WithCacheSingleflightHandler(handler Handler, withCache bool, withSingleflight bool) Handler {
 
 	if withSingleflight {
-		handler = WithSingleflight(handler)
+		handler = HandlerMiddlewareSingleflight(handler)
 	}
 	return handler
 }
