@@ -153,3 +153,13 @@ func NewRepository[T any](tableConfig TableConfig) Repository[T] {
 func (r Repository[T]) GetTable() TableConfig {
 	return r.tableConfig
 }
+
+//WithTable 设置新的表配置，用于临时切换表。或者事务切换dbHandler等场景。
+
+func (r Repository[T]) WithTable(tableConfig TableConfig) Repository[T] {
+	return Repository[T]{
+		tableConfig:       tableConfig,
+		RepositoryCommand: NewRepositoryCommand(tableConfig),
+		RepositoryQuery:   NewRepositoryQuery[T](tableConfig),
+	}
+}
