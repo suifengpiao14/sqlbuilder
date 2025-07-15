@@ -2,6 +2,7 @@ package sqlbuilder
 
 import (
 	"context"
+	"database/sql"
 	"reflect"
 	"time"
 
@@ -208,6 +209,7 @@ func ChainHandler(handler Handler, middlewares ...HandlerMiddleware) Handler {
 }
 
 type Handler interface {
+	Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) (err error)
 	Exec(sql string) (err error)
 	ExecWithRowsAffected(sql string) (rowsAffected int64, err error)
 	InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error)
@@ -226,6 +228,13 @@ func NewGormHandler(getDB func() *gorm.DB) Handler {
 	return GormHandler(getDB)
 }
 
+func (h GormHandler) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) error {
+	err := h().Transaction(func(tx *gorm.DB) error {
+		err := fc(NewGormHandler(func() *gorm.DB { return tx }))
+		return err
+	}, opts...)
+	return err
+}
 func (h GormHandler) OriginalHandler() Handler {
 	return h
 }
@@ -375,6 +384,11 @@ func (hc _HandlerSingleflight) IsOriginalHandler() bool {
 	return false
 }
 
+func (hc _HandlerSingleflight) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) error {
+	err := hc.handler.Transaction(fc, opts...)
+	return err
+}
+
 func (hc _HandlerSingleflight) Exec(sql string) (err error) {
 	_, err, _ = hc.group.Do(sql, func() (interface{}, error) {
 		return nil, hc.handler.Exec(sql)
@@ -513,6 +527,10 @@ var Cache_sql_duration time.Duration = 1 * time.Minute
 func (hc _HandlerCache) OriginalHandler() Handler {
 	return GetOriginalHandler(hc.handler)
 }
+func (hc _HandlerCache) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) error {
+	err := hc.handler.Transaction(fc, opts...)
+	return err
+}
 
 func (hc _HandlerCache) IsOriginalHandler() bool {
 	return false
@@ -628,6 +646,10 @@ func (hc _HandlerSingleflightDoOnce) OriginalHandler() Handler {
 func (hc _HandlerSingleflightDoOnce) IsOriginalHandler() bool {
 	return false
 }
+func (hc _HandlerSingleflightDoOnce) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) error {
+	err := hc.handler.Transaction(fc, opts...)
+	return err
+}
 
 func (hc _HandlerSingleflightDoOnce) Exec(sql string) (err error) {
 	return hc.handler.Exec(sql)
@@ -708,6 +730,11 @@ func (hc _HandlerTriggerAsyncEvent) getEventLeaveDispatcher() EventASyncHandler 
 func (hc _HandlerTriggerAsyncEvent) OriginalHandler() Handler {
 	return GetOriginalHandler(hc.handler)
 }
+func (hc _HandlerTriggerAsyncEvent) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) error {
+	err := hc.handler.Transaction(fc, opts...)
+	return err
+}
+
 func (hc _HandlerTriggerAsyncEvent) IsOriginalHandler() bool {
 	return false
 }
