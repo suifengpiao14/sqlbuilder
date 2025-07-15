@@ -149,3 +149,7 @@ func NewRepository[T any](tableConfig TableConfig) Repository[T] {
 		RepositoryQuery:   NewRepositoryQuery[T](tableConfig),
 	}
 }
+
+func (r Repository[T]) GetTable() TableConfig {
+	return r.tableConfig
+}
