@@ -34,13 +34,13 @@ func (s RepositoryCommand) BatchInsert(fieldsList []Fields, customFns ...CustomF
 	return err
 }
 
-func (s RepositoryCommand) InsertWithLastId(fields Fields, customFns ...CustomFnInsertParam) (lastInsertId uint64, err error) {
+func (s RepositoryCommand) InsertWithLastId(fields Fields, customFns ...CustomFnInsertParam) (lastInsertId uint64, rowsAffected int64, err error) {
 	builder := NewInsertBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
-	lastInsertId, _, err = builder.Insert()
+	lastInsertId, rowsAffected, err = builder.Insert()
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return lastInsertId, nil
+	return lastInsertId, rowsAffected, nil
 }
 
 func (s RepositoryCommand) Update(fields Fields, customFns ...CustomFnUpdateParam) (err error) {
@@ -137,14 +137,14 @@ func (s RepositoryQuery[Model]) Count(fields Fields, customFns ...CustomFnTotalP
 }
 
 type Repository[T any] struct {
-	TableConfig
+	tableConfig TableConfig
 	RepositoryCommand
 	RepositoryQuery[T]
 }
 
 func NewRepository[T any](tableConfig TableConfig) Repository[T] {
 	return Repository[T]{
-		TableConfig:       tableConfig,
+		tableConfig:       tableConfig,
 		RepositoryCommand: NewRepositoryCommand(tableConfig),
 		RepositoryQuery:   NewRepositoryQuery[T](tableConfig),
 	}

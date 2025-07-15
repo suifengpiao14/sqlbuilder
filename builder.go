@@ -298,11 +298,17 @@ type CustomFieldsFns []CustomFieldsFn
 // InsertParam 供子类复用,修改数据
 type InsertParam struct {
 	SQLParam[InsertParam]
+	insertIgnore        bool
 	_triggerInsertEvent EventInsertTrigger
 }
 
 func (p *InsertParam) WithTriggerEvent(triggerInsertEvent EventInsertTrigger) *InsertParam {
 	p._triggerInsertEvent = triggerInsertEvent
+	return p
+}
+
+func (p *InsertParam) WithInsertIgnore(insertIgnore bool) *InsertParam {
+	p.insertIgnore = insertIgnore
 	return p
 }
 func (p *InsertParam) getEventHandler() (triggerInsertEvent EventInsertTrigger) {
@@ -350,10 +356,22 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
+	if p.insertIgnore {
+		// 替换前缀为 INSERT IGNORE
+		sql = replaceInsertWithInsertIgnore(sql)
+	}
+
 	if p._log != nil {
 		p._log.Log(sql)
 	}
 	return sql, nil
+}
+
+func replaceInsertWithInsertIgnore(sql string) string {
+	if len(sql) >= 6 && sql[:6] == "INSERT" {
+		return "INSERT IGNORE" + sql[6:]
+	}
+	return sql
 }
 
 func (p InsertParam) Validate() (err error) {
