@@ -398,6 +398,15 @@ func (indexs Indexs) GetUnique() (uniqueIndex Indexs) {
 	return uniqueIndex
 }
 
+func (indexs Indexs) GetPrimary() (primary *Index, exists bool) {
+	for _, index := range indexs {
+		if index.IsPrimary {
+			return &index, true
+		}
+	}
+	return nil, false
+}
+
 type Tags []string
 
 func (tags Tags) HastTag(tag string) bool {

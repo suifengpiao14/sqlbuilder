@@ -289,12 +289,12 @@ type ColumnConfig struct {
 	DbName    string     `json:"dbName"` // 数据库字段名，和数据库字段保持一致
 	Type      SchemaType `json:"type"`
 	Length    int        `json:"length"`
-	PK        bool       `json:"pk"`
-	Unique    bool       `json:"unique"`
-	Nullable  bool       `json:"nullable"`
-	Default   any        `json:"default"`
-	Comment   string     `json:"comment"`
-	Enums     Enums      `json:"enums"`
+	//	PK        bool       `json:"pk"`
+	Unique   bool   `json:"unique"`
+	Nullable bool   `json:"nullable"`
+	Default  any    `json:"default"`
+	Comment  string `json:"comment"`
+	Enums    Enums  `json:"enums"`
 }
 
 // Deprecated: use NewColumn instead

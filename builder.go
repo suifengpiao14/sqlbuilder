@@ -814,6 +814,7 @@ func (p FirstParam) FirstMustExists(result any) (err error) {
 	return nil
 }
 
+// ds 传入传出是2个不同的实例，函数中需要明确赋值给返回的实例
 type SelectBuilderFn func(ds *goqu.SelectDataset) *goqu.SelectDataset
 
 type SelectBuilderFns []SelectBuilderFn
@@ -869,6 +870,16 @@ func (p ListParam) ToSQL() (sql string, err error) {
 
 	selec := fs.Select()
 	order := fs.Order()
+	if len(order) == 0 { // 没有排序字段,则默认按主键降序排列
+		primary, exists := p.GetTable().Indexs.GetPrimary()
+		if exists {
+			for _, columnName := range primary.ColumnNames(p.GetTable().Columns) {
+				subOrder := goqu.I(columnName).Asc()
+				order = append(order, subOrder)
+			}
+		}
+	}
+
 	ds := Dialect.DialectWrapper().Select(selec...).
 		From(tableConfig.AliasOrTableExpr()).
 		Where(where...).
