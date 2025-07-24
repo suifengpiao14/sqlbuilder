@@ -832,6 +832,7 @@ func (p FirstParam) FirstMustExists(result any) (err error) {
 	return nil
 }
 
+// ds 传入传出是2个不同的实例，函数中需要明确赋值给返回的实例
 type SelectBuilderFn func(ds *goqu.SelectDataset) *goqu.SelectDataset
 
 type SelectBuilderFns []SelectBuilderFn
@@ -887,6 +888,16 @@ func (p ListParam) ToSQL() (sql string, err error) {
 
 	selec := fs.Select()
 	order := fs.Order()
+	if len(order) == 0 { // 没有排序字段,则默认按主键降序排列
+		primary, exists := p.GetTable().Indexs.GetPrimary()
+		if exists {
+			for _, columnName := range primary.ColumnNames(p.GetTable().Columns) {
+				subOrder := goqu.I(columnName).Asc()
+				order = append(order, subOrder)
+			}
+		}
+	}
+
 	ds := Dialect.DialectWrapper().Select(selec...).
 		From(tableConfig.AliasOrTableExpr()).
 		Where(where...).
@@ -1164,14 +1175,17 @@ func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 	}
 	return totalSql, listSql, nil
 }
-
-func (p PaginationParam) paginationHandler(totalSql string, listSql string, result any) (count int64, err error) {
-	handler := p.GetHandler()
+func (p PaginationParam) getHandler() (handler Handler) {
+	handler = p.GetHandler()
 	cacheDuration := GetCacheDuration(p.context)
 	if cacheDuration > 0 {
 		handler = _WithCache(handler)
 	}
+	return handler
+}
 
+func (p PaginationParam) paginationHandler(totalSql string, listSql string, result any) (count int64, err error) {
+	handler := p.getHandler()
 	count, err = handler.Count(totalSql)
 	if err != nil {
 		return 0, err
@@ -1179,7 +1193,7 @@ func (p PaginationParam) paginationHandler(totalSql string, listSql string, resu
 	if count == 0 {
 		return 0, nil
 	}
-	err = p.GetHandler().Query(p.context, listSql, result)
+	err = handler.Query(p.context, listSql, result)
 	if err != nil {
 		return 0, err
 	}
@@ -1187,6 +1201,15 @@ func (p PaginationParam) paginationHandler(totalSql string, listSql string, resu
 }
 
 func (p PaginationParam) Pagination(result any) (count int64, err error) {
+	isShardedTable := p.GetTable().isShardedTable()
+	if isShardedTable {
+		shardedTablePaginationBuilder := NewShardedTablePaginationBuilder(p)
+		count, err = shardedTablePaginationBuilder.Pagination(result)
+		if err != nil {
+			return 0, err
+		}
+		return count, nil
+	}
 	totalSql, listSql, err := p.ToSQL()
 	if err != nil {
 		return 0, err
