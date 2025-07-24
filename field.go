@@ -1739,7 +1739,7 @@ func (fs Fields) Pagination() (index int, size int) {
 		val, _ := pageSize.GetValue(Layer_get_value_before_db, fs...)
 		size = cast.ToInt(val)
 	}
-
+	index, size = max(index, 0), max(size, 0)
 	return index, size
 }
 func (fs Fields) DeletedAt() (f *Field, err error) {
