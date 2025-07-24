@@ -2,8 +2,6 @@ package sqlbuilder
 
 import (
 	"reflect"
-	"slices"
-	"time"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/pkg/errors"
@@ -11,9 +9,7 @@ import (
 
 // PaginationParamForShardedTable 从分表/水平分表中获取数据，分表/水平分表指 表结构相同，仅表名不同的多张表
 type ShardedTablePaginationParam struct {
-	builderFns SelectBuilderFns
-	tableNames []string
-	SQLParam[ShardedTablePaginationParam]
+	PaginationParam
 	withOutTotal bool // 默认统计总数，设置为true时不统计总数
 }
 
@@ -22,56 +18,20 @@ func (p *ShardedTablePaginationParam) WithOutTotal(withOutTotal bool) *ShardedTa
 	return p
 }
 
-func NewPaginationShardedTableBuilder(tableConfig TableConfig, tableNames ...string) *ShardedTablePaginationParam {
-	firstTableName := tableConfig.Name
-	exists := slices.Contains(tableNames, firstTableName) // 校验表名是否包含第一张表，防止第一张表不存在导致后续查询出错
-	if !exists {
-		tableNames = append([]string{firstTableName}, tableNames...)
-	}
-	p := &ShardedTablePaginationParam{
-		tableNames: tableNames,
-	}
-	p.SQLParam = NewSQLParam(p, tableConfig)
+func NewShardedTablePaginationBuilder(paginationParam PaginationParam) *ShardedTablePaginationParam {
+	p := &ShardedTablePaginationParam{}
+	p.PaginationParam = paginationParam
 	return p
 }
 
-func (p *ShardedTablePaginationParam) WithCacheDuration(duration time.Duration) *ShardedTablePaginationParam {
-	p.context = WithCacheDuration(p.context, duration)
-	return p
-}
-
-func (p *ShardedTablePaginationParam) WithBuilderFns(builderFns ...SelectBuilderFn) *ShardedTablePaginationParam {
-	if len(p.builderFns) == 0 {
-		p.builderFns = SelectBuilderFns{}
-	}
-	p.builderFns = append(p.builderFns, builderFns...)
-	return p
-}
-
-type CustomFnShardedTablePaginationParam = CustomFn[ShardedTablePaginationParam]
-type CustomFnShardedTablePaginationParams = CustomFns[ShardedTablePaginationParam]
-
-func (p *ShardedTablePaginationParam) ApplyCustomFn(customFns ...CustomFnShardedTablePaginationParam) *ShardedTablePaginationParam {
-	p = CustomFns[ShardedTablePaginationParam](customFns).Apply(p)
-	return p
-}
-
-func (p ShardedTablePaginationParam) getHandler() (handler Handler) {
-	handler = p.GetHandler()
-	cacheDuration := GetCacheDuration(p.context)
-	if cacheDuration > 0 {
-		handler = _WithCache(handler)
-	}
-	return handler
-}
-
-type ShardedTablePagination struct {
+// shardedTableSingleTablePagination 单表操作
+type shardedTableSingleTablePagination struct {
 	table TableConfig // 表名
 	//hitCount int64       // 符合条件的记录数
 	p ShardedTablePaginationParam
 }
 
-func (shardedT ShardedTablePagination) Count() (count int64, err error) {
+func (shardedT shardedTableSingleTablePagination) Count() (count int64, err error) {
 	// 执行计数查询
 	handler := shardedT.p.getHandler()
 	totalSql, err := shardedT.TotalSQL()
@@ -86,7 +46,7 @@ func (shardedT ShardedTablePagination) Count() (count int64, err error) {
 	return count, nil
 }
 
-func (shardedT ShardedTablePagination) List(result any, offset, limit int) (err error) {
+func (shardedT shardedTableSingleTablePagination) List(result any, offset, limit int) (err error) {
 	// 查询记录
 	handler := shardedT.p.getHandler()
 	listSql, err := shardedT.ListSQL(offset, limit)
@@ -100,7 +60,7 @@ func (shardedT ShardedTablePagination) List(result any, offset, limit int) (err 
 	return nil
 }
 
-func (shardedT ShardedTablePagination) TotalSQL() (totalSql string, err error) {
+func (shardedT shardedTableSingleTablePagination) TotalSQL() (totalSql string, err error) {
 	table := shardedT.table
 	p := shardedT.p
 	totalSql, err = NewTotalBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).ToSQL()
@@ -110,7 +70,7 @@ func (shardedT ShardedTablePagination) TotalSQL() (totalSql string, err error) {
 	return totalSql, nil
 }
 
-func (shardedT ShardedTablePagination) ListSQL(offset, limit int) (listSQL string, err error) {
+func (shardedT shardedTableSingleTablePagination) ListSQL(offset, limit int) (listSQL string, err error) {
 	listBuilder := NewListBuilder(shardedT.table).WithCustomFieldsFn(shardedT.p.customFieldsFns...).AppendFields(shardedT.p._Fields...).WithBuilderFns(shardedT.p.builderFns...)
 	listBuilder = listBuilder.WithBuilderFns(func(ds *goqu.SelectDataset) *goqu.SelectDataset {
 		ds = ds.Offset(uint(offset)).Limit(uint(limit)) //根据实际情况 重置limit和offset
@@ -124,7 +84,7 @@ func (shardedT ShardedTablePagination) ListSQL(offset, limit int) (listSQL strin
 	return listSql, nil
 }
 
-type ShardedTablePaginations []ShardedTablePagination
+type ShardedTablePaginations []shardedTableSingleTablePagination
 
 // func (shardedTs ShardedTablePaginations) Count() (total int64) {
 // 	for _, cursor := range shardedTs {
@@ -147,10 +107,15 @@ func (p ShardedTablePaginationParam) Pagination(result any) (totalCount int64, e
 
 	tableConfig := p.GetTable()
 	shardedTablePaginations := ShardedTablePaginations{}
+	tableNames := tableConfig.getShardedTableNames()
+	if len(tableNames) == 0 { // 非分表场景，直接执行查询
+		tableNames = []string{tableConfig.DBName.Name}
+	}
+
 	//生成统计总数sql
-	for _, tableName := range p.tableNames {
+	for _, tableName := range tableNames {
 		table := tableConfig.WithTableName(tableName)
-		shardedTablePagination := ShardedTablePagination{
+		shardedTablePagination := shardedTableSingleTablePagination{
 			table: table,
 			p:     p,
 		}

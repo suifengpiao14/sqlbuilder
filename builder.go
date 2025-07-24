@@ -1157,14 +1157,17 @@ func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 	}
 	return totalSql, listSql, nil
 }
-
-func (p PaginationParam) paginationHandler(totalSql string, listSql string, result any) (count int64, err error) {
-	handler := p.GetHandler()
+func (p PaginationParam) getHandler() (handler Handler) {
+	handler = p.GetHandler()
 	cacheDuration := GetCacheDuration(p.context)
 	if cacheDuration > 0 {
 		handler = _WithCache(handler)
 	}
+	return handler
+}
 
+func (p PaginationParam) paginationHandler(totalSql string, listSql string, result any) (count int64, err error) {
+	handler := p.getHandler()
 	count, err = handler.Count(totalSql)
 	if err != nil {
 		return 0, err
@@ -1172,7 +1175,7 @@ func (p PaginationParam) paginationHandler(totalSql string, listSql string, resu
 	if count == 0 {
 		return 0, nil
 	}
-	err = p.GetHandler().Query(p.context, listSql, result)
+	err = handler.Query(p.context, listSql, result)
 	if err != nil {
 		return 0, err
 	}
@@ -1180,6 +1183,15 @@ func (p PaginationParam) paginationHandler(totalSql string, listSql string, resu
 }
 
 func (p PaginationParam) Pagination(result any) (count int64, err error) {
+	isShardedTable := p.GetTable().isShardedTable()
+	if isShardedTable {
+		shardedTablePaginationBuilder := NewShardedTablePaginationBuilder(p)
+		count, err = shardedTablePaginationBuilder.Pagination(result)
+		if err != nil {
+			return 0, err
+		}
+		return count, nil
+	}
 	totalSql, listSql, err := p.ToSQL()
 	if err != nil {
 		return 0, err

@@ -106,6 +106,8 @@ type TableConfig struct {
 	Indexs                   Indexs // 索引信息，唯一索引，在新增时会自动校验是否存在,更新时会自动保护
 	// 表级别的字段（值产生方式和实际数据无关），比如创建时间、更新时间、删除字段等，这些字段设置好后，相关操作可从此获取字段信息,增加该字段，方便封装delete操作、冗余字段自动填充等操作, 增加ctx 入参 方便使用ctx专递数据，比如 业务扩展多租户，只需表增加相关字段，在ctx中传递租户信息，并设置表级别字段场景即可
 	TableLevelFieldsHook func(ctx context.Context, fs ...*Field) (hookedFields Fields)
+	shardedTableNameFn   func(fs ...Field) (shardedTableNames []string) // 分表策略，比如按时间分表，此处传入字段信息，返回多个表名
+
 }
 
 func NewTableConfig(name string) TableConfig {
@@ -120,6 +122,21 @@ func NewTableConfig(name string) TableConfig {
 func (t TableConfig) WithTableName(name string) TableConfig {
 	t.DBName = DBName{Name: name}
 	return t
+}
+func (t TableConfig) WithShardedTableNameFn(shardedTableNameFn func(fs ...Field) (shardedTableNames []string)) TableConfig {
+	t.shardedTableNameFn = shardedTableNameFn
+	return t
+}
+func (t TableConfig) getShardedTableNames(fs ...Field) (shardedTableNames []string) {
+	if t.shardedTableNameFn == nil {
+		return nil
+	}
+	shardedTableNames = t.shardedTableNameFn(fs...)
+	return shardedTableNames
+}
+func (t TableConfig) isShardedTable() (isShardedTable bool) {
+	isShardedTable = t.shardedTableNameFn != nil
+	return isShardedTable
 }
 
 func (t TableConfig) AddColumns(columns ...ColumnConfig) TableConfig {
