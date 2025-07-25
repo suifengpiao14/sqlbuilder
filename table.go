@@ -302,16 +302,39 @@ func (t TableConfig) Merge(tables ...TableConfig) TableConfig {
 }
 
 type ColumnConfig struct {
-	FieldName string     // 业务标识 和Field.Name 保持一致，用户 column 和Field 互转
-	DbName    string     `json:"dbName"` // 数据库字段名，和数据库字段保持一致
-	Type      SchemaType `json:"type"`
-	Length    int        `json:"length"`
-	//	PK        bool       `json:"pk"`
-	Unique   bool   `json:"unique"`
-	Nullable bool   `json:"nullable"`
-	Default  any    `json:"default"`
-	Comment  string `json:"comment"`
-	Enums    Enums  `json:"enums"`
+	FieldName string // 业务标识 和Field.Name 保持一致，用户 column 和Field 互转
+	DbName    string `json:"dbName"` // 数据库字段名，和数据库字段保持一致
+	DBColType string `json:"type"`
+	Length    int    `json:"length"`
+	Nullable  bool   `json:"nullable"`
+	Default   any    `json:"default"`
+	Comment   string `json:"comment"`
+	Enums     Enums  `json:"enums"`
+}
+
+func (c ColumnConfig) WithType(dbColType string) ColumnConfig {
+	c.DBColType = dbColType
+	return c
+}
+func (c ColumnConfig) WithLength(length int) ColumnConfig {
+	c.Length = length
+	return c
+}
+func (c ColumnConfig) WithNullable(nullable bool) ColumnConfig {
+	c.Nullable = nullable
+	return c
+}
+func (c ColumnConfig) WithDefault(defaultValue any) ColumnConfig {
+	c.Default = defaultValue
+	return c
+}
+func (c ColumnConfig) WithComment(comment string) ColumnConfig {
+	c.Comment = comment
+	return c
+}
+func (c ColumnConfig) WithEnums(enums ...Enum) ColumnConfig {
+	c.Enums = Enums(enums)
+	return c
 }
 
 // Deprecated: use NewColumn instead
@@ -348,8 +371,8 @@ func (c ColumnConfig) MakeField(value any) *Field {
 	valueFnFn := func(_ any, f *Field, fs ...*Field) (any, error) {
 		return value, nil
 	}
-	f := NewField(valueFnFn).SetName(c.CamelName()).SetType(c.Type).Comment(c.Comment).AppendEnum(c.Enums...).SetDefault(c.Default)
-	if c.Type.IsEqual(Schema_Type_string) {
+	f := NewField(valueFnFn).SetName(c.CamelName()).SetType(SchemaType(c.DBColType)).Comment(c.Comment).AppendEnum(c.Enums...).SetDefault(c.Default)
+	if c.DBColType == Schema_Type_string.String() {
 		f.SetLength(c.Length)
 	}
 	//todo 更多细节设置,如根据默认值和Nullable设置是否容许为空等
@@ -489,4 +512,85 @@ func Slice2Any[T any](arr []T) (out []any) {
 		out[i] = v
 	}
 	return out
+}
+
+func (tableConfig TableConfig) generateDDL() (ddl string, err error) {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("CREATE TABLE `%s` (\n", tableConfig.DBName.Name))
+
+	var columnDefs []string
+	var primaryKeys []string
+	var uniqueKeys []string
+	var indexes []string
+
+	// 字段定义
+	for _, col := range tableConfig.Columns {
+		colDef := fmt.Sprintf("  `%s` %s", col.DbName, mapGoTypeToMySQL(col.DBColType, col.Length))
+
+		if !col.Nullable {
+			colDef += " NOT NULL"
+		} else {
+			colDef += " NULL"
+		}
+
+		if col.Default != nil {
+			colDef += " DEFAULT " + escapeDefault(col.Default)
+		}
+
+		if col.Comment != "" {
+			colDef += fmt.Sprintf(" COMMENT '%s'", col.Comment)
+		}
+
+		columnDefs = append(columnDefs, colDef)
+	}
+
+	// 索引
+	for _, idx := range tableConfig.Indexs {
+		columnNames := idx.ColumnNames(tableConfig.Columns)
+		if len(columnNames) == 0 {
+			continue
+		}
+
+		escapedCols := make([]string, 0)
+		for _, dbName := range columnNames {
+			escapedCols = append(escapedCols, fmt.Sprintf("`%s`", dbName))
+		}
+
+		if idx.IsPrimary {
+			primaryKeys = append(primaryKeys, escapedCols...)
+		} else if idx.Unique {
+			uniqueKeys = append(uniqueKeys, fmt.Sprintf("UNIQUE KEY (%s)", strings.Join(escapedCols, ",")))
+		} else {
+			indexes = append(indexes, fmt.Sprintf("KEY (%s)", strings.Join(escapedCols, ",")))
+		}
+	}
+
+	// 拼接字段 + 索引
+	columnDefs = append(columnDefs, fmt.Sprintf("  PRIMARY KEY (%s)", strings.Join(primaryKeys, ",")))
+	columnDefs = append(columnDefs, uniqueKeys...)
+	columnDefs = append(columnDefs, indexes...)
+
+	sb.WriteString(strings.Join(columnDefs, ",\n"))
+	sb.WriteString("\n) ENGINE=InnoDB AUTO_INCREMENT=1  DEFAULT CHARSET=utf8mb4;")
+
+	return sb.String(), nil
+}
+
+func mapGoTypeToMySQL(typ string, length int) string {
+	if length > 0 {
+		return fmt.Sprintf("VARCHAR(%d)", length)
+	}
+	return typ
+}
+
+func escapeDefault(val any) string {
+	switch v := val.(type) {
+	case string:
+		return fmt.Sprintf("'%s'", v)
+	case nil:
+		return "NULL"
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
