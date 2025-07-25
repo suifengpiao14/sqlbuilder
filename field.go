@@ -1791,11 +1791,13 @@ func (fs Fields) ApplyDelay() Fields {
 }
 
 // Add 新增列，Append 被占用，使用add
+// 2023-07-25 14:05:40   add 方法名称容易理解成在原有fs基础上最佳，经常写成 fs.Add(fs2...), 忘记要写成fs = fs.Add(fs2...), 建议改成引用func (fs *Fields) 方式
+
 func (fs Fields) Add(moreFs ...*Field) Fields {
 	return append(fs, moreFs...)
 }
 
-// Deprecated: 废弃，使用 Append 方法代替 Fields 容许重复
+// Deprecated: 废弃，使用 Add 方法代替 Fields 容许重复
 func (fs *Fields) Append(moreFields ...*Field) *Fields {
 	if *fs == nil {
 		*fs = make(Fields, 0)
