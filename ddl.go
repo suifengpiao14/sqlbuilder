@@ -29,20 +29,18 @@ func (tableConfig TableConfig) generateMysqlDDL() (ddl string, err error) {
 
 	// 字段定义
 	for _, col := range tableConfig.Columns {
-		colDef := fmt.Sprintf("  `%s` %s", col.DbName, mapGoTypeToMySQL(col.GetType(), col.GetLength()))
-		nullable := col.GetNullable()
-		if !nullable {
+		col = col.CopyFieldSchemaIfEmpty()
+		colDef := fmt.Sprintf("  `%s` %s", col.DbName, mapGoTypeToMySQL(col.Type, col.Length))
+		if col.NotNull {
 			colDef += " NOT NULL"
 		} else {
 			colDef += " NULL"
 		}
-		defaul := col.GetDefault()
-		if defaul != nil {
-			colDef += " DEFAULT " + escapeDefault(defaul)
+		if col.Default != nil {
+			colDef += " DEFAULT " + escapeDefault(col.Default)
 		}
-		comment := col.GetComment()
-		if comment != "" {
-			colDef += fmt.Sprintf(" COMMENT '%s'", comment)
+		if col.Comment != "" {
+			colDef += fmt.Sprintf(" COMMENT '%s'", col.Comment)
 		}
 
 		columnDefs = append(columnDefs, colDef)
@@ -96,14 +94,13 @@ func (tableConfig TableConfig) generateSQLite3DDL() (ddl string, err error) {
 
 	// 字段定义
 	for _, col := range tableConfig.Columns {
-		colDef := fmt.Sprintf("  `%s` %s", col.DbName, mapGoTypeToSQLite(col.GetType(), col.GetLength()))
-		nullable := col.GetNullable()
-		if !nullable {
+		col = col.CopyFieldSchemaIfEmpty()
+		colDef := fmt.Sprintf("  `%s` %s", col.DbName, mapGoTypeToSQLite(col.Type, col.Length))
+		if col.NotNull {
 			colDef += " NOT NULL"
 		}
-		defaul := col.GetDefault()
-		if defaul != nil {
-			colDef += " DEFAULT " + escapeDefault(defaul)
+		if col.Default != nil {
+			colDef += " DEFAULT " + escapeDefault(col.Default)
 		}
 
 		columnDefs = append(columnDefs, colDef)

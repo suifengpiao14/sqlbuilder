@@ -329,7 +329,7 @@ type ColumnConfig struct {
 	DbName    string     `json:"dbName"` // 数据库字段名，和数据库字段保持一致
 	Type      SchemaType `json:"type"`
 	Length    int        `json:"length"`
-	Nullable  bool       `json:"nullable"`
+	NotNull   bool       `json:"nullable"`
 	Default   any        `json:"default"`
 	Comment   string     `json:"comment"`
 	Enums     Enums      `json:"enums"`
@@ -345,7 +345,7 @@ func (c ColumnConfig) WithLength(length int) ColumnConfig {
 	return c
 }
 func (c ColumnConfig) WithNullable(nullable bool) ColumnConfig {
-	c.Nullable = nullable
+	c.NotNull = nullable
 	return c
 }
 func (c ColumnConfig) WithDefault(defaultValue any) ColumnConfig {
@@ -367,58 +367,34 @@ func (c ColumnConfig) WithEnums(enums ...Enum) ColumnConfig {
 	return c
 }
 
-func (c ColumnConfig) GetType() SchemaType {
-	if c.Type != "" {
-		return c.Type
+func (c ColumnConfig) CopyFieldSchemaIfEmpty() ColumnConfig {
+	if c.field == nil || c.field.Schema == nil {
+		return c
 	}
-	if c.field != nil && c.field.Schema != nil {
-		return c.field.Schema.Type
+	fieldSchema := c.field.Schema
+	if c.Type == "" {
+		c.Type = fieldSchema.Type
 	}
-	return ""
-}
-func (c ColumnConfig) GetLength() int {
-	if c.Length != 0 {
-		return c.Length
+	if c.Length == 0 {
+		c.Length = fieldSchema.MaxLength
 	}
-	if c.field != nil && c.field.Schema != nil {
-		return c.field.Schema.MaxLength
+	if !c.NotNull {
+		c.NotNull = fieldSchema.Required
 	}
-	return 0
-}
-func (c ColumnConfig) GetNullable() bool {
-	if c.Nullable {
-		return true
+	if c.Default == nil {
+		c.Default = fieldSchema.Default
 	}
-	defaul := c.GetDefault()
-	if defaul == nil {
-		return true // 没有默认值，容许为空
-	}
-
-	if c.field != nil && c.field.Schema != nil {
-		return !c.field.Schema.Required
-	}
-	return true
-}
-func (c ColumnConfig) GetDefault() any {
-	if c.Default != nil {
-		return c.Default
-	}
-	if c.field != nil && c.field.Schema != nil {
-		return c.field.Schema.Default
-	}
-	return nil
-}
-func (c ColumnConfig) GetComment() string {
-	if c.Comment != "" {
-		return c.Comment
-	}
-	if c.field != nil && c.field.Schema != nil {
-		if c.field.Schema.Comment != "" {
-			return c.field.Schema.Comment
+	if c.Comment == "" {
+		c.Comment = fieldSchema.Comment
+		if c.Comment == "" {
+			c.Comment = fieldSchema.Title
 		}
-		return c.field.Schema.Title
 	}
-	return ""
+	if len(c.Enums) == 0 {
+		c.Enums = fieldSchema.Enums
+	}
+	return c
+
 }
 
 func (c ColumnConfig) GetField(f *Field) *Field {
@@ -443,7 +419,7 @@ func newColumnConfig(dbName, fieldName string) ColumnConfig {
 
 // NewColumn 新建列配置，用于封装模型时，将字段映射为数据库字段,使用*Field作为参数，能减少硬编码，减少硬编码带来的维护成本
 func NewColumn(dbFieldName string, field *Field) ColumnConfig {
-	return newColumnConfig(dbFieldName, field.Name).WithField(field)
+	return newColumnConfig(dbFieldName, field.Name).WithField(field).CopyFieldSchemaIfEmpty()
 }
 
 // DbNameIsEmpty 字段DbName 为空，对数据表操作来说，是无效字段，但是业务层面封装的模型支持退化，比如keyvalue 模型正常2个字段，但是只保留key 也是常见模型，这是将value映射为""，即可实现key模型，于是诞生 了DbName 为空的数据，此函数协助过滤
