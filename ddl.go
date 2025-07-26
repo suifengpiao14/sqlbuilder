@@ -47,9 +47,9 @@ func (tableConfig TableConfig) generateSQLite3DDL() (ddl string, err error) {
 	sb.WriteString(fmt.Sprintf("CREATE TABLE `%s` (\n", tableConfig.DBName.Name))
 
 	// 字段定义
-	columnDefs := tableConfig.Columns.DDL(Driver_mysql)
+	columnDefs := tableConfig.Columns.DDL(Driver_sqlite3)
 	// 索引
-	indexDefs := tableConfig.Indexs.DDL(Driver_mysql, tableConfig)
+	indexDefs := tableConfig.Indexs.DDL(Driver_sqlite3, tableConfig)
 
 	columnDefs = append(columnDefs, indexDefs...)
 
