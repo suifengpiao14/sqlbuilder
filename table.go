@@ -325,15 +325,18 @@ func (t TableConfig) Merge(tables ...TableConfig) TableConfig {
 }
 
 type ColumnConfig struct {
-	FieldName string     // 业务标识 和Field.Name 保持一致，用户 column 和Field 互转
-	DbName    string     `json:"dbName"` // 数据库字段名，和数据库字段保持一致
-	Type      SchemaType `json:"type"`
-	Length    int        `json:"length"`
-	NotNull   bool       `json:"nullable"`
-	Default   any        `json:"default"`
-	Comment   string     `json:"comment"`
-	Enums     Enums      `json:"enums"`
-	field     *Field
+	FieldName     string     // 业务标识 和Field.Name 保持一致，用户 column 和Field 互转
+	DbName        string     `json:"dbName"` // 数据库字段名，和数据库字段保持一致
+	Type          SchemaType `json:"type"`
+	Unsigned      bool       `json:"unsigned"`
+	AutoIncrement bool       `json:"autoIncrement"`
+	Length        int        `json:"length"`
+	NotNull       bool       `json:"nullable"`
+	Default       any        `json:"default"`
+	Comment       string     `json:"comment"`
+	Enums         Enums      `json:"enums"`
+	Tags          Tags       `json:"tags"`
+	field         *Field
 }
 
 func (c ColumnConfig) WithType(dbColType SchemaType) ColumnConfig {
@@ -348,12 +351,24 @@ func (c ColumnConfig) WithNullable(nullable bool) ColumnConfig {
 	c.NotNull = nullable
 	return c
 }
+func (c ColumnConfig) WithUnSigned(unsigned bool) ColumnConfig {
+	c.Unsigned = unsigned
+	return c
+}
+func (c ColumnConfig) WithAutoIncrement(autoIncr bool) ColumnConfig {
+	c.AutoIncrement = autoIncr
+	return c
+}
 func (c ColumnConfig) WithDefault(defaultValue any) ColumnConfig {
 	c.Default = defaultValue
 	return c
 }
 func (c ColumnConfig) WithComment(comment string) ColumnConfig {
 	c.Comment = comment
+	return c
+}
+func (c ColumnConfig) WithTags(tags ...string) ColumnConfig {
+	c.Tags = Tags(tags)
 	return c
 }
 
@@ -376,6 +391,12 @@ func (c ColumnConfig) CopyFieldSchemaIfEmpty() ColumnConfig {
 		c.Type = fieldSchema.Type
 	}
 	if c.Length == 0 {
+		switch c.Type {
+		case Schema_Type_string:
+			c.Length = fieldSchema.MaxLength
+		case Schema_Type_int:
+			c.Length = int(fieldSchema.Maximum)
+		}
 		c.Length = fieldSchema.MaxLength
 	}
 	if !c.NotNull {

@@ -3,6 +3,8 @@ package sqlbuilder
 import (
 	"fmt"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 var (
@@ -22,55 +24,12 @@ func (tableConfig TableConfig) generateMysqlDDL() (ddl string, err error) {
 
 	sb.WriteString(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s` (\n", tableConfig.DBName.Name))
 
-	var columnDefs []string
-	var primaryKeys []string
-	var uniqueKeys []string
-	var indexes []string
-
 	// 字段定义
-	for _, col := range tableConfig.Columns {
-		col = col.CopyFieldSchemaIfEmpty()
-		colDef := fmt.Sprintf("  `%s` %s", col.DbName, mapGoTypeToMySQL(col.Type, col.Length))
-		if col.NotNull {
-			colDef += " NOT NULL"
-		} else {
-			colDef += " NULL"
-		}
-		if col.Default != nil {
-			colDef += " DEFAULT " + escapeDefault(col.Default)
-		}
-		if col.Comment != "" {
-			colDef += fmt.Sprintf(" COMMENT '%s'", col.Comment)
-		}
-
-		columnDefs = append(columnDefs, colDef)
-	}
-
+	columnDefs := tableConfig.Columns.DDL(Driver_mysql)
 	// 索引
-	for _, idx := range tableConfig.Indexs {
-		columnNames := idx.ColumnNames(tableConfig.Columns)
-		if len(columnNames) == 0 {
-			continue
-		}
+	indexDefs := tableConfig.Indexs.DDL(Driver_mysql, tableConfig)
 
-		escapedCols := make([]string, 0)
-		for _, dbName := range columnNames {
-			escapedCols = append(escapedCols, fmt.Sprintf("`%s`", dbName))
-		}
-		indexName := fmt.Sprintf("idx_%s_%s", tableConfig.DBName.Name, strings.Join(columnNames, "_"))
-		if idx.IsPrimary {
-			primaryKeys = append(primaryKeys, escapedCols...)
-		} else if idx.Unique {
-			uniqueKeys = append(uniqueKeys, fmt.Sprintf("UNIQUE KEY `uik_%s` (%s)", indexName, strings.Join(escapedCols, ",")))
-		} else {
-			indexes = append(indexes, fmt.Sprintf("KEY  `ik_%s`(%s)", indexName, strings.Join(escapedCols, ",")))
-		}
-	}
-
-	// 拼接字段 + 索引
-	columnDefs = append(columnDefs, fmt.Sprintf("  PRIMARY KEY (%s)", strings.Join(primaryKeys, ",")))
-	columnDefs = append(columnDefs, uniqueKeys...)
-	columnDefs = append(columnDefs, indexes...)
+	columnDefs = append(columnDefs, indexDefs...)
 
 	sb.WriteString(strings.Join(columnDefs, ",\n"))
 	sb.WriteString("\n) ENGINE=InnoDB AUTO_INCREMENT=1  DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ")
@@ -87,98 +46,73 @@ func (tableConfig TableConfig) generateSQLite3DDL() (ddl string, err error) {
 
 	sb.WriteString(fmt.Sprintf("CREATE TABLE `%s` (\n", tableConfig.DBName.Name))
 
-	var columnDefs []string
-	var primaryKeys []string
-	var uniqueDefs []string
-	var indexes []string // separate CREATE INDEX, outside main DDL
-
 	// 字段定义
-	for _, col := range tableConfig.Columns {
-		col = col.CopyFieldSchemaIfEmpty()
-		colDef := fmt.Sprintf("  `%s` %s", col.DbName, mapGoTypeToSQLite(col.Type, col.Length))
-		if col.NotNull {
-			colDef += " NOT NULL"
-		}
-		if col.Default != nil {
-			colDef += " DEFAULT " + escapeDefault(col.Default)
-		}
+	columnDefs := tableConfig.Columns.DDL(Driver_mysql)
+	// 索引
+	indexDefs := tableConfig.Indexs.DDL(Driver_mysql, tableConfig)
 
-		columnDefs = append(columnDefs, colDef)
-	}
-
-	// 主键/唯一索引需放到表定义中；普通索引需要 CREATE INDEX
-	for _, idx := range tableConfig.Indexs {
-		columnNames := idx.ColumnNames(tableConfig.Columns)
-		if len(columnNames) == 0 {
-			continue
-		}
-
-		escapedCols := make([]string, 0, len(columnNames))
-		for _, name := range columnNames {
-			dbName := ""
-			for _, col := range tableConfig.Columns {
-				if col.FieldName == name || col.DbName == name {
-					dbName = col.DbName
-					break
-				}
-			}
-			if dbName != "" {
-				escapedCols = append(escapedCols, fmt.Sprintf("`%s`", dbName))
-			}
-		}
-
-		if idx.IsPrimary {
-			primaryKeys = append(primaryKeys, escapedCols...)
-		} else if idx.Unique {
-			uniqueDefs = append(uniqueDefs, fmt.Sprintf("  UNIQUE (%s)", strings.Join(escapedCols, ",")))
-		} else {
-			// 普通索引在 SQLite 中要单独 CREATE INDEX
-			indexName := fmt.Sprintf("idx_%s_%s", tableConfig.DBName.Name, strings.Join(columnNames, "_"))
-			indexStmt := fmt.Sprintf("CREATE INDEX `%s` ON `%s` (%s);", indexName, tableConfig.DBName.Name, strings.Join(escapedCols, ","))
-			indexes = append(indexes, indexStmt)
-		}
-	}
-
-	// 主键
-	if len(primaryKeys) > 0 {
-		columnDefs = append(columnDefs, fmt.Sprintf("  PRIMARY KEY (%s)", strings.Join(primaryKeys, ",")))
-	}
-	// 唯一索引
-	columnDefs = append(columnDefs, uniqueDefs...)
+	columnDefs = append(columnDefs, indexDefs...)
 
 	sb.WriteString(strings.Join(columnDefs, ",\n"))
 	sb.WriteString("\n);")
-
 	ddl = sb.String()
-	if len(indexes) > 0 {
-		ddl += "\n" + strings.Join(indexes, "\n")
-	}
-
 	return ddl, nil
 }
 
-// 简化版类型映射（可扩展）
-func mapGoTypeToMySQL(t SchemaType, length int) string {
-	switch t {
-	case "string":
-		if length > 0 {
-			return fmt.Sprintf("VARCHAR(%d)", length)
-		}
-		return "TEXT"
-	case "int", "int64":
-		if length == 0 {
-			length = 11
-		}
-		return fmt.Sprintf("INT(%d)", length)
-	case "float", "float64":
-		return "DOUBLE"
-	case "bool":
-		return "BOOLEAN"
-	case "time":
-		return "DATETIME"
-	default:
-		return "TEXT"
+func (cols ColumnConfigs) DDL(driver Driver) (lines []string) {
+	arr := make([]string, 0)
+	for _, col := range cols {
+		arr = append(arr, col.DDL(driver))
 	}
+
+	lines = make([]string, 0)
+	for _, l := range arr {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		lines = append(lines, l)
+	}
+	return lines
+}
+
+func (col ColumnConfig) DDL(driver Driver) (ddl string) {
+	col = col.CopyFieldSchemaIfEmpty()
+	switch driver {
+	case Driver_mysql:
+		return Column2DDLMysql(col)
+	case Driver_sqlite3:
+		return Column2DDLSQLite(col)
+	}
+	err := errors.Errorf("unsport driver:%s", string(driver))
+	panic(err)
+}
+
+func (indexs Indexs) DDL(driver Driver, table TableConfig) (lines []string) {
+	arr := make([]string, 0)
+	for _, index := range indexs {
+		arr = append(arr, index.DDL(driver, table))
+	}
+
+	lines = make([]string, 0)
+	for _, l := range arr {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		lines = append(lines, l)
+	}
+	return lines
+
+}
+
+func (index Index) DDL(driver Driver, table TableConfig) (line string) {
+	switch driver {
+	case Driver_mysql:
+		return Index2DDLMysql(index, table)
+	case Driver_sqlite3:
+		return Index2DDLSQLite(index, table)
+	}
+	err := errors.Errorf("unsport driver:%s", string(driver))
+	panic(err)
 }
 
 func escapeDefault(val any) string {
