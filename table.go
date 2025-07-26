@@ -172,14 +172,21 @@ func (t TableConfig) GetHandler() (handler Handler) {
 		panic(err)
 	}
 	if CREATE_TABLE_IF_NOT_EXISTS {
-		ddl, err := t.GenerateDDL()
-		if err != nil {
-			panic(err)
+		sql := fmt.Sprintf(`select 1 from %s;`, t.DBName.BaseNameWithQuotes())
+		ctx := context.Background()
+		var result int
+		err := t.handler.Query(ctx, sql, &result)
+		if err != nil { // 查询报错，则认为是表不存在，则创建表
+			ddl, err := t.GenerateDDL()
+			if err != nil {
+				panic(err)
+			}
+			err = t.handler.Exec(ddl)
+			if err != nil {
+				panic(err)
+			}
 		}
-		err = t.handler.Exec(ddl)
-		if err != nil {
-			panic(err)
-		}
+
 	}
 	return t.handler
 }

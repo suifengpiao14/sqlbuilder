@@ -195,7 +195,7 @@ func escapeDefault(val any) string {
 	}
 }
 
-func mapGoTypeToSQLite(t SchemaType, length int) string {
+func mapGoTypeToSQLite(t SchemaType, _ int) string {
 	switch t {
 	case "string":
 		return "TEXT"
