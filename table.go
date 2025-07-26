@@ -103,6 +103,7 @@ type TableConfig struct {
 	FieldName2DBColumnNameFn FieldName2DBColumnNameFn `json:"-"`
 	Schema                   SchemaConfig
 	handler                  Handler
+	Comment                  string // 表注释
 	Indexs                   Indexs // 索引信息，唯一索引，在新增时会自动校验是否存在,更新时会自动保护
 	// 表级别的字段（值产生方式和实际数据无关），比如创建时间、更新时间、删除字段等，这些字段设置好后，相关操作可从此获取字段信息,增加该字段，方便封装delete操作、冗余字段自动填充等操作, 增加ctx 入参 方便使用ctx专递数据，比如 业务扩展多租户，只需表增加相关字段，在ctx中传递租户信息，并设置表级别字段场景即可
 	TableLevelFieldsHook func(ctx context.Context, fs ...*Field) (hookedFields Fields)
@@ -121,6 +122,11 @@ func NewTableConfig(name string) TableConfig {
 
 func (t TableConfig) WithTableName(name string) TableConfig {
 	t.DBName = DBName{Name: name}
+	return t
+}
+
+func (t TableConfig) WithComment(comment string) TableConfig {
+	t.Comment = comment
 	return t
 }
 func (t TableConfig) WithShardedTableNameFn(shardedTableNameFn func(fs ...Field) (shardedTableNames []string)) TableConfig {
@@ -164,6 +170,16 @@ func (t TableConfig) GetHandler() (handler Handler) {
 	if t.handler == nil {
 		err := errors.New("database handler is nil, please use TableConfig.WithHandler to set handler")
 		panic(err)
+	}
+	if CREATE_TABLE_IF_NOT_EXISTS {
+		ddl, err := t.GenerateDDL()
+		if err != nil {
+			panic(err)
+		}
+		err = t.handler.Exec(ddl)
+		if err != nil {
+			panic(err)
+		}
 	}
 	return t.handler
 }
@@ -302,18 +318,19 @@ func (t TableConfig) Merge(tables ...TableConfig) TableConfig {
 }
 
 type ColumnConfig struct {
-	FieldName string // 业务标识 和Field.Name 保持一致，用户 column 和Field 互转
-	DbName    string `json:"dbName"` // 数据库字段名，和数据库字段保持一致
-	DBColType string `json:"type"`
-	Length    int    `json:"length"`
-	Nullable  bool   `json:"nullable"`
-	Default   any    `json:"default"`
-	Comment   string `json:"comment"`
-	Enums     Enums  `json:"enums"`
+	FieldName string     // 业务标识 和Field.Name 保持一致，用户 column 和Field 互转
+	DbName    string     `json:"dbName"` // 数据库字段名，和数据库字段保持一致
+	Type      SchemaType `json:"type"`
+	Length    int        `json:"length"`
+	Nullable  bool       `json:"nullable"`
+	Default   any        `json:"default"`
+	Comment   string     `json:"comment"`
+	Enums     Enums      `json:"enums"`
+	field     *Field
 }
 
-func (c ColumnConfig) WithType(dbColType string) ColumnConfig {
-	c.DBColType = dbColType
+func (c ColumnConfig) WithType(dbColType SchemaType) ColumnConfig {
+	c.Type = dbColType
 	return c
 }
 func (c ColumnConfig) WithLength(length int) ColumnConfig {
@@ -332,9 +349,73 @@ func (c ColumnConfig) WithComment(comment string) ColumnConfig {
 	c.Comment = comment
 	return c
 }
+
+func (c ColumnConfig) WithField(f *Field) ColumnConfig {
+	c.field = f
+	return c
+}
+
 func (c ColumnConfig) WithEnums(enums ...Enum) ColumnConfig {
 	c.Enums = Enums(enums)
 	return c
+}
+
+func (c ColumnConfig) GetType() SchemaType {
+	if c.Type != "" {
+		return c.Type
+	}
+	if c.field != nil && c.field.Schema != nil {
+		return c.field.Schema.Type
+	}
+	return ""
+}
+func (c ColumnConfig) GetLength() int {
+	if c.Length != 0 {
+		return c.Length
+	}
+	if c.field != nil && c.field.Schema != nil {
+		return c.field.Schema.MaxLength
+	}
+	return 0
+}
+func (c ColumnConfig) GetNullable() bool {
+	if c.Nullable {
+		return true
+	}
+	defaul := c.GetDefault()
+	if defaul == nil {
+		return true // 没有默认值，容许为空
+	}
+
+	if c.field != nil && c.field.Schema != nil {
+		return !c.field.Schema.Required
+	}
+	return true
+}
+func (c ColumnConfig) GetDefault() any {
+	if c.Default != nil {
+		return c.Default
+	}
+	if c.field != nil && c.field.Schema != nil {
+		return c.field.Schema.Default
+	}
+	return nil
+}
+func (c ColumnConfig) GetComment() string {
+	if c.Comment != "" {
+		return c.Comment
+	}
+	if c.field != nil && c.field.Schema != nil {
+		if c.field.Schema.Comment != "" {
+			return c.field.Schema.Comment
+		}
+		return c.field.Schema.Title
+	}
+	return ""
+}
+
+func (c ColumnConfig) GetField(f *Field) *Field {
+	return c.field
 }
 
 // Deprecated: use NewColumn instead
@@ -355,7 +436,7 @@ func newColumnConfig(dbName, fieldName string) ColumnConfig {
 
 // NewColumn 新建列配置，用于封装模型时，将字段映射为数据库字段,使用*Field作为参数，能减少硬编码，减少硬编码带来的维护成本
 func NewColumn(dbFieldName string, field *Field) ColumnConfig {
-	return newColumnConfig(dbFieldName, field.Name)
+	return newColumnConfig(dbFieldName, field.Name).WithField(field)
 }
 
 // DbNameIsEmpty 字段DbName 为空，对数据表操作来说，是无效字段，但是业务层面封装的模型支持退化，比如keyvalue 模型正常2个字段，但是只保留key 也是常见模型，这是将value映射为""，即可实现key模型，于是诞生 了DbName 为空的数据，此函数协助过滤
@@ -371,8 +452,8 @@ func (c ColumnConfig) MakeField(value any) *Field {
 	valueFnFn := func(_ any, f *Field, fs ...*Field) (any, error) {
 		return value, nil
 	}
-	f := NewField(valueFnFn).SetName(c.CamelName()).SetType(SchemaType(c.DBColType)).Comment(c.Comment).AppendEnum(c.Enums...).SetDefault(c.Default)
-	if c.DBColType == Schema_Type_string.String() {
+	f := NewField(valueFnFn).SetName(c.CamelName()).SetType(SchemaType(c.Type)).Comment(c.Comment).AppendEnum(c.Enums...).SetDefault(c.Default)
+	if c.Type.IsEqual(Schema_Type_string) {
 		f.SetLength(c.Length)
 	}
 	//todo 更多细节设置,如根据默认值和Nullable设置是否容许为空等
@@ -512,85 +593,4 @@ func Slice2Any[T any](arr []T) (out []any) {
 		out[i] = v
 	}
 	return out
-}
-
-func (tableConfig TableConfig) generateDDL() (ddl string, err error) {
-	var sb strings.Builder
-
-	sb.WriteString(fmt.Sprintf("CREATE TABLE `%s` (\n", tableConfig.DBName.Name))
-
-	var columnDefs []string
-	var primaryKeys []string
-	var uniqueKeys []string
-	var indexes []string
-
-	// 字段定义
-	for _, col := range tableConfig.Columns {
-		colDef := fmt.Sprintf("  `%s` %s", col.DbName, mapGoTypeToMySQL(col.DBColType, col.Length))
-
-		if !col.Nullable {
-			colDef += " NOT NULL"
-		} else {
-			colDef += " NULL"
-		}
-
-		if col.Default != nil {
-			colDef += " DEFAULT " + escapeDefault(col.Default)
-		}
-
-		if col.Comment != "" {
-			colDef += fmt.Sprintf(" COMMENT '%s'", col.Comment)
-		}
-
-		columnDefs = append(columnDefs, colDef)
-	}
-
-	// 索引
-	for _, idx := range tableConfig.Indexs {
-		columnNames := idx.ColumnNames(tableConfig.Columns)
-		if len(columnNames) == 0 {
-			continue
-		}
-
-		escapedCols := make([]string, 0)
-		for _, dbName := range columnNames {
-			escapedCols = append(escapedCols, fmt.Sprintf("`%s`", dbName))
-		}
-
-		if idx.IsPrimary {
-			primaryKeys = append(primaryKeys, escapedCols...)
-		} else if idx.Unique {
-			uniqueKeys = append(uniqueKeys, fmt.Sprintf("UNIQUE KEY (%s)", strings.Join(escapedCols, ",")))
-		} else {
-			indexes = append(indexes, fmt.Sprintf("KEY (%s)", strings.Join(escapedCols, ",")))
-		}
-	}
-
-	// 拼接字段 + 索引
-	columnDefs = append(columnDefs, fmt.Sprintf("  PRIMARY KEY (%s)", strings.Join(primaryKeys, ",")))
-	columnDefs = append(columnDefs, uniqueKeys...)
-	columnDefs = append(columnDefs, indexes...)
-
-	sb.WriteString(strings.Join(columnDefs, ",\n"))
-	sb.WriteString("\n) ENGINE=InnoDB AUTO_INCREMENT=1  DEFAULT CHARSET=utf8mb4;")
-
-	return sb.String(), nil
-}
-
-func mapGoTypeToMySQL(typ string, length int) string {
-	if length > 0 {
-		return fmt.Sprintf("VARCHAR(%d)", length)
-	}
-	return typ
-}
-
-func escapeDefault(val any) string {
-	switch v := val.(type) {
-	case string:
-		return fmt.Sprintf("'%s'", v)
-	case nil:
-		return "NULL"
-	default:
-		return fmt.Sprintf("%v", v)
-	}
 }

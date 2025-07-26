@@ -229,6 +229,14 @@ func (d DialectWrapper) EscapeString(val string) string {
 	return val
 }
 
+func (d DialectWrapper) IsMysql() bool {
+	return strings.EqualFold(d.dialect, Driver_mysql.String())
+}
+
+func (d DialectWrapper) IsSQLite3() bool {
+	return strings.EqualFold(d.dialect, Driver_sqlite3.String())
+}
+
 func NewDialect(dialect string) DialectWrapper {
 	return DialectWrapper{
 		dialect: dialect,
