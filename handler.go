@@ -209,6 +209,7 @@ func ChainHandler(handler Handler, middlewares ...HandlerMiddleware) Handler {
 }
 
 type Handler interface {
+	GetDialector() string // 获取驱动名称，方便后续扩展其它数据库支持
 	Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) (err error)
 	Exec(sql string) (err error)
 	ExecWithRowsAffected(sql string) (rowsAffected int64, err error)
@@ -234,6 +235,9 @@ func (h GormHandler) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptio
 		return err
 	}, opts...)
 	return err
+}
+func (h GormHandler) GetDialector() string {
+	return h().Dialector.Name()
 }
 func (h GormHandler) OriginalHandler() Handler {
 	return h
@@ -382,6 +386,10 @@ func HandlerMiddlewareSingleflight(handler Handler) Handler {
 func (hc _HandlerSingleflight) OriginalHandler() Handler {
 	return GetOriginalHandler(hc.handler)
 }
+
+func (hc _HandlerSingleflight) GetDialector() string {
+	return hc.handler.GetDialector()
+}
 func (hc _HandlerSingleflight) IsOriginalHandler() bool {
 	return false
 }
@@ -529,6 +537,10 @@ var Cache_sql_duration = 1 * time.Minute
 func (hc _HandlerCache) OriginalHandler() Handler {
 	return GetOriginalHandler(hc.handler)
 }
+func (hc _HandlerCache) GetDialector() string {
+	return hc.handler.GetDialector()
+}
+
 func (hc _HandlerCache) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) error {
 	err := hc.handler.Transaction(fc, opts...)
 	return err
@@ -648,6 +660,9 @@ func (hc _HandlerSingleflightDoOnce) OriginalHandler() Handler {
 func (hc _HandlerSingleflightDoOnce) IsOriginalHandler() bool {
 	return false
 }
+func (hc _HandlerSingleflightDoOnce) GetDialector() string {
+	return hc.handler.GetDialector()
+}
 func (hc _HandlerSingleflightDoOnce) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) error {
 	err := hc.handler.Transaction(fc, opts...)
 	return err
@@ -733,6 +748,9 @@ func (hc _HandlerTriggerAsyncEvent) getEventLeaveDispatcher() EventASyncHandler 
 
 func (hc _HandlerTriggerAsyncEvent) OriginalHandler() Handler {
 	return GetOriginalHandler(hc.handler)
+}
+func (hc _HandlerTriggerAsyncEvent) GetDialector() string {
+	return hc.handler.GetDialector()
 }
 func (hc _HandlerTriggerAsyncEvent) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) error {
 	err := hc.handler.Transaction(fc, opts...)

@@ -14,7 +14,8 @@ var (
 )
 
 func (tableConfig TableConfig) GenerateDDL() (ddl string, err error) {
-	return GenerateDDL(Driver(Dialect.dialect), tableConfig)
+	handler := tableConfig.GetHandler()
+	return GenerateDDL(Driver(handler.GetDialector()), tableConfig)
 }
 
 func GenerateDDL(driver Driver, tableConfig TableConfig) (ddl string, err error) {

@@ -163,6 +163,20 @@ func (d Driver) IsSame(target Driver) bool {
 	return strings.EqualFold(d.String(), target.String())
 }
 
+func (d Driver) GoquDialect() goqu.DialectWrapper {
+	return goqu.Dialect(d.String())
+}
+
+func (d Driver) EscapeString(val string) string {
+	switch strings.ToLower(d.String()) {
+	case strings.ToLower(Driver_mysql.String()):
+		return MysqlEscapeString(val)
+	case strings.ToLower(Driver_sqlite3.String()):
+		return SQLite3EscapeString(val)
+	}
+	return val
+}
+
 type Expressions = []goqu.Expression
 
 var ErrEmptyWhere = errors.New("error  empty where")
@@ -208,17 +222,22 @@ var MysqlEscapeString = func(val string) string {
 }
 var SQLite3EscapeString = MysqlEscapeString // 此处暂时使用mysql的
 
+// Deprecated: 废弃，使用 Driver.GoquDialect 代替
 type DialectWrapper struct {
 	dialect string
 }
 
+// Deprecated: 废弃，使用 Driver.GoquDialect 代替
 func (d DialectWrapper) Dialect() string {
 	return d.dialect
 }
+
+// Deprecated: 废弃，使用 Driver.GoquDialect 代替
 func (d DialectWrapper) DialectWrapper() goqu.DialectWrapper {
 	return goqu.Dialect(d.dialect)
 }
 
+// Deprecated: 废弃，使用 Driver.EscapeString 代替
 func (d DialectWrapper) EscapeString(val string) string {
 	switch strings.ToLower(d.dialect) {
 	case strings.ToLower(Driver_mysql.String()):
@@ -229,25 +248,30 @@ func (d DialectWrapper) EscapeString(val string) string {
 	return val
 }
 
+// Deprecated: 废弃，使用 Driver
 func (d DialectWrapper) IsMysql() bool {
 	return strings.EqualFold(d.dialect, Driver_mysql.String())
 }
 
+// Deprecated: 废弃，使用 Driver
 func (d DialectWrapper) IsSQLite3() bool {
 	return strings.EqualFold(d.dialect, Driver_sqlite3.String())
 }
 
+// Deprecated: 废弃，使用 Driver
 func NewDialect(dialect string) DialectWrapper {
 	return DialectWrapper{
 		dialect: dialect,
 	}
 }
 
-// Dialect 设定驱动,方便直接使用
+// Deprecated: 使用 Driver 代替
 var Dialect = NewDialect(Driver_sqlite3.String())
 
+// Deprecated: 使用 Driver 代替
 var Dialect_Mysql = NewDialect(Driver_mysql.String())
 
+// Deprecated: 废弃，使用 Driver.EscapeString 代替
 func EscapeString(s string) (escaped string) {
 	escaped = Dialect.EscapeString(s)
 	return escaped
@@ -359,7 +383,7 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 
-	ds := Dialect.DialectWrapper().Insert(tableConfig.Name).Rows(rowData)
+	ds := p.GetGoquDialect().Insert(tableConfig.Name).Rows(rowData)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -491,7 +515,7 @@ func (is BatchInsertParam) ToSQL() (sql string, err error) {
 	if len(data) == 0 {
 		return "", ErrBatchInsertDataIsNil
 	}
-	ds := Dialect.DialectWrapper().Insert(tableConfig.Name).Rows(data...)
+	ds := is.GetGoquDialect().Insert(tableConfig.Name).Rows(data...)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		return "", err
@@ -579,7 +603,7 @@ func (p DeleteParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
-	ds := Dialect.DialectWrapper().Update(tableConfig.Name).Set(data).Where(where...)
+	ds := p.GetGoquDialect().Update(tableConfig.Name).Set(data).Where(where...)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		err = errors.Wrap(err, "build delete sql error")
@@ -671,7 +695,7 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 	}
 	limit := fs.Limit()
 
-	ds := Dialect.DialectWrapper().Update(tableConfig.Name).Set(data).Where(where...).Order(fs.Order()...)
+	ds := p.GetGoquDialect().Update(tableConfig.Name).Set(data).Where(where...).Order(fs.Order()...)
 	if limit > 0 {
 		ds = ds.Limit(limit)
 	}
@@ -822,7 +846,7 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 		err = errors.Wrap(err, errWithMsg)
 		return "", err
 	}
-	ds := Dialect.DialectWrapper().Select(fs.Select()...).
+	ds := p.GetGoquDialect().Select(fs.Select()...).
 		From(tableConfig.AliasOrTableExpr()).
 		Where(where...).
 		Order(fs.Order()...).
@@ -928,7 +952,7 @@ func (p ListParam) ToSQL() (sql string, err error) {
 		}
 	}
 
-	ds := Dialect.DialectWrapper().Select(selec...).
+	ds := p.GetGoquDialect().Select(selec...).
 		From(tableConfig.AliasOrTableExpr()).
 		Where(where...).
 		Order(order...)
@@ -1042,7 +1066,7 @@ func (p ExistsParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 
-	ds := Dialect.DialectWrapper().
+	ds := p.GetGoquDialect().
 		From(tableConfig.AliasOrTableExpr()).
 		Where(where...).
 		Limit(1)
@@ -1133,7 +1157,7 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 		err = errors.WithMessage(err, errWithMsg)
 		return "", err
 	}
-	ds := Dialect.DialectWrapper().
+	ds := p.GetGoquDialect().
 		From(tableConfig.AliasOrTableExpr()).
 		Where(where...)
 	ds = p.builderFns.Apply(ds)
@@ -1506,6 +1530,14 @@ func (p *SQLParam[T]) WithHandler(handler Handler) *T {
 
 func (p *SQLParam[T]) GetHandler() (handler Handler) {
 	return p._Table.GetHandler()
+}
+
+func (p *SQLParam[T]) GetGoquDialect() goqu.DialectWrapper {
+	dialect := string(Driver_mysql)
+	if p._Table.handler != nil {
+		dialect = p._Table.handler.GetDialector()
+	}
+	return goqu.Dialect(dialect)
 }
 
 func (p *SQLParam[T]) WithHandlerMiddleware(middlewares ...HandlerMiddleware) *T {

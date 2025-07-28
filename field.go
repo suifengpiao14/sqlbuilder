@@ -2173,8 +2173,15 @@ func TryParseExpressions(field string, value any) (expressions Expressions, ok b
 
 	return nil, false
 }
+
+// Deprecated: 请使用TryParseExpressions
 func Expression2String(expressions ...goqu.Expression) string {
 	sql, _, _ := Dialect.DialectWrapper().Select().Where(expressions...).ToSQL()
+	return sql
+}
+
+func Expression2StringWithDriver(driver Driver, expressions ...goqu.Expression) string {
+	sql, _, _ := driver.GoquDialect().Select().Where(expressions...).ToSQL()
 	return sql
 }
 
