@@ -13,6 +13,17 @@ var (
 	CreateTableIfNotExists = false // 是否在创建表时检查该表是否存在，如果不存在则创建,开发环境建议设置为true，生产环境建议设置为false
 )
 
+func shouldCrateTable(driver Driver) bool {
+	if CreateTableIfNotExists {
+		return true
+	}
+	switch driver {
+	case Driver_sqlite3, _Driver_sqlite:
+		return true
+	}
+	return false
+}
+
 func (tableConfig TableConfig) GenerateDDL() (ddl string, err error) {
 	dialector := Driver_mysql
 	handler := tableConfig.handler // 这里可以不指定句柄，默认使用mysql驱动

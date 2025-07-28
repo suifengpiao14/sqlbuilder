@@ -176,7 +176,7 @@ func (t TableConfig) GetHandler() (handler Handler) {
 
 func (t TableConfig) GetHandlerWithInitTable() (handler Handler) {
 	handler = t.GetHandler()
-	if CreateTableIfNotExists {
+	if shouldCrateTable(Driver(handler.GetDialector())) {
 		sql := fmt.Sprintf(`select 1 from %s;`, t.DBName.BaseNameWithQuotes())
 		ctx := context.Background()
 
