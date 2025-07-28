@@ -62,14 +62,7 @@ func (s RepositoryCommand) Delete(fields Fields, customFns ...CustomFnDeletePara
 }
 
 type ModelI interface {
-	~struct{} | ~[]struct{} |
-		~int | ~[]int |
-		~string | ~[]string |
-		int64 | []int64 |
-		uint64 | []uint64 |
-		float32 | []float32 |
-		float64 | []float64 |
-		bool | []bool
+	~struct{} | ~[]struct{}
 }
 type RepositoryQuery[Model ModelI] struct {
 	tableConfig TableConfig
