@@ -191,9 +191,9 @@ const (
 
 type Enums []Enum
 
-func (a Enums) Len() int           { return len(a) }
-func (a Enums) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a Enums) Less(i, j int) bool { return a[i].OrderDesc > a[j].OrderDesc }
+func (es Enums) Len() int           { return len(es) }
+func (es Enums) Swap(i, j int)      { es[i], es[j] = es[j], es[i] }
+func (es Enums) Less(i, j int) bool { return es[i].OrderDesc > es[j].OrderDesc }
 
 func (es *Enums) Sort() *Enums {
 	sort.Sort(es)

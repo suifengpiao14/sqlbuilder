@@ -158,7 +158,7 @@ func (p ShardedTablePaginationParam) Pagination(result any) (totalCount int64, e
 			beforCount := rvArr.Len()
 			rvArr = reflect.AppendSlice(rvArr, reflect.Indirect(reflect.ValueOf(subResult)))
 			afterCount := rvArr.Len()
-			realCount := afterCount - beforCount // 获取本次查询的实际数量
+			realCount := uint(afterCount - beforCount) // 获取本次查询的实际数量
 			// 更新偏移量与剩余数量
 			offset = max(offset-int64(realCount), 0) // 入参pageIndex=0,size=100,实际查到5条，则下一次查询偏移量还是0，只是limit 100-5=95
 			limit = limit - realCount
@@ -168,10 +168,10 @@ func (p ShardedTablePaginationParam) Pagination(result any) (totalCount int64, e
 	rv.Set(rvArr)
 	return totalCount, nil
 }
-func (p ShardedTablePaginationParam) ListSQL(tableConfig TableConfig, offset int, limit int) (listSQL string, err error) {
+func (p ShardedTablePaginationParam) ListSQL(tableConfig TableConfig, offset uint, limit uint) (listSQL string, err error) {
 	listBuilder := NewListBuilder(tableConfig).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...)
 	listBuilder = listBuilder.WithBuilderFns(func(ds *goqu.SelectDataset) *goqu.SelectDataset {
-		ds = ds.Limit(uint(limit)).Offset(uint(offset))
+		ds = ds.Limit(limit).Offset(offset)
 		return ds
 	})
 	listSql, err := listBuilder.ToSQL()

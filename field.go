@@ -300,7 +300,8 @@ func Join(ds *goqu.SelectDataset, jionConfigs ...OnUnit) *goqu.SelectDataset {
 type Field struct {
 	Name     string   `json:"name"`
 	ValueFns ValueFns `json:"-"` // 增加error，方便封装字段验证规则
-	WhereFns ValueFns `json:"-"` // 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	// 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	WhereFns ValueFns `json:"-"`
 	//_OrderFn          OrderFn         `json:"-"` //deprecated  排序函数
 	_OrderFnWithSort OrderFnWithSort `json:"-"` // 排序函数,支持多个排序规则
 
@@ -1155,10 +1156,10 @@ func NewStringField[T ~string | ~[]string](value T, name string, title string, m
 	return f
 }
 
-var ERROR_VALUE_NIL = errors.New("error value nil")
+var ErrValueNil = errors.New("error value nil")
 
 func IsErrorValueNil(err error) bool {
-	return errors.Is(err, ERROR_VALUE_NIL)
+	return errors.Is(err, ErrValueNil)
 }
 
 // ValueFnArgEmptyStr2NilExceptFields 将空字符串值转换为nil值时排除的字段,常见的有 deleted_at 字段,空置代表正常
@@ -1251,7 +1252,7 @@ func (f Field) getValue(layers []Layer, fs ...*Field) (value any, err error) {
 		return value, err
 	}
 	if IsNil(value) {
-		err = ERROR_VALUE_NIL //相比返回 nil,nil; 此处抛出错误，其它地方更容易感知中断处理，如需要继续执行，执行忽略这个类型Error 即可
+		err = ErrValueNil //相比返回 nil,nil; 此处抛出错误，其它地方更容易感知中断处理，如需要继续执行，执行忽略这个类型Error 即可
 		return nil, err
 	}
 	return value, nil
@@ -1299,16 +1300,16 @@ func FilterNil(in any, valueFn ValueFn) (any, error) {
 }
 
 // IsEqual 判断名称值是否相等
-func (f Field) IsEqual(o Field, fs ...*Field) bool {
+func (f Field) IsEqual(otherF Field, fs ...*Field) bool {
 	fv, err := f.GetValue(Layer_all, fs...)
 	if err != nil || IsNil(fv) {
 		return false
 	}
-	ov, err := o.GetValue(Layer_all, fs...)
+	ov, err := otherF.GetValue(Layer_all, fs...)
 	if err != nil || IsNil(ov) {
 		return false
 	}
-	return strings.EqualFold(cast.ToString(fv), cast.ToString(ov)) && strings.EqualFold(f.Name, o.Name)
+	return strings.EqualFold(cast.ToString(fv), cast.ToString(ov)) && strings.EqualFold(f.Name, otherF.Name)
 }
 
 func (c Field) Validate(val any) (err error) {
@@ -1735,15 +1736,15 @@ func (fs Fields) Select() (columns []any) {
 	return columns
 }
 
-func (fs Fields) Pagination() (index int, size int) {
+func (fs Fields) Pagination() (index uint, size uint) {
 	if pageIndex, ok := fs.GetByTag(Field_tag_pageIndex); ok {
 		val, _ := pageIndex.GetValue(Layer_get_value_before_db, fs...)
-		index = cast.ToInt(val)
+		index = cast.ToUint(val)
 
 	}
 	if pageSize, ok := fs.GetByTag(Field_tag_pageSize); ok {
 		val, _ := pageSize.GetValue(Layer_get_value_before_db, fs...)
-		size = cast.ToInt(val)
+		size = cast.ToUint(val)
 	}
 	index, size = max(index, 0), max(size, 0)
 	return index, size
@@ -2020,17 +2021,17 @@ func (fs Fields) Data(layers ...Layer) (data any, err error) {
 	return dataMap, nil
 }
 
-func IsNil(v any) bool {
-	if v == nil {
+func IsNil(val any) bool {
+	if val == nil {
 		return true
 	}
-	valueOf := reflect.ValueOf(v)
+	valueOf := reflect.ValueOf(val)
 	k := valueOf.Kind()
 	switch k {
 	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.UnsafePointer, reflect.Interface, reflect.Slice:
 		return valueOf.IsNil()
 	default:
-		return v == nil
+		return val == nil
 	}
 }
 

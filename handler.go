@@ -289,7 +289,7 @@ func (h GormHandler) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffe
 	}
 	return lastInsertId, rowsAffected, nil
 }
-func (h GormHandler) First(ctx context.Context, sql string, result any) (exists bool, err error) {
+func (h GormHandler) First(_ context.Context, sql string, result any) (exists bool, err error) {
 	err = h().Raw(sql).First(result).Error
 	exists = true
 	if err != nil {
@@ -306,7 +306,7 @@ func (h GormHandler) First(ctx context.Context, sql string, result any) (exists 
 	return exists, nil
 }
 
-func (h GormHandler) Query(ctx context.Context, sql string, result any) (err error) {
+func (h GormHandler) Query(_ context.Context, sql string, result any) (err error) {
 	err = h().Raw(sql).Find(result).Error
 	return err
 }
@@ -321,7 +321,7 @@ func (h GormHandler) GetDB() *gorm.DB {
 }
 
 // Deprecated: 请使用 HandlerMiddlewareSingleflight 代替 WithCacheSingleflightHandler,cache 可以通过 FirstParam.WithCacheDuration 设置缓存时间来启用
-func WithCacheSingleflightHandler(handler Handler, withCache bool, withSingleflight bool) Handler {
+func WithCacheSingleflightHandler(handler Handler, _ bool, withSingleflight bool) Handler {
 
 	if withSingleflight {
 		handler = HandlerMiddlewareSingleflight(handler)
@@ -524,7 +524,7 @@ func HandlerMiddlewareCache(handler Handler) Handler {
 	return _WithCache(handler)
 }
 
-var Cache_sql_duration time.Duration = 1 * time.Minute
+var Cache_sql_duration = 1 * time.Minute
 
 func (hc _HandlerCache) OriginalHandler() Handler {
 	return GetOriginalHandler(hc.handler)
@@ -654,10 +654,12 @@ func (hc _HandlerSingleflightDoOnce) Transaction(fc func(tx Handler) error, opts
 }
 
 func (hc _HandlerSingleflightDoOnce) Exec(sql string) (err error) {
-	return hc.handler.Exec(sql)
+	err = hc.handler.Exec(sql)
+	return err
 }
 func (hc _HandlerSingleflightDoOnce) ExecWithRowsAffected(sql string) (rowsAffected int64, err error) {
-	return hc.handler.ExecWithRowsAffected(sql)
+	rowsAffected, err = hc.handler.ExecWithRowsAffected(sql)
+	return rowsAffected, err
 }
 func (hc _HandlerSingleflightDoOnce) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
 	return hc.handler.InsertWithLastId(sql)

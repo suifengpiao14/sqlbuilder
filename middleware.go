@@ -68,27 +68,25 @@ func (sis *SceneFns) Append(sceneFns ...SceneFn) {
 // ApplyFnIncrease 字段值递增中间件
 var ApplyFnIncrease ApplyFn = func(f *Field, fs ...*Field) {
 	f.ValueFns.Append(ValueFn{
-		Fn:    ValueFnFnIncrease(f, fs...),
+		Fn:    ValueFnFnIncrease,
 		Layer: Value_Layer_DBFormat,
 	})
 }
 
-func ValueFnFnIncrease(f *Field, fs ...*Field) ValueFnFn {
-	return func(inputValue any, f *Field, fs ...*Field) (any, error) {
-		if IsNil(inputValue) {
-			return nil, nil
-		}
-		num := cast.ToInt(inputValue)
-		if num == 0 {
-			return nil, nil
-		}
-		symbol := "+"
-		if num < 0 {
-			symbol = "-"
-		}
-		val := fmt.Sprintf("%s %s %d", f.DBColumnName().FullName(), symbol, num)
-		return goqu.L(val), nil
+var ValueFnFnIncrease ValueFnFn = func(inputValue any, f *Field, fs ...*Field) (any, error) {
+	if IsNil(inputValue) {
+		return nil, nil
 	}
+	num := cast.ToInt(inputValue)
+	if num == 0 {
+		return nil, nil
+	}
+	symbol := "+"
+	if num < 0 {
+		symbol = "-"
+	}
+	val := fmt.Sprintf("%s %s %d", f.DBColumnName().FullName(), symbol, num)
+	return goqu.L(val), nil
 }
 
 var ApplyFnUseDBValue ApplyFn = func(f *Field, fs ...*Field) {
@@ -223,7 +221,7 @@ func ValueFnMustNotExists(handler Handler) ValueFn {
 				return nil, err
 			}
 			if exists {
-				err = errors.WithMessagef(ERROR_COLUMN_VALUE_EXISTS, "column %s value %s exists", f.DBColumnName().FullName(), inputValue) // 有时存在，需要返回指定错误，方便业务自主处理错误
+				err = errors.WithMessagef(ErrColumnValueExists, "column %s value %s exists", f.DBColumnName().FullName(), inputValue) // 有时存在，需要返回指定错误，方便业务自主处理错误
 				return nil, err
 			}
 			return inputValue, err
@@ -250,7 +248,7 @@ func ValueFnMustExists(handler Handler) ValueFn {
 				return nil, err
 			}
 			if !exists {
-				err = errors.WithMessagef(ERROR_COLUMN_VALUE_NOT_EXISTS, "column %s value %s", f.DBColumnName().FullName(), inputValue) // 没有时存在，需要返回指定错误，方便业务自主处理错误
+				err = errors.WithMessagef(ErrColumnValueNotExists, "column %s value %s", f.DBColumnName().FullName(), inputValue) // 没有时存在，需要返回指定错误，方便业务自主处理错误
 				return nil, err
 			}
 			return inputValue, err
@@ -259,9 +257,9 @@ func ValueFnMustExists(handler Handler) ValueFn {
 	return valueFn
 }
 
-var ERROR_COLUMN_VALUE_NOT_EXISTS = errors.New("column value not exists")
-var ERROR_COLUMN_VALUE_EXISTS = errors.New("column value exists")
-var ERROR_Unique = errors.New("unique error")
+var ErrColumnValueNotExists = errors.New("column value not exists")
+var ErrColumnValueExists = errors.New("column value exists")
+var ErrUnique = errors.New("unique error")
 
 // Deprecated ApplyFnUnique use tableConfig.Indexs 设置unique index 代替，无需手动添加中间件
 

@@ -64,8 +64,8 @@ func (id DBIdentifier) FullName() string {
 	return strings.Join(arr, ".")
 }
 
-func (i DBIdentifier) NameWithQuotes() string {
-	name := i.BaseName()
+func (id DBIdentifier) NameWithQuotes() string {
+	name := id.BaseName()
 	if name == "" {
 		return ""
 	}
@@ -174,6 +174,7 @@ func (t TableConfig) GetHandler() (handler Handler) {
 	if CREATE_TABLE_IF_NOT_EXISTS {
 		sql := fmt.Sprintf(`select 1 from %s;`, t.DBName.BaseNameWithQuotes())
 		ctx := context.Background()
+
 		var result int
 		err := t.handler.Query(ctx, sql, &result)
 		if err != nil { // 查询报错，则认为是表不存在，则创建表
@@ -467,16 +468,14 @@ func (c ColumnConfig) MakeField(value any) *Field {
 type ColumnConfigs []ColumnConfig
 
 func (cs *ColumnConfigs) AddColumns(cols ...ColumnConfig) {
-	if *cs == nil {
-		*cs = make([]ColumnConfig, 0)
-
-	}
-	*cs = append(*cs, cols...)
 	//2025-06-18 09:50 注释去重，将 数据库字段和业务字段改为1:N关系，理由：
 	// 1. 业务上存在多个字段对应数据库一个字段，比如id,ids
 	// 2. 改成1:N 关系后,提前封装的业务模型内数据表字段映射不会影响实际业务字段表映射的完整性，相当于站在各自的领域角度，操作同一个字段，能有效解耦提前封装的业务模块和实际扩展的模型
 	// 3. 改成1:N 关系后,基本没有副作用，在通过Columns 生成ddl时可以根据dbName 去重即可
-	//cs.UniqueueByFieldName() //根据FieldName 去重,同名覆盖，由于预先写模型时，fieldName 是固定的，dbName是后期根据业务定义的，所以这里支持fieldName覆盖
+	if *cs == nil {
+		*cs = make([]ColumnConfig, 0)
+	}
+	*cs = append(*cs, cols...)
 }
 
 // Uniqueue 去重,同名覆盖（保留最后设置）,由于预先写模型时，fieldName 是固定的，dbName是后期根据业务定义的，所以这里支持fieldName覆盖

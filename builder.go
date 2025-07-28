@@ -165,7 +165,7 @@ func (d Driver) IsSame(target Driver) bool {
 
 type Expressions = []goqu.Expression
 
-var ERROR_EMPTY_WHERE = errors.New("error  empty where")
+var ErrEmptyWhere = errors.New("error  empty where")
 
 const (
 	Driver_mysql   Driver = "mysql"
@@ -459,8 +459,11 @@ func (p *BatchInsertParam) AppendFields(fields ...Fields) *BatchInsertParam {
 	return p
 }
 
-var ERROR_BATCH_INSERT_DATA_IS_NIL = errors.New("batch insert err: data is nil")
-var ERROR_NOT_FOUND = errors.New("not found record")
+var ErrBatchInsertDataIsNil = errors.New("batch insert err: data is nil")
+var ErrNotFound = errors.New("not found record")
+
+// Deprecated: use ErrNotFound instead
+var ERROR_NOT_FOUND = ErrNotFound
 
 type CustomFnBatchInsertParam = CustomFn[BatchInsertParam]
 type CustomFnBatchInsertParams = CustomFns[BatchInsertParam]
@@ -486,7 +489,7 @@ func (is BatchInsertParam) ToSQL() (sql string, err error) {
 		data = append(data, rowData)
 	}
 	if len(data) == 0 {
-		return "", ERROR_BATCH_INSERT_DATA_IS_NIL
+		return "", ErrBatchInsertDataIsNil
 	}
 	ds := Dialect.DialectWrapper().Insert(tableConfig.Name).Rows(data...)
 	sql, _, err = ds.ToSQL()
@@ -579,6 +582,7 @@ func (p DeleteParam) ToSQL() (sql string, err error) {
 	ds := Dialect.DialectWrapper().Update(tableConfig.Name).Set(data).Where(where...)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
+		err = errors.Wrap(err, "build delete sql error")
 		return "", err
 	}
 	p.Log(sql)
@@ -853,7 +857,7 @@ func (p FirstParam) FirstMustExists(result any) (err error) {
 		return err
 	}
 	if !exists {
-		return ERROR_NOT_FOUND
+		return ErrNotFound
 	}
 	return nil
 }

@@ -233,9 +233,9 @@ type TypeReflect[T int | uint] struct {
 
 type TypeReflects[T int | uint] []TypeReflect[T]
 
-func (a TypeReflects[T]) Len() int           { return len(a) }
-func (a TypeReflects[T]) Swap(i, j int)      { a[i], a[j].UpperLimit = a[j], a[i].UpperLimit }
-func (a TypeReflects[T]) Less(i, j int) bool { return a[i].UpperLimit < a[j].UpperLimit }
+func (trs TypeReflects[T]) Len() int           { return len(trs) }
+func (trs TypeReflects[T]) Swap(i, j int)      { trs[i], trs[j].UpperLimit = trs[j], trs[i].UpperLimit }
+func (trs TypeReflects[T]) Less(i, j int) bool { return trs[i].UpperLimit < trs[j].UpperLimit }
 
 func (trs TypeReflects[T]) GetByUpperLimitWithDefault(upperLimit T) (tr *TypeReflect[T]) {
 	if upperLimit > 0 {

@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"sync"
 
+	// Register MySQL dialect for goqu
 	_ "github.com/doug-martin/goqu/v9/dialect/mysql"
+	// Register sqlite3 dialect for goqu
 	_ "github.com/doug-martin/goqu/v9/dialect/sqlite3"
-
+	// Register MySQL driver for sql.DB
 	_ "github.com/go-sql-driver/mysql"
+	// Register sqlite3 driver for sql.DB
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"gorm.io/driver/mysql"

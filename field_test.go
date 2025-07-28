@@ -23,14 +23,14 @@ func TestCopy(t *testing.T) {
 			},
 		},
 	}
-	f2 := f1.Copy()
+	cpF := f1.Copy()
 	f1.Name = "new name"
 	f1.Schema.Type = "new type"
 	f1.Schema.Enums.Append(sqlbuilder.Enum{Key: "new", OrderDesc: 100, Title: "复制后改动"})
 	sort.Sort(f1.Schema.Enums)
 
 	fmt.Println(f1.Name, f1.Schema.Type, f1.Select())
-	fmt.Println(f2.Name, f2.Schema.Type, f2.Select())
+	fmt.Println(cpF.Name, cpF.Schema.Type, cpF.Select())
 
 }
 
