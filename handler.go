@@ -261,7 +261,7 @@ func (h GormHandler) Exists(sql string) (exists bool, err error) {
 	return exists, nil
 }
 func (h GormHandler) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
-	h().Transaction(func(tx *gorm.DB) error {
+	err = h().Transaction(func(tx *gorm.DB) error {
 		err = tx.Exec(sql).Error
 		if err != nil {
 			return err
@@ -284,8 +284,10 @@ func (h GormHandler) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffe
 		}
 		return nil
 	})
-
-	return lastInsertId, rowsAffected, err
+	if err != nil {
+		return 0, 0, err
+	}
+	return lastInsertId, rowsAffected, nil
 }
 func (h GormHandler) First(ctx context.Context, sql string, result any) (exists bool, err error) {
 	err = h().Raw(sql).First(result).Error

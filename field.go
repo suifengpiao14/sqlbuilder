@@ -1478,7 +1478,7 @@ func ValueFnApiValidateAtLeastOne(TagAtLeastOne string) ValueFn {
 			}
 			if IsNil(data) {
 				nameArr := make([]string, 0)
-				subFields.Each(func(f *Field) error {
+				_ = subFields.Each(func(f *Field) error {
 					nameArr = append(nameArr, f.Name)
 					return nil
 				})
