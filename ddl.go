@@ -52,6 +52,10 @@ func GenerateDDL(driver Driver, tableConfig TableConfig) (ddl string, err error)
 	case Driver_sqlite3, _Driver_sqlite:
 		sb.WriteString(fmt.Sprintf("CREATE TABLE `%s` (\n", tableConfig.DBName.Name))
 		sb.WriteString(strings.Join(columnDefs, ",\n"))
+		sb.WriteString(");\n")
+		// 创建普通索引
+		normalIndex := Index2DDLSQLiteNormalIndexs(tableConfig.Indexs, tableConfig)
+		sb.WriteString(normalIndex)
 	default:
 		err := errors.Errorf("unsport driver:%s", string(driver))
 		return "", err
@@ -88,7 +92,7 @@ func MakeColumnsAndIndexs(driver Driver, table TableConfig) (lines []string, err
 			}
 		}
 		for _, index := range table.Indexs {
-			ddl := Index2DDLSQLite(index, table)
+			ddl := Index2DDLSQLitePrimaryAndUniqueIndex(index, table)
 			if strings.TrimSpace(ddl) != "" {
 				arr = append(arr, ddl)
 			}
@@ -113,26 +117,44 @@ func Column2DDLSQLite(col ColumnConfig) (ddl string) {
 	return colDef
 }
 
-func Index2DDLSQLite(index Index, table TableConfig) (ddl string) {
+func Index2DDLSQLitePrimaryAndUniqueIndex(index Index, table TableConfig) (ddl string) {
 	columnNames := index.ColumnNames(table.Columns)
 	if len(columnNames) == 0 {
 		return ""
 	}
-
 	escapedCols := make([]string, 0, len(columnNames))
 	for _, name := range columnNames {
 		escapedCols = append(escapedCols, fmt.Sprintf("`%s`", name))
 	}
-
 	if index.IsPrimary {
 		ddl = fmt.Sprintf("  PRIMARY KEY (%s)", strings.Join(escapedCols, ","))
-	} else if index.Unique {
+		return ddl
+	}
+	if index.Unique {
 		ddl = fmt.Sprintf("  UNIQUE (%s)", strings.Join(escapedCols, ","))
-	} else {
+		return ddl
+	}
+	return ""
+}
+
+func Index2DDLSQLiteNormalIndexs(indexs Indexs, table TableConfig) (ddl string) {
+	arr := make([]string, 0)
+	for _, index := range indexs {
+		columnNames := index.ColumnNames(table.Columns)
+		if len(columnNames) == 0 || index.IsPrimary || index.Unique {
+			return ""
+		}
+		escapedCols := make([]string, 0, len(columnNames))
+		for _, name := range columnNames {
+			escapedCols = append(escapedCols, fmt.Sprintf("`%s`", name))
+		}
 		// 普通索引在 SQLite 中要单独 CREATE INDEX
 		indexName := fmt.Sprintf("idx_%s", strings.Join(columnNames, "_"))
-		ddl = fmt.Sprintf("CREATE INDEX `%s` ON `%s` (%s);", indexName, table.DBName.Name, strings.Join(escapedCols, ","))
+		oneIndex := fmt.Sprintf("CREATE INDEX `%s` ON `%s` (%s);", indexName, table.DBName.Name, strings.Join(escapedCols, ","))
+		arr = append(arr, oneIndex)
 	}
+	ddl = strings.Join(arr, ",\n")
+	ddl = fmt.Sprintf(`%s;`, ddl)
 	return ddl
 }
 
