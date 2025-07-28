@@ -61,11 +61,21 @@ func (s RepositoryCommand) Delete(fields Fields, customFns ...CustomFnDeletePara
 	return err
 }
 
-type RepositoryQuery[Model any] struct {
+type ModelI interface {
+	~struct{} | ~[]struct{} |
+		~int | ~[]int |
+		~string | ~[]string |
+		int64 | []int64 |
+		uint64 | []uint64 |
+		float32 | []float32 |
+		float64 | []float64 |
+		bool | []bool
+}
+type RepositoryQuery[Model ModelI] struct {
 	tableConfig TableConfig
 }
 
-func NewRepositoryQuery[Model any](tableConfig TableConfig) RepositoryQuery[Model] {
+func NewRepositoryQuery[Model ModelI](tableConfig TableConfig) RepositoryQuery[Model] {
 	return RepositoryQuery[Model]{
 		tableConfig: tableConfig,
 	}
@@ -136,13 +146,13 @@ func (s RepositoryQuery[Model]) Count(fields Fields, customFns ...CustomFnTotalP
 	return total, err
 }
 
-type Repository[T any] struct {
+type Repository[T ModelI] struct {
 	tableConfig TableConfig
 	RepositoryCommand
 	RepositoryQuery[T]
 }
 
-func NewRepository[T any](tableConfig TableConfig) Repository[T] {
+func NewRepository[T ModelI](tableConfig TableConfig) Repository[T] {
 	return Repository[T]{
 		tableConfig:       tableConfig,
 		RepositoryCommand: NewRepositoryCommand(tableConfig),
