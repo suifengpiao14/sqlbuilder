@@ -689,16 +689,25 @@ func (f *Field) GetFieldName() string {
 }
 
 func (f *Field) SetTitle(title string) *Field {
-	f.MergeSchema(Schema{Title: title})
+	if f.Schema == nil {
+		f.Schema = &Schema{}
+	}
+	f.Schema.Title = title
 	return f
 }
 
 func (f *Field) SetType(typ SchemaType) *Field {
-	f.MergeSchema(Schema{Type: typ})
+	if f.Schema == nil {
+		f.Schema = &Schema{}
+	}
+	f.Schema.Type = typ
 	return f
 }
 func (f *Field) SetFormat(format string) *Field {
-	f.MergeSchema(Schema{Format: format})
+	if f.Schema == nil {
+		f.Schema = &Schema{}
+	}
+	f.Schema.Format = format
 	return f
 }
 
@@ -710,7 +719,10 @@ func (f *Field) SetBaseInfo(name string, typ SchemaType, title string) *Field {
 
 // Comment 设置注释 针对DDL 语义化
 func (f *Field) Comment(comment string) *Field {
-	f.MergeSchema(Schema{Comment: comment})
+	if f.Schema == nil {
+		f.Schema = &Schema{}
+	}
+	f.Schema.Comment = comment
 	return f
 }
 func (f *Field) SetLength(maxLength int) *Field {
@@ -723,7 +735,10 @@ func (f *Field) SetLength(maxLength int) *Field {
 
 // SetDescription 设置描述 针对api 语义化
 func (f *Field) SetDescription(description string) *Field {
-	f.MergeSchema(Schema{Comment: description})
+	if f.Schema != nil {
+		f.Schema = &Schema{}
+	}
+	f.Schema.Comment = description
 	return f
 }
 func (f *Field) SetDefault(defaul any) *Field {
@@ -761,9 +776,10 @@ func (f *Field) GetTags() Tags {
 	return f.tags
 }
 func (f *Field) AppendEnum(enums ...Enum) *Field {
-	f.MergeSchema(Schema{
-		Enums: enums,
-	})
+	if f.Schema == nil {
+		f.Schema = &Schema{}
+	}
+	f.Schema.Enums = append(f.Schema.Enums, enums...)
 	return f
 }
 func (f *Field) SetRequired(required bool) *Field {
