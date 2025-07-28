@@ -457,7 +457,7 @@ func (c ColumnConfig) MakeField(value any) *Field {
 	valueFnFn := func(_ any, f *Field, fs ...*Field) (any, error) {
 		return value, nil
 	}
-	f := NewField(valueFnFn).SetName(c.CamelName()).SetType(SchemaType(c.Type)).Comment(c.Comment).AppendEnum(c.Enums...).SetDefault(c.Default)
+	f := NewField(valueFnFn).SetName(c.CamelName()).SetType(c.Type).Comment(c.Comment).AppendEnum(c.Enums...).SetDefault(c.Default)
 	if c.Type.IsEqual(Schema_Type_string) {
 		f.SetLength(c.Length)
 	}
