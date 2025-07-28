@@ -418,7 +418,7 @@ func (p InsertParam) Exec() (err error) {
 	if err != nil {
 		return err
 	}
-	withEventHandler := WithTriggerAsyncEvent(p.GetHandler(), func(event *Event) {
+	withEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
 		err = p.getEventHandler()(event.LastInsertId, event.RowsAffected)
 		if err != nil {
 			p.Log(sql, err)
@@ -438,7 +438,7 @@ func (p InsertParam) Insert() (lastInsertId uint64, rowsAffected int64, err erro
 	if err != nil {
 		return 0, 0, err
 	}
-	withEventHandler := WithTriggerAsyncEvent(p.GetHandler(), func(event *Event) {
+	withEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
 		err = p.getEventHandler()(event.LastInsertId, event.RowsAffected)
 		if err != nil {
 			p.Log(sql, err)
@@ -531,7 +531,7 @@ func (p BatchInsertParam) Exec() (err error) {
 		return err
 	}
 
-	withEventHandler := WithTriggerAsyncEvent(p.GetHandler(), func(event *Event) {
+	withEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
 		err = p.getEventHandler()(event.LastInsertId, event.RowsAffected)
 		if err != nil {
 			p.Log(sql, err)
@@ -545,7 +545,7 @@ func (p BatchInsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected 
 	if err != nil {
 		return 0, 0, err
 	}
-	withEventHandler := WithTriggerAsyncEvent(p.GetHandler(), func(event *Event) {
+	withEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
 		err = p.getEventHandler()(event.LastInsertId, event.RowsAffected)
 		if err != nil {
 			p.Log(sql, err)
@@ -617,7 +617,7 @@ func (p DeleteParam) Exec() (err error) {
 	if err != nil {
 		return err
 	}
-	withEventHandler := WithTriggerAsyncEvent(p.GetHandler(), func(event *Event) {
+	withEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
 		err = p.getEventHandler()(event.RowsAffected)
 		if err != nil {
 			p.Log(sql, err)
@@ -631,7 +631,7 @@ func (p DeleteParam) Delete() (rowsAffected int64, err error) {
 	if err != nil {
 		return rowsAffected, err
 	}
-	withEventHandler := WithTriggerAsyncEvent(p.GetHandler(), func(event *Event) {
+	withEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
 		err = p.getEventHandler()(event.RowsAffected)
 		if err != nil {
 			p.Log(sql, err)
@@ -722,7 +722,7 @@ func (p UpdateParam) Exec() (err error) {
 	if err != nil {
 		return err
 	}
-	withEventHandler := WithTriggerAsyncEvent(p.GetHandler(), func(event *Event) {
+	withEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
 		err = p.getEventHandler()(event.RowsAffected)
 		if err != nil {
 			p.Log(sql, err)
@@ -742,7 +742,7 @@ func (p UpdateParam) Update() (rowsAffected int64, err error) {
 	if err != nil {
 		return 0, err
 	}
-	withEventHandler := WithTriggerAsyncEvent(p.GetHandler(), func(event *Event) {
+	withEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
 		err = p.getEventHandler()(event.RowsAffected)
 		if err != nil {
 			p.Log(sql, err)
@@ -770,7 +770,7 @@ func (p UpdateParam) UpdateMustExists() (rowsAffected int64, err error) {
 	if err != nil {
 		return 0, err
 	}
-	withEventHandler := WithTriggerAsyncEvent(p.GetHandler(), func(event *Event) {
+	withEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
 		err = p.getEventHandler()(event.RowsAffected)
 		if err != nil {
 			p.Log(sql, err)
@@ -866,7 +866,7 @@ func (p FirstParam) First(result any) (exists bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	handler := p.GetHandler()
+	handler := p.GetHandlerWithInitTable()
 	cacheDuration := GetCacheDuration(p.context)
 	if cacheDuration > 0 {
 		handler = _WithCache(handler)
@@ -979,7 +979,7 @@ func (p ListParam) List(result any) (err error) {
 	if err != nil {
 		return err
 	}
-	handler := p.GetHandler()
+	handler := p.GetHandlerWithInitTable()
 	cacheDuration := GetCacheDuration(p.context)
 	if cacheDuration > 0 {
 		handler = _WithCache(handler) // 启用缓存中间件
@@ -1093,7 +1093,7 @@ func (p ExistsParam) Exists() (exists bool, err error) {
 		return false, err
 	}
 	// 删除SCENE_SQL_EXISTS场景后需要确保确保exitsHandler 不会走缓存
-	existsHandler := WithSingleflightDoOnce(p.GetHandler().OriginalHandler()).Exists // 屏蔽缓存中间件，同时防止单实例并发问题
+	existsHandler := WithSingleflightDoOnce(p.GetHandlerWithInitTable().OriginalHandler()).Exists // 屏蔽缓存中间件，同时防止单实例并发问题
 	return existsHandler(sql)
 }
 
@@ -1176,7 +1176,7 @@ func (p TotalParam) Count() (total int64, err error) {
 	if err != nil {
 		return -1, err
 	}
-	return p.GetHandler().Count(sql)
+	return p.GetHandlerWithInitTable().Count(sql)
 }
 
 type PaginationParam struct {
@@ -1224,7 +1224,7 @@ func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 	return totalSql, listSql, nil
 }
 func (p PaginationParam) getHandler() (handler Handler) {
-	handler = p.GetHandler()
+	handler = p.GetHandlerWithInitTable()
 	cacheDuration := GetCacheDuration(p.context)
 	if cacheDuration > 0 {
 		handler = _WithCache(handler)
@@ -1385,21 +1385,21 @@ func (p SetParam) Set() (isNotExits bool, lastInsertId uint64, rowsAffected int6
 		return false, 0, 0, err
 	}
 
-	existsHandler := WithSingleflightDoOnce(p.GetHandler().OriginalHandler()).Exists // 屏蔽缓存中间件，同时防止单实例并发问题
+	existsHandler := WithSingleflightDoOnce(p.GetHandlerWithInitTable().OriginalHandler()).Exists // 屏蔽缓存中间件，同时防止单实例并发问题
 	triggerInsertdEvent, triggerUpdateEvent, triggerDeletedEvent := p.getEventHandler()
-	withInsertEventHandler := WithTriggerAsyncEvent(p.GetHandler(), func(event *Event) {
+	withInsertEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
 		err = triggerInsertdEvent(event.LastInsertId, event.RowsAffected)
 		if err != nil {
 			p.Log(insertSql, err)
 		}
 	})
-	withUpdateEventHandler := WithTriggerAsyncEvent(p.GetHandler(), func(event *Event) {
+	withUpdateEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
 		err = triggerUpdateEvent(event.RowsAffected)
 		if err != nil {
 			p.Log(updateSql, err)
 		}
 	})
-	withDeletedEventHandler := WithTriggerAsyncEvent(p.GetHandler(), func(event *Event) {
+	withDeletedEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
 		err = triggerDeletedEvent(event.RowsAffected)
 		if err != nil {
 			p.Log(deleteSql, err)
@@ -1528,7 +1528,7 @@ func (p *SQLParam[T]) WithHandler(handler Handler) *T {
 	return p.self
 }
 
-func (p *SQLParam[T]) GetHandler() (handler Handler) {
+func (p *SQLParam[T]) GetHandlerWithInitTable() (handler Handler) {
 	return p._Table.GetHandlerWithInitTable()
 }
 
@@ -1541,7 +1541,7 @@ func (p *SQLParam[T]) GetGoquDialect() goqu.DialectWrapper {
 }
 
 func (p *SQLParam[T]) WithHandlerMiddleware(middlewares ...HandlerMiddleware) *T {
-	p._Table = p._Table.WithHandler(ChainHandler(p.GetHandler(), middlewares...))
+	p._Table = p._Table.WithHandler(ChainHandler(p.GetHandlerWithInitTable(), middlewares...))
 	return p.self
 }
 
