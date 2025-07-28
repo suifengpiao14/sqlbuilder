@@ -1347,7 +1347,7 @@ func (c Field) FormatType(val any) (value any) {
 	valType := valValue.Type()
 	switch valType.Kind() {
 	case reflect.Slice, reflect.Array:
-		var dstTyp any = ""
+		var dstTyp any
 		switch c.Schema.Type {
 		case Schema_Type_int:
 			dstTyp = 0
