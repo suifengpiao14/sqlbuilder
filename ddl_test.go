@@ -20,7 +20,7 @@ func NewOrderId(orderId string) *sqlbuilder.Field {
 	return sqlbuilder.NewStringField(orderId, "orderId", "订单号", 0)
 }
 
-var table = sqlbuilder.NewTableConfig("pay_order_1").WithHandler(sqlbuilder.NewGormHandler(sqlbuilder.GormDB)).AddColumns(
+var table = sqlbuilder.NewTableConfig("pay_order_1").WithHandler(sqlbuilder.NewGormHandler(sqlbuilder.GormDBForSqlite3)).AddColumns(
 	sqlbuilder.NewColumn("order_id", sqlbuilder.GetField(NewOrderId)),
 	sqlbuilder.NewColumn("notify_url", sqlbuilder.GetField(NewNotifyUrl)),
 	sqlbuilder.NewColumn("isAuto", sqlbuilder.GetField(NewAnyAmount)),
@@ -34,7 +34,6 @@ var table = sqlbuilder.NewTableConfig("pay_order_1").WithHandler(sqlbuilder.NewG
 ).WithComment("支付订单表")
 
 func init() {
-	sqlbuilder.Dialect = sqlbuilder.Dialect_Mysql
 	sqlbuilder.CreateTableIfNotExists = true
 }
 func TestGenerateDDL(t *testing.T) {
@@ -44,5 +43,5 @@ func TestGenerateDDL(t *testing.T) {
 }
 
 func TestCrateTable(t *testing.T) {
-	table.GetHandler()
+	table.GetHandlerWithInitTable()
 }

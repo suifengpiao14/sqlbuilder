@@ -171,25 +171,29 @@ func (t TableConfig) GetHandler() (handler Handler) {
 		err := errors.New("database handler is nil, please use TableConfig.WithHandler to set handler")
 		panic(err)
 	}
+	return t.handler
+}
+
+func (t TableConfig) GetHandlerWithInitTable() (handler Handler) {
+	handler = t.GetHandler()
 	if CreateTableIfNotExists {
 		sql := fmt.Sprintf(`select 1 from %s;`, t.DBName.BaseNameWithQuotes())
 		ctx := context.Background()
 
 		var result int
-		err := t.handler.Query(ctx, sql, &result)
+		err := handler.Query(ctx, sql, &result)
 		if err != nil { // 查询报错，则认为是表不存在，则创建表
 			ddl, err := t.GenerateDDL()
 			if err != nil {
 				panic(err)
 			}
-			err = t.handler.Exec(ddl)
+			err = handler.Exec(ddl)
 			if err != nil {
 				panic(err)
 			}
 		}
-
 	}
-	return t.handler
+	return handler
 }
 func (t TableConfig) GetDBNameByFieldNameMust(fieldName string) (dbName string) {
 	col := t.Columns.GetByFieldNameMust(fieldName)

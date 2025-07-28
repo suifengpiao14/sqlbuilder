@@ -1529,7 +1529,7 @@ func (p *SQLParam[T]) WithHandler(handler Handler) *T {
 }
 
 func (p *SQLParam[T]) GetHandler() (handler Handler) {
-	return p._Table.GetHandler()
+	return p._Table.GetHandlerWithInitTable()
 }
 
 func (p *SQLParam[T]) GetGoquDialect() goqu.DialectWrapper {

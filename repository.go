@@ -16,7 +16,7 @@ func NewRepositoryCommand(tableConfig TableConfig) RepositoryCommand {
 
 // Deprecated  use GetTableConfig.GetHander() instead.
 func (s RepositoryCommand) GetHandler() Handler {
-	return s.tableConfig.GetHandler()
+	return s.tableConfig.GetHandlerWithInitTable()
 }
 
 func (s RepositoryCommand) GetTableConfig() TableConfig {
@@ -78,7 +78,7 @@ func (s RepositoryQuery[Model]) GetTableConfig() TableConfig {
 
 // Deprecated  use GetTableConfig.GetHander() instead.
 func (s RepositoryQuery[Model]) GetHandler() Handler {
-	return s.tableConfig.GetHandler()
+	return s.tableConfig.GetHandlerWithInitTable()
 }
 
 func (s RepositoryQuery[Model]) First(fields Fields, customFns ...CustomFnFirstParam) (model Model, exists bool, err error) {
@@ -176,7 +176,7 @@ func (r Repository[T]) GetTable() TableConfig {
 //		}
 //	}
 func (r Repository[T]) Transaction(fc func(txRepository Repository[T]) (err error)) (err error) {
-	err = r.GetTable().GetHandler().Transaction(func(tx Handler) error {
+	err = r.GetTable().GetHandlerWithInitTable().Transaction(func(tx Handler) error {
 		tableConfig := r.tableConfig.WithHandler(tx)
 		txRepo := Repository[T]{
 			tableConfig:       tableConfig,

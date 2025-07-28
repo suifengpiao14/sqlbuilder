@@ -14,13 +14,17 @@ var (
 )
 
 func (tableConfig TableConfig) GenerateDDL() (ddl string, err error) {
-	handler := tableConfig.GetHandler()
-	return GenerateDDL(Driver(handler.GetDialector()), tableConfig)
+	dialector := Driver_mysql
+	handler := tableConfig.handler // 这里可以不指定句柄，默认使用mysql驱动
+	if handler != nil {
+		dialector = Driver(handler.GetDialector())
+	}
+	return GenerateDDL(dialector, tableConfig)
 }
 
 func GenerateDDL(driver Driver, tableConfig TableConfig) (ddl string, err error) {
 	// 字段、索引定义
-	columnDefs, err := MakeColumnsAndIndexs(Driver_mysql, tableConfig)
+	columnDefs, err := MakeColumnsAndIndexs(driver, tableConfig)
 	if err != nil {
 		return "", err
 	}
@@ -34,7 +38,7 @@ func GenerateDDL(driver Driver, tableConfig TableConfig) (ddl string, err error)
 			sb.WriteString(fmt.Sprintf(` COMMENT ="%s";`, tableConfig.Comment))
 
 		}
-	case Driver_sqlite3:
+	case Driver_sqlite3, _Driver_sqlite:
 		sb.WriteString(fmt.Sprintf("CREATE TABLE `%s` (\n", tableConfig.DBName.Name))
 		sb.WriteString(strings.Join(columnDefs, ",\n"))
 	default:
@@ -64,7 +68,7 @@ func MakeColumnsAndIndexs(driver Driver, table TableConfig) (lines []string, err
 			}
 		}
 
-	case Driver_sqlite3:
+	case Driver_sqlite3, _Driver_sqlite:
 		for _, col := range table.Columns {
 			col = col.CopyFieldSchemaIfEmpty()
 			ddl := Column2DDLSQLite(col)
