@@ -61,9 +61,7 @@ func (s RepositoryCommand) Delete(fields Fields, customFns ...CustomFnDeletePara
 	return err
 }
 
-type ModelI interface {
-	~struct{} | ~[]struct{}
-}
+type ModelI any
 type RepositoryQuery[Model ModelI] struct {
 	tableConfig TableConfig
 }

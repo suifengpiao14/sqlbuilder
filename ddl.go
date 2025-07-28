@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	CREATE_TABLE_IF_NOT_EXISTS = false // 是否在创建表时检查该表是否存在，如果不存在则创建,开发环境建议设置为true，生产环境建议设置为false
+	CreateTableIfNotExists = false // 是否在创建表时检查该表是否存在，如果不存在则创建,开发环境建议设置为true，生产环境建议设置为false
 )
 
 func (tableConfig TableConfig) GenerateDDL() (ddl string, err error) {

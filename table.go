@@ -171,7 +171,7 @@ func (t TableConfig) GetHandler() (handler Handler) {
 		err := errors.New("database handler is nil, please use TableConfig.WithHandler to set handler")
 		panic(err)
 	}
-	if CREATE_TABLE_IF_NOT_EXISTS {
+	if CreateTableIfNotExists {
 		sql := fmt.Sprintf(`select 1 from %s;`, t.DBName.BaseNameWithQuotes())
 		ctx := context.Background()
 

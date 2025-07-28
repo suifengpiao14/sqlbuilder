@@ -35,7 +35,7 @@ var table = sqlbuilder.NewTableConfig("pay_order_1").WithHandler(sqlbuilder.NewG
 
 func init() {
 	sqlbuilder.Dialect = sqlbuilder.Dialect_Mysql
-	sqlbuilder.CREATE_TABLE_IF_NOT_EXISTS = true
+	sqlbuilder.CreateTableIfNotExists = true
 }
 func TestGenerateDDL(t *testing.T) {
 	ddl, err := table.GenerateDDL()
