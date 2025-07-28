@@ -17,6 +17,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	// Register sqlite3 driver for sql.DB
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/suifengpiao14/sshmysql"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -50,18 +51,47 @@ var GormDBForSqlite3 func() *gorm.DB = sync.OnceValue(func() (db *gorm.DB) {
 	return db
 })
 
+type DBConfig struct {
+	UserName     string
+	Password     string
+	Host         string
+	Port         int
+	DatabaseName string
+	QueryParams  string
+	SSHConfig    *sshmysql.SSHConfig
+}
+
 // GormDBMakeMysql 生成一个gorm.DB的工厂方法，该方法只会执行一次，后续调用直接返回第一次生成的db实例。该方法返回的结果需要保存到变量里面，不然还是会被重新生成。多个mysq 连接实例，可以分别调用后保存到变量
-func GormDBMakeMysql(userName string, password string, host string, port int, database string, gormConfig *gorm.Config) func() *gorm.DB {
+func GormDBMakeMysql(dbConfig DBConfig, gormConfig *gorm.Config) func() *gorm.DB {
+	if dbConfig.QueryParams == "" {
+		dbConfig.QueryParams = "charset=utf8mb4&parseTime=False&timeout=300s&loc=Local"
+	}
 	gormDB := sync.OnceValue(func() (gormDB *gorm.DB) {
 		dsn := fmt.Sprintf(
-			"%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=False&timeout=300s&loc=Local",
-			userName,
-			password,
-			host,
-			port,
-			database,
+			"%s:%s@tcp(%s:%d)/%s?%s",
+			dbConfig.UserName,
+			dbConfig.Password,
+			dbConfig.Host,
+			dbConfig.Port,
+			dbConfig.DatabaseName,
+			dbConfig.QueryParams,
 		)
-		gormDB, err := gorm.Open(mysql.Open(dsn), gormConfig)
+		var sqlDB *sql.DB
+		var err error
+
+		if dbConfig.SSHConfig != nil {
+			sqlDB, err = dbConfig.SSHConfig.Tunnel(dsn)
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			sqlDB, err = sql.Open(string(Driver_mysql), dsn)
+			if err != nil {
+				panic(err)
+			}
+		}
+		dialector := mysql.New(mysql.Config{Conn: sqlDB})
+		gormDB, err = gorm.Open(dialector, gormConfig)
 		if err != nil {
 			panic(err)
 		}
