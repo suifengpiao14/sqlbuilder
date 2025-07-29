@@ -24,8 +24,9 @@ type Schema struct {
 	MaxLength int        `json:"maxLength"` // 字符串最大长度
 	MinLength int        `json:"minLength"` // 字符串最小长度
 	Maximum   uint       `json:"maximum"`   // 数字最大值
-	Minimum   int        `json:"minimum"`   // 数字最小值
-	RegExp    string     `json:"regExp"`    //正则表达式
+	Minimum   *int       `json:"minimum"`   // 数字最小值,最小数字可能为0，所以这里用指针
+
+	RegExp string `json:"regExp"` //正则表达式
 
 	//Primary       bool `json:"primary"` //是否为主键
 	//Unique        bool `json:"unique"`  // 是否为唯一键
@@ -71,7 +72,7 @@ func (schema *Schema) SetMinLength(min int) *Schema {
 	return schema
 }
 func (schema *Schema) SetMinimum(min int) *Schema {
-	schema.Minimum = min
+	schema.Minimum = &min
 	return schema
 }
 func (schema *Schema) SetAllowZero(zeroAsEmpty bool) *Schema {
@@ -130,7 +131,7 @@ func (s *Schema) Merge(megred Schema) *Schema {
 		s.Maximum = megred.Maximum
 	}
 
-	if megred.Minimum > 0 {
+	if megred.Minimum != nil {
 		s.Minimum = megred.Minimum
 	}
 
@@ -495,14 +496,15 @@ func (schema Schema) validate(fieldName string, field reflect.Value) error {
 	}
 	// 验证 minimum
 
-	if schema.Minimum > 0 {
-		if kind == reflect.Int && varInt < int64(schema.Minimum) {
-			return fmt.Errorf("%s is less than minimum value of %d", fieldName, schema.Minimum)
+	if schema.Minimum != nil {
+		minimum := *schema.Minimum
+		if kind == reflect.Int && varInt < int64(minimum) {
+			return fmt.Errorf("%s is less than minimum value of %d", fieldName, minimum)
 		}
 		if schema.Type == Schema_Type_int {
 			varInt = cast.ToInt64(field.Interface())
-			if varInt < int64(schema.Minimum) {
-				return fmt.Errorf("%s as number is less than minimum value of %d", fieldName, schema.Minimum)
+			if varInt < int64(minimum) {
+				return fmt.Errorf("%s as number is less than minimum value of %d", fieldName, minimum)
 			}
 		}
 

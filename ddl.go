@@ -169,12 +169,12 @@ func Index2DDLMysql(index Index, table TableConfig) (ddl string) {
 		escapedCols = append(escapedCols, fmt.Sprintf("`%s`", dbName))
 	}
 
-	indexName := fmt.Sprintf("idx_%s", strings.Join(columnNames, "_"))
+	indexName := strings.Join(columnNames, "_")
 	switch {
 	case index.IsPrimary:
 		ddl = fmt.Sprintf("  PRIMARY KEY (%s)", strings.Join(escapedCols, ","))
 	case index.Unique:
-		ddl = fmt.Sprintf("UNIQUE KEY `uik_%s` (%s)", indexName, strings.Join(escapedCols, ","))
+		ddl = fmt.Sprintf("UNIQUE KEY `uk_%s` (%s)", indexName, strings.Join(escapedCols, ","))
 	default:
 		ddl = fmt.Sprintf("KEY  `ik_%s`(%s)", indexName, strings.Join(escapedCols, ","))
 	}
@@ -188,6 +188,14 @@ func Column2DDLMysql(col ColumnConfig) (ddl string) {
 		maxLength, maximum := col.Enums.MaxLengthMaximum()
 		col.Length = max(maxLength, int(maximum))
 		col.Default = col.Enums.Default().Key
+		col.Comment = fmt.Sprintf(`%s(%s)`, col.Comment, col.Enums.String())
+	}
+	//Unsigned 在case int 里面就已经赋值，所以需要在最早格式化
+	if col.AutoIncrement {
+		col.Unsigned = true
+	}
+	if col.Tags.HastTag(Tag_unsigned) {
+		col.Unsigned = true
 	}
 
 	notNil := ""
@@ -222,12 +230,12 @@ func Column2DDLMysql(col ColumnConfig) (ddl string) {
 			defaul = 0
 		}
 		if col.Unsigned {
-			tr := TypeReflectsUnsinedInt.GetByUpperLimitWithDefault(uint(col.Length))
+			tr := TypeReflectsUnsinedInt.GetByUpperLimitWithDefault(col.Maximum)
 			if tr != nil {
 				typ = fmt.Sprintf("%s(%d) unsigned", tr.DBType, col.Length)
 			}
 		} else {
-			tr := TypeReflectsInt.GetByUpperLimitWithDefault(col.Length)
+			tr := TypeReflectsInt.GetByUpperLimitWithDefault(int(col.Maximum))
 			if tr != nil {
 				typ = fmt.Sprintf("%s(%d)", tr.DBType, col.Length)
 			}
@@ -243,8 +251,12 @@ func Column2DDLMysql(col ColumnConfig) (ddl string) {
 
 	autoIncrement := ""
 	if col.AutoIncrement {
+		col.Unsigned = true
 		autoIncrement = "AUTO_INCREMENT"
 		defaulStr = "" // 自增不需要默认值
+	}
+	if col.Tags.HastTag(Tag_datetime) {
+		typ = "datetime"
 	}
 
 	if col.Tags.HastTag(Tag_createdAt) {

@@ -336,6 +336,7 @@ type ColumnConfig struct {
 	Unsigned      bool       `json:"unsigned"`
 	AutoIncrement bool       `json:"autoIncrement"`
 	Length        int        `json:"length"`
+	Maximum       uint       `json:"maximum"` // 最大值，
 	NotNull       bool       `json:"nullable"`
 	Default       any        `json:"default"`
 	Comment       string     `json:"comment"`
@@ -391,19 +392,28 @@ func (c ColumnConfig) CopyFieldSchemaIfEmpty() ColumnConfig {
 	if c.field == nil || c.field.Schema == nil {
 		return c
 	}
-	fieldSchema := c.field.Schema
+	field := c.field
+	c.Tags.Append(field.tags...)
+	if field.HastTag(Tag_autoIncrement) {
+		c.AutoIncrement = true
+	}
+	if field.HastTag(Tag_unsigned) {
+		c.Unsigned = true
+	}
+	fieldSchema := field.Schema
 	if c.Type == "" {
 		c.Type = fieldSchema.Type
 	}
 	if c.Length == 0 {
-		switch c.Type {
-		case Schema_Type_string:
-			c.Length = fieldSchema.MaxLength
-		case Schema_Type_int:
-			c.Length = int(fieldSchema.Maximum)
-		}
 		c.Length = fieldSchema.MaxLength
 	}
+	if c.Maximum == 0 {
+		c.Maximum = fieldSchema.Maximum
+	}
+	if fieldSchema.Minimum != nil && *fieldSchema.Minimum >= 0 {
+		c.Unsigned = true // 最小值大于等于0，认为是无符号类型
+	}
+
 	if !c.NotNull {
 		c.NotNull = fieldSchema.Required
 	}

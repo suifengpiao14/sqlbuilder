@@ -458,8 +458,11 @@ func (f *Field) Copy() (copyF *Field) {
 }
 
 const (
-	Tag_createdAt = "createdAt"
-	Tag_updatedAt = "updatedAt"
+	Tag_createdAt     = "createdAt"
+	Tag_updatedAt     = "updatedAt"
+	Tag_datetime      = "datetime"
+	Tag_autoIncrement = "autoIncrement"
+	Tag_unsigned      = "unsigned"
 )
 
 // func (f *Field) AddIndex(indexs ...Index) *Field {
@@ -732,6 +735,20 @@ func (f *Field) SetLength(maxLength int) *Field {
 	f.Schema.MaxLength = maxLength
 	return f
 }
+func (f *Field) SetMaximum(maximum uint) *Field {
+	if f.Schema == nil {
+		f.Schema = &Schema{}
+	}
+	f.Schema.Maximum = maximum
+	return f
+}
+func (f *Field) SetMinimum(minimum int) *Field {
+	if f.Schema == nil {
+		f.Schema = &Schema{}
+	}
+	f.Schema.Minimum = &minimum
+	return f
+}
 
 // SetDescription 设置描述 针对api 语义化
 func (f *Field) SetDescription(description string) *Field {
@@ -861,7 +878,7 @@ func (f *Field) RequiredWhenInsert(required bool) *Field {
 func (f *Field) MinBoundaryWhereInsert(minimum int, minLength int) *Field {
 	f.SceneInsert(func(f *Field, fs ...*Field) {
 		f.MergeSchema(Schema{
-			Minimum:   minimum,
+			Minimum:   &minimum,
 			MinLength: minLength,
 		})
 	})

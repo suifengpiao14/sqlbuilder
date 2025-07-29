@@ -66,6 +66,9 @@ func GormDBMakeMysql(dbConfig DBConfig, gormConfig *gorm.Config) func() *gorm.DB
 	if dbConfig.QueryParams == "" {
 		dbConfig.QueryParams = "charset=utf8mb4&parseTime=False&timeout=300s&loc=Local"
 	}
+	if gormConfig == nil {
+		gormConfig = &gorm.Config{}
+	}
 	gormDB := sync.OnceValue(func() (gormDB *gorm.DB) {
 		dsn := fmt.Sprintf(
 			"%s:%s@tcp(%s:%d)/%s?%s",
