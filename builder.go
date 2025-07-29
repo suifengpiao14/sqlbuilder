@@ -1265,7 +1265,7 @@ func (p PaginationParam) Pagination(result any) (count int64, err error) {
 
 	index, size := p._Fields.Pagination()
 	if index == 0 && size == 0 {
-		err = errors.WithMessagef(ErrPaginationSizeRequired, "got sql:%s", listSql)
+		err = ErrPaginationSizeRequired
 		return 0, err
 	}
 

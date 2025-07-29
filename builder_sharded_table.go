@@ -120,11 +120,7 @@ func (p ShardedTablePaginationParam) Pagination(result any) (totalCount int64, e
 
 	pageIndex, size := p.Fields().Pagination()
 	if pageIndex == 0 && size == 0 {
-		listSql, err := p.ListSQL(p.GetTable(), 0, size)
-		if err != nil {
-			return 0, err
-		}
-		err = errors.WithMessagef(ErrPaginationSizeRequired, "got sql:%s", listSql)
+		err = ErrPaginationSizeRequired
 		return 0, err
 	}
 	offset := int64(pageIndex * size)
