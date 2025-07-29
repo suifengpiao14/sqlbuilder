@@ -231,7 +231,8 @@ func NewGormHandler(getDB func() *gorm.DB) Handler {
 
 func (h GormHandler) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) error {
 	err := h().Transaction(func(tx *gorm.DB) error {
-		err := fc(NewGormHandler(func() *gorm.DB { return tx }))
+		txHandler := NewGormHandler(func() *gorm.DB { return tx })
+		err := fc(txHandler)
 		return err
 	}, opts...)
 	return err
