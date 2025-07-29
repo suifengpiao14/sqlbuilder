@@ -87,12 +87,7 @@ func (shardedT shardedTableSingleTablePagination) ListSQL(offset, limit int) (li
 
 type ShardedTablePaginations []shardedTableSingleTablePagination
 
-// func (shardedTs ShardedTablePaginations) Count() (total int64) {
-// 	for _, cursor := range shardedTs {
-// 		total += cursor.hitCount
-// 	}
-// 	return total
-// }
+var ErrPaginationSizeRequired = errors.New("pagination size required")
 
 func (p ShardedTablePaginationParam) Pagination(result any) (totalCount int64, err error) {
 	rv := reflect.Indirect(reflect.ValueOf(result))
@@ -129,7 +124,7 @@ func (p ShardedTablePaginationParam) Pagination(result any) (totalCount int64, e
 		if err != nil {
 			return 0, err
 		}
-		err = errors.Errorf("pagination size required,got sql:%s", listSql)
+		err = errors.WithMessagef(ErrPaginationSizeRequired, "got sql:%s", listSql)
 		return 0, err
 	}
 	offset := int64(pageIndex * size)
