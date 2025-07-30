@@ -1826,8 +1826,14 @@ func (fs Fields) ApplyDelay() Fields {
 
 // Add 新增列，Append 被占用，使用add
 // 2023-07-25 14:05:40   add 方法名称容易理解成在原有fs基础上最佳，经常写成 fs.Add(fs2...), 忘记要写成fs = fs.Add(fs2...), 建议改成引用func (fs *Fields) 方式
+//2025-07-30 10:20:48 Add 使用Fields 方便链式调用，换成 *Fields 不能和其它方法链式调用，为了避免上述问题，新增AddRef 方法
 
-func (fs *Fields) Add(moreFs ...*Field) Fields {
+func (fs Fields) Add(moreFs ...*Field) Fields {
+	fs = append(fs, moreFs...)
+	return fs
+}
+
+func (fs *Fields) AddRef(moreFs ...*Field) Fields {
 	*fs = append(*fs, moreFs...)
 	return *fs
 }
