@@ -433,8 +433,17 @@ func (c ColumnConfig) CopyFieldSchemaIfEmpty() ColumnConfig {
 
 }
 
-func (c ColumnConfig) GetField(f *Field) *Field {
-	return c.field
+func (c ColumnConfig) GetField() *Field {
+	if c.field != nil {
+		cp := c.field.Copy()
+		return cp
+	}
+	f := NewField(0).SetName(c.CamelName()).SetType(c.Type).Comment(c.Comment).AppendEnum(c.Enums...).SetDefault(c.Default)
+	if c.Type.IsEqual(Schema_Type_string) {
+		f.SetLength(c.Length)
+	}
+	//todo 更多细节设置,如根据默认值和Nullable设置是否容许为空等
+	return f
 }
 
 // Deprecated: use NewColumn instead
@@ -468,18 +477,23 @@ func (c ColumnConfig) CamelName() string {
 }
 
 func (c ColumnConfig) MakeField(value any) *Field {
+
 	valueFnFn := func(_ any, f *Field, fs ...*Field) (any, error) {
 		return value, nil
 	}
-	f := NewField(valueFnFn).SetName(c.CamelName()).SetType(c.Type).Comment(c.Comment).AppendEnum(c.Enums...).SetDefault(c.Default)
-	if c.Type.IsEqual(Schema_Type_string) {
-		f.SetLength(c.Length)
-	}
-	//todo 更多细节设置,如根据默认值和Nullable设置是否容许为空等
+	f := c.GetField()
+	f.ValueFns.ResetSetValueFn(valueFnFn)
 	return f
 }
 
 type ColumnConfigs []ColumnConfig
+
+func (cs ColumnConfigs) Fields() (fs Fields) {
+	for _, c := range cs {
+		fs = append(fs, c.GetField())
+	}
+	return fs
+}
 
 func (cs *ColumnConfigs) AddColumns(cols ...ColumnConfig) {
 	//2025-06-18 09:50 注释去重，将 数据库字段和业务字段改为1:N关系，理由：
@@ -558,6 +572,14 @@ func (cs ColumnConfigs) GetByFieldName(fieldName string) (c ColumnConfig, exists
 		}
 	}
 	return c, false
+}
+func (cs ColumnConfigs) GetByFieldNameAsError(fieldName string) (c ColumnConfig, err error) {
+	c, ok := cs.GetByFieldName(fieldName)
+	if !ok {
+		err = errors.Errorf("not found fieldName(%s) in Columns", fieldName)
+		return c, err
+	}
+	return c, nil
 }
 func (cs ColumnConfigs) GetByDbName(dbName string) (c ColumnConfig, exists bool) {
 	for _, c := range cs {

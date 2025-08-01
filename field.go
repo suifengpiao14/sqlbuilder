@@ -315,6 +315,7 @@ type Field struct {
 	selectColumns []any    // 查询时列
 	fieldName     string   //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
 	delayApplies  ApplyFns // 延迟执行函数 在 xxx.ToSQL()中调用，在执行后才执行中间件(如在设置f.SetSelectColumns 时需要获取 f.Table().Columns 信息时，就需要延迟执行中间件)
+	ddlSequence   int      // 生成ddl语句时排序字段，一般不用，在多字段联合唯一索引/主键 时 将多字段值拼接时会使用到
 
 	//indexs        Indexs // 索引(索引跟表走，不在领域语言上)
 	//applyFns      ApplyFns // apply 必须当场执行，因为存在apply函数嵌套apply函数,
@@ -324,13 +325,20 @@ func (f Field) Fields() Fields {
 	return Fields{&f}
 }
 
+// MakeDBColumnWithAlias 生成数据库列别名，方便在查询时使用别名做为字段名,比如模块封装，基本都会用到提前设置好的别名
+func (f Field) MakeDBColumnWithAlias(tableColumns ColumnConfigs) any {
+	col := tableColumns.GetByFieldNameMust(f.Name)
+	alias := goqu.I(col.DbName).As(f.fieldName)
+	return alias
+}
+
 type Index struct {
 	IsPrimary bool `json:"isPrimary"` // 是否主键索引
 	Unique    bool `json:"unique"`    // 是否唯一索引
 	//Name        string   `json:"name"`   // 索引名称
 	ColumnNames func(tableColumns ColumnConfigs) (columnNames []string) //在实际封装模块时,已知 Field.Name ,DB.Column.Name 未知，需要支持通过 Field.Name 转DB.Column.Name,所以设计成函数格式
+	Weight      int                                                     `json:"weight"` // 索引权重,越大的表明越重要，能优先作为记录的唯一标识（程序自动识别记录唯一标识时会用到）
 
-	//Order       int      `json:"order"` // 复合索引时,需要指定顺序,数字小的排前面
 }
 
 func (i Index) GetColumnNames(tableColumns ColumnConfigs) []string {
@@ -408,6 +416,67 @@ func (indexs Indexs) GetPrimary() (primary *Index, exists bool) {
 	return nil, false
 }
 
+func (indexs Indexs) First() (index *Index, exists bool) {
+	if len(indexs) == 0 {
+		return nil, false
+	}
+	return &indexs[0], true
+}
+
+// SortByColCount  根据列数量排序，优先使用唯一索引，其次使用主键索引（有唯一索引情况下，主键id往往是没有业务含义的列），最后使用复合索引,这个主要用于寻找对象唯一标识
+func (indexs Indexs) SortByColCount(tableColumns ColumnConfigs) Indexs {
+	slices.SortStableFunc(indexs, func(i, j Index) int {
+		diff := i.Weight - j.Weight
+		if diff != 0 {
+			diff = diff * -1 // 权重大的排在前面
+			return diff
+		}
+		iColumCount := len(i.GetColumnNames(tableColumns))
+		jColumCount := len(j.GetColumnNames(tableColumns))
+		iOrdinary := i.Unique && !j.Unique
+		jOrdinary := !j.Unique && !j.IsPrimary
+
+		//1. i,j 索引类型相同(同时为唯一索引、主键、普通索引)，比较列数量
+		if (i.Unique && j.Unique) || (i.IsPrimary && j.IsPrimary) || (iOrdinary && jOrdinary) {
+			diff := iColumCount - jColumCount
+			return diff
+		}
+		//2. i,j 索引类型不同
+		//2.1 i唯一索引，j通索引，i排在前面
+		if i.Unique && jOrdinary {
+			return -1
+		}
+		//2.2 i唯一索引，j主键，列长度小的排前面，列长度相等，i排在前面
+		if i.Unique && j.IsPrimary {
+			diff := iColumCount - jColumCount
+			if diff == 0 {
+				return -1
+			}
+			return diff
+		}
+		//2.3 i主键，j通索引，i排在前面
+		if i.IsPrimary && jOrdinary {
+			return -1
+		}
+		//2.4 i主键，j唯一索引，列长度小的排前面，列长度相等，j排在前面
+		if i.IsPrimary && j.Unique {
+			diff := iColumCount - jColumCount
+			if diff == 0 {
+				return 1
+			}
+			return diff
+		}
+		//2.5 i通索引，j唯一索引或者主键索引，j排在前面
+		if iOrdinary && (j.Unique || j.IsPrimary) {
+			return 1
+		}
+		//2.6 i通索引，j通索引，列长度小的排前面
+		diff = iColumCount - jColumCount
+		return diff
+	})
+	return indexs
+}
+
 type Tags []string
 
 func (tags Tags) HastTag(tag string) bool {
@@ -437,9 +506,9 @@ const (
 )
 
 const (
-	Field_tag_pageIndex    = "pageIndex"   // 标记为pageIndex列
-	Field_tag_pageSize     = "pageSize"    //标记为pageSize列
-	Field_tag_update_limit = "updateLimit" // 标记为updateLimit列
+	Field_tag_pageIndex = "pageIndex" // 标记为pageIndex列
+	Field_tag_pageSize  = "pageSize"  //标记为pageSize列
+	//Field_tag_update_limit = "updateLimit" // 标记为updateLimit列 ,使用PageSize标记，减少比必要预先定义
 
 	Field_tag_CanWriteWhenDeleted = "CanWriteWhenDeleted" // 标记为删除场景下，可以更新数据库字段（如操作人 ，Field_name_deletedAt 自带该标签功能）
 )
@@ -455,6 +524,11 @@ func (f *Field) Copy() (copyF *Field) {
 	// indexs := f.indexs
 	// fcp.indexs = indexs
 	return &fcp
+}
+
+func (f *Field) SetDDLsequence(DDLsequence int) *Field {
+	f.ddlSequence = DDLsequence
+	return f
 }
 
 const (
@@ -1792,10 +1866,8 @@ func (fs Fields) DeletedAt() (f *Field, err error) {
 }
 
 func (fs Fields) Limit() (limit uint) {
-	if pageSize, ok := fs.GetByTag(Field_tag_update_limit); ok {
-		val, _ := pageSize.GetValue(Layer_get_value_before_db, fs...)
-		limit = cast.ToUint(val)
-	}
+	_, pageSize := fs.Pagination()
+	limit = pageSize
 	return limit
 }
 
@@ -1822,6 +1894,37 @@ func (fs Fields) ApplyDelay() Fields {
 		fields = append(fields, f.Apply(f.delayApplies...))
 	}
 	return fields
+}
+
+//MakeDBColumnWithAlias 生成查询字段别名，用于多表联合查询时，字段同名问题处理,模块预封装场景
+
+func (fs Fields) MakeDBColumnWithAlias(tableColumns ColumnConfigs) (selectColumnWithAlias []any) {
+	selectColumnWithAlias = make([]any, 0)
+	for _, f := range fs {
+		selectColumnWithAlias = append(selectColumnWithAlias, f.MakeDBColumnWithAlias(tableColumns))
+	}
+	return selectColumnWithAlias
+}
+
+// MakeAsOneDBColumnWithAlias 将数据表多个字段值合并成一个，并取别名（主要用于多字段生成唯一标识场景）
+func (fs Fields) MakeAsOneDBColumnWithAlias(alias string, tableColumns ColumnConfigs) (selectColumnWithAlias any) {
+	if len(fs) == 1 {
+		return fs[0].MakeDBColumnWithAlias(tableColumns)
+	}
+	arr := make([]string, 0)
+	slices.SortStableFunc(fs, func(a *Field, b *Field) int { return a.ddlSequence - b.ddlSequence })
+	lastIndex := len(fs) - 1
+	//CONCAT(`key`,"-",`value`) as `key_value`
+	for i, f := range fs {
+		col := tableColumns.GetByFieldNameMust(f.Name)
+		arr = append(arr, fmt.Sprintf("`%s`", col.DbName))
+		if i != lastIndex {
+			arr = append(arr, `"-"`)
+		}
+	}
+	concatSql := fmt.Sprintf("CONCAT(%s)", strings.Join(arr, ","))
+	aliasSQL := goqu.L(concatSql).As(alias)
+	return aliasSQL
 }
 
 // Add 新增列，Append 被占用，使用add

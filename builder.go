@@ -718,17 +718,7 @@ func (p UpdateParam) Validate() (err error) {
 	return nil
 }
 func (p UpdateParam) Exec() (err error) {
-	sql, err := p.ToSQL()
-	if err != nil {
-		return err
-	}
-	withEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
-		err = p.getEventHandler()(event.RowsAffected)
-		if err != nil {
-			p.Log(sql, err)
-		}
-	})
-	_, err = withEventHandler.ExecWithRowsAffected(sql)
+	_, err = p.Update()
 	return err
 }
 

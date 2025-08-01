@@ -48,6 +48,11 @@ func (s RepositoryCommand) Update(fields Fields, customFns ...CustomFnUpdatePara
 	err = builder.Exec()
 	return err
 }
+func (s RepositoryCommand) UpdateWithRowsAffected(fields Fields, customFns ...CustomFnUpdateParam) (rowsAffected int64, err error) {
+	builder := NewUpdateBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+	rowsAffected, err = builder.Update()
+	return rowsAffected, err
+}
 
 func (s RepositoryCommand) Set(fields Fields, customFns ...CustomFnSetParam) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
 	builder := NewSetBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
@@ -176,7 +181,8 @@ func (r Repository[T]) GetTable() TableConfig {
 //		}
 //	}
 func (r Repository[T]) Transaction(fc func(txRepository Repository[T]) (err error)) (err error) {
-	err = r.GetTable().GetHandlerWithInitTable().Transaction(func(tx Handler) error {
+
+	err = r.TransactionForMutiTable(func(tx Handler) error {
 		tableConfig := r.tableConfig.WithHandler(tx)
 		txRepo := Repository[T]{
 			tableConfig:       tableConfig,
@@ -193,4 +199,21 @@ func (r Repository[T]) Transaction(fc func(txRepository Repository[T]) (err erro
 		return err
 	}
 	return nil
+}
+
+func (r Repository[T]) TransactionForMutiTable(fc func(tx Handler) (err error)) (err error) {
+	err = r.GetTable().GetHandlerWithInitTable().Transaction(fc)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r Repository[T]) WithTxHandler(txHandler Handler) Repository[T] {
+	tableConfig := r.GetTable().WithHandler(txHandler)
+	return Repository[T]{
+		tableConfig:       tableConfig,
+		RepositoryCommand: NewRepositoryCommand(tableConfig),
+		RepositoryQuery:   NewRepositoryQuery[T](tableConfig),
+	}
 }
