@@ -310,7 +310,7 @@ type Field struct {
 	scene         Scene       // 场景
 	sceneFns      SceneFns    // 场景初始化配置
 	tags          Tags        // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
-	dbName        string
+	dbName        string      //Deprecated 废弃，使用DBColumnName代替
 	docName       string
 	selectColumns []any    // 查询时列
 	fieldName     string   //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
@@ -328,7 +328,7 @@ func (f Field) Fields() Fields {
 // MakeDBColumnWithAlias 生成数据库列别名，方便在查询时使用别名做为字段名,比如模块封装，基本都会用到提前设置好的别名
 func (f Field) MakeDBColumnWithAlias(tableColumns ColumnConfigs) any {
 	col := tableColumns.GetByFieldNameMust(f.Name)
-	alias := goqu.I(col.DbName).As(f.fieldName)
+	alias := goqu.I(col.DbName).As(f.Name)
 	return alias
 }
 
