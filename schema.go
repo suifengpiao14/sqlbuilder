@@ -38,6 +38,12 @@ type Schema struct {
 func IntRef(in int) *int {
 	return &in
 }
+func (schema Schema) GetMinimumInt() int {
+	if schema.Minimum == nil {
+		return 0
+	}
+	return *schema.Minimum
+}
 
 const (
 	Schema_format_date     = "date"
