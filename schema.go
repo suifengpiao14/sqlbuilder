@@ -35,6 +35,10 @@ type Schema struct {
 	AllowZero    bool `json:"zeroAsEmpty"`  //0值是否当做空值处理，验证required 时有使用
 }
 
+func IntRef(in int) *int {
+	return &in
+}
+
 const (
 	Schema_format_date     = "date"
 	Schema_format_time     = "time"
