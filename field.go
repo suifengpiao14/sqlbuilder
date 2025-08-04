@@ -310,12 +310,12 @@ type Field struct {
 	scene         Scene       // 场景
 	sceneFns      SceneFns    // 场景初始化配置
 	tags          Tags        // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
-	dbName        string      //Deprecated 废弃，使用DBColumnName代替
-	docName       string
-	selectColumns []any    // 查询时列
-	fieldName     string   //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
-	delayApplies  ApplyFns // 延迟执行函数 在 xxx.ToSQL()中调用，在执行后才执行中间件(如在设置f.SetSelectColumns 时需要获取 f.Table().Columns 信息时，就需要延迟执行中间件)
-	ddlSequence   int      // 生成ddl语句时排序字段，一般不用，在多字段联合唯一索引/主键 时 将多字段值拼接时会使用到
+	dbName        string      //Depricated 废弃，使用DBColumnName代替
+	docName       string      //Depricated 废弃，使用DBColumnName代替
+	selectColumns []any       // 查询时列
+	fieldName     string      //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
+	delayApplies  ApplyFns    // 延迟执行函数 在 xxx.ToSQL()中调用，在执行后才执行中间件(如在设置f.SetSelectColumns 时需要获取 f.Table().Columns 信息时，就需要延迟执行中间件)
+	ddlSequence   int         // 生成ddl语句时排序字段，一般不用，在多字段联合唯一索引/主键 时 将多字段值拼接时会使用到
 
 	//indexs        Indexs // 索引(索引跟表走，不在领域语言上)
 	//applyFns      ApplyFns // apply 必须当场执行，因为存在apply函数嵌套apply函数,
@@ -1289,10 +1289,13 @@ var GlobalFnValueFns = func(f Field, fs ...*Field) ValueFns {
 	}
 }
 
+// Depricated: 废弃，就像Field.dbName 一样，交由上层映射，不做内部转换（调用方持有Field.Name,不是Field 持有 docName）
 func (f *Field) SetDocName(docName string) *Field {
 	f.docName = docName
 	return f
 }
+
+// Depricated: 废弃，就像Field.dbName 一样，交由上层映射，不做内部转换（调用方持有Field.Name,不是Field 持有 docName）
 func (f Field) GetDocName() string {
 	if f.docName == "" {
 		f.docName = f.Name
