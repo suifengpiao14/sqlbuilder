@@ -66,104 +66,159 @@ func (s RepositoryCommand) Delete(fields Fields, customFns ...CustomFnDeletePara
 	return err
 }
 
-type ModelI any
-type RepositoryQuery[Model ModelI] struct {
+// type ModelI any
+// type RepositoryQuery[Model ModelI] struct {
+// 	tableConfig TableConfig
+// }
+
+// func NewRepositoryQuery[Model ModelI](tableConfig TableConfig) RepositoryQuery[Model] {
+// 	return RepositoryQuery[Model]{
+// 		tableConfig: tableConfig,
+// 	}
+// }
+
+// func (s RepositoryQuery[Model]) GetTableConfig() TableConfig {
+// 	return s.tableConfig
+// }
+
+// // Deprecated  use GetTableConfig.GetHander() instead.
+// func (s RepositoryQuery[Model]) GetHandler() Handler {
+// 	return s.tableConfig.GetHandlerWithInitTable()
+// }
+
+// func (s RepositoryQuery[Model]) First(fields Fields, customFns ...CustomFnFirstParam) (model Model, exists bool, err error) {
+// 	builder := NewFirstBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+// 	exists, err = builder.First(&model)
+// 	return model, exists, err
+// }
+// func (s RepositoryQuery[Model]) FirstMustExists(fields Fields, customFns ...CustomFnFirstParam) (model Model, err error) {
+// 	builder := NewFirstBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+// 	err = builder.FirstMustExists(&model)
+// 	return model, err
+// }
+
+// func (s RepositoryQuery[Model]) Pagination(fields Fields, customFns ...CustomFnPaginationParam) (models []Model, total int64, err error) {
+// 	builder := NewPaginationBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+// 	models = make([]Model, 0)
+// 	total, err = builder.Pagination(&models)
+// 	return models, total, err
+// }
+
+// func (s RepositoryQuery[Model]) All(fields Fields, customFns ...CustomFnListParam) (models []Model, err error) {
+// 	builder := NewListBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+// 	models = make([]Model, 0)
+// 	err = builder.List(&models)
+// 	return models, err
+// }
+// func (s RepositoryQuery[Model]) GetByIdentityMust(fields Fields, customFns ...CustomFnFirstParam) (model Model, err error) {
+// 	builder := NewFirstBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+// 	builder.ApplyCustomFn(customFns...)
+
+// 	err = builder.FirstMustExists(&model)
+// 	return model, err
+// }
+
+// func (s RepositoryQuery[Model]) GetByIdentity(fields Fields, customFns ...CustomFnFirstParam) (model Model, exists bool, err error) {
+// 	builder := NewFirstBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+// 	exists, err = builder.First(&model)
+// 	return model, exists, err
+// }
+
+// func (s RepositoryQuery[Model]) GetByIdentities(fields Fields, customFns ...CustomFnListParam) (models []Model, err error) {
+// 	builder := NewListBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+// 	err = builder.List(models)
+// 	return models, err
+// }
+
+// func (s RepositoryQuery[Model]) Exists(fields Fields, customFns ...CustomFnExistsParam) (exists bool, err error) {
+// 	builder := NewExistsBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+// 	exists, err = builder.Exists()
+// 	return exists, err
+// }
+
+// func (s RepositoryQuery[Model]) Count(fields Fields, customFns ...CustomFnTotalParam) (total int64, err error) {
+// 	builder := NewTotalBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+// 	total, err = builder.Count()
+// 	return total, err
+// }
+
+type RepositoryQuery struct {
 	tableConfig TableConfig
 }
 
-func NewRepositoryQuery[Model ModelI](tableConfig TableConfig) RepositoryQuery[Model] {
-	return RepositoryQuery[Model]{
+func NewRepositoryQuery(tableConfig TableConfig) RepositoryQuery {
+	return RepositoryQuery{
 		tableConfig: tableConfig,
 	}
 }
 
-func (s RepositoryQuery[Model]) GetTableConfig() TableConfig {
+func (s RepositoryQuery) GetTableConfig() TableConfig {
 	return s.tableConfig
 }
 
 // Deprecated  use GetTableConfig.GetHander() instead.
-func (s RepositoryQuery[Model]) GetHandler() Handler {
+func (s RepositoryQuery) GetHandler() Handler {
 	return s.tableConfig.GetHandlerWithInitTable()
 }
 
-func (s RepositoryQuery[Model]) First(fields Fields, customFns ...CustomFnFirstParam) (model Model, exists bool, err error) {
+func (s RepositoryQuery) First(dst any, fields Fields, customFns ...CustomFnFirstParam) (exists bool, err error) {
 	builder := NewFirstBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
-	exists, err = builder.First(&model)
-	return model, exists, err
+	exists, err = builder.First(dst)
+	return exists, err
 }
-func (s RepositoryQuery[Model]) FirstMustExists(fields Fields, customFns ...CustomFnFirstParam) (model Model, err error) {
+func (s RepositoryQuery) FirstMustExists(dst any, fields Fields, customFns ...CustomFnFirstParam) (err error) {
 	builder := NewFirstBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
-	err = builder.FirstMustExists(&model)
-	return model, err
+	err = builder.FirstMustExists(dst)
+	return err
 }
 
-func (s RepositoryQuery[Model]) Pagination(fields Fields, customFns ...CustomFnPaginationParam) (models []Model, total int64, err error) {
+func (s RepositoryQuery) Pagination(dst any, fields Fields, customFns ...CustomFnPaginationParam) (total int64, err error) {
 	builder := NewPaginationBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
-	models = make([]Model, 0)
-	total, err = builder.Pagination(&models)
-	return models, total, err
+	total, err = builder.Pagination(dst)
+	return total, err
 }
 
-func (s RepositoryQuery[Model]) All(fields Fields, customFns ...CustomFnListParam) (models []Model, err error) {
+func (s RepositoryQuery) All(dst any, fields Fields, customFns ...CustomFnListParam) (err error) {
 	builder := NewListBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
-	models = make([]Model, 0)
-	err = builder.List(&models)
-	return models, err
-}
-func (s RepositoryQuery[Model]) GetByIdentityMust(fields Fields, customFns ...CustomFnFirstParam) (model Model, err error) {
-	builder := NewFirstBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
-	builder.ApplyCustomFn(customFns...)
-
-	err = builder.FirstMustExists(&model)
-	return model, err
+	err = builder.List(dst)
+	return err
 }
 
-func (s RepositoryQuery[Model]) GetByIdentity(fields Fields, customFns ...CustomFnFirstParam) (model Model, exists bool, err error) {
-	builder := NewFirstBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
-	exists, err = builder.First(&model)
-	return model, exists, err
-}
-
-func (s RepositoryQuery[Model]) GetByIdentities(fields Fields, customFns ...CustomFnListParam) (models []Model, err error) {
-	builder := NewListBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
-	err = builder.List(models)
-	return models, err
-}
-
-func (s RepositoryQuery[Model]) Exists(fields Fields, customFns ...CustomFnExistsParam) (exists bool, err error) {
+func (s RepositoryQuery) Exists(fields Fields, customFns ...CustomFnExistsParam) (exists bool, err error) {
 	builder := NewExistsBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
 	exists, err = builder.Exists()
 	return exists, err
 }
 
-func (s RepositoryQuery[Model]) Count(fields Fields, customFns ...CustomFnTotalParam) (total int64, err error) {
+func (s RepositoryQuery) Count(fields Fields, customFns ...CustomFnTotalParam) (total int64, err error) {
 	builder := NewTotalBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
 	total, err = builder.Count()
 	return total, err
 }
 
-type Repository[T ModelI] struct {
+type Repository struct {
 	tableConfig TableConfig
 	RepositoryCommand
-	RepositoryQuery[T]
+	//RepositoryQuery[T]
+	RepositoryQuery
 }
 
-func NewRepository[T ModelI](tableConfig TableConfig) Repository[T] {
-	return Repository[T]{
+func NewRepository(tableConfig TableConfig) Repository {
+	return Repository{
 		tableConfig:       tableConfig,
 		RepositoryCommand: NewRepositoryCommand(tableConfig),
-		RepositoryQuery:   NewRepositoryQuery[T](tableConfig),
+		RepositoryQuery:   NewRepositoryQuery(tableConfig),
 	}
 }
 
-func (r Repository[T]) GetTable() TableConfig {
+func (r Repository) GetTable() TableConfig {
 	return r.tableConfig
 }
 
 // //WithTable 设置新的表配置，用于临时切换表(也可以切换dbHandler等场景)
 
-// func (r Repository[T]) WithTable(tableConfig TableConfig) Repository[T] {
-// 	return Repository[T]{
+// func (r Repository) WithTable(tableConfig TableConfig) Repository {
+// 	return Repository{
 // 		tableConfig:       tableConfig,
 // 		RepositoryCommand: NewRepositoryCommand(tableConfig),
 // 		RepositoryQuery:   NewRepositoryQuery[T](tableConfig),
@@ -172,22 +227,22 @@ func (r Repository[T]) GetTable() TableConfig {
 
 // // WithHandler 设置新的handler，用于临时切换dbHandler等场景。
 //
-//	func (r Repository[T]) WithHandler(handler Handler) Repository[T] {
+//	func (r Repository) WithHandler(handler Handler) Repository {
 //		tableConfig := r.tableConfig.WithHandler(handler)
-//		return Repository[T]{
+//		return Repository{
 //			tableConfig:       tableConfig,
 //			RepositoryCommand: NewRepositoryCommand(tableConfig),
 //			RepositoryQuery:   NewRepositoryQuery[T](tableConfig),
 //		}
 //	}
-func (r Repository[T]) Transaction(fc func(txRepository Repository[T]) (err error)) (err error) {
+func (r Repository) Transaction(fc func(txRepository Repository) (err error)) (err error) {
 
 	err = r.TransactionForMutiTable(func(tx Handler) error {
 		tableConfig := r.tableConfig.WithHandler(tx)
-		txRepo := Repository[T]{
+		txRepo := Repository{
 			tableConfig:       tableConfig,
 			RepositoryCommand: NewRepositoryCommand(tableConfig),
-			RepositoryQuery:   NewRepositoryQuery[T](tableConfig),
+			RepositoryQuery:   NewRepositoryQuery(tableConfig),
 		}
 		err = fc(txRepo)
 		if err != nil {
@@ -201,7 +256,7 @@ func (r Repository[T]) Transaction(fc func(txRepository Repository[T]) (err erro
 	return nil
 }
 
-func (r Repository[T]) TransactionForMutiTable(fc func(tx Handler) (err error)) (err error) {
+func (r Repository) TransactionForMutiTable(fc func(tx Handler) (err error)) (err error) {
 	err = r.GetTable().GetHandlerWithInitTable().Transaction(fc)
 	if err != nil {
 		return err
@@ -209,11 +264,11 @@ func (r Repository[T]) TransactionForMutiTable(fc func(tx Handler) (err error)) 
 	return nil
 }
 
-func (r Repository[T]) WithTxHandler(txHandler Handler) Repository[T] {
+func (r Repository) WithTxHandler(txHandler Handler) Repository {
 	tableConfig := r.GetTable().WithHandler(txHandler)
-	return Repository[T]{
+	return Repository{
 		tableConfig:       tableConfig,
 		RepositoryCommand: NewRepositoryCommand(tableConfig),
-		RepositoryQuery:   NewRepositoryQuery[T](tableConfig),
+		RepositoryQuery:   NewRepositoryQuery(tableConfig),
 	}
 }
