@@ -219,6 +219,12 @@ func (t TableConfig) MergeTableLevelFields(ctx context.Context, fs ...*Field) Fi
 	return fs1
 }
 
+//Fields 返回所有字段，包括表级别字段,主要用于api 出入参生成文档场景
+
+func (t TableConfig) Fields() (fs Fields) {
+	return t.Columns.Fields()
+}
+
 var Error_UniqueIndexAlreadyExist = errors.New("unique index already exist")
 
 func (t TableConfig) CheckUniqueIndex(allFields ...*Field) (err error) {
