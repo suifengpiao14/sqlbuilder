@@ -120,6 +120,12 @@ func NewTableConfig(name string) TableConfig {
 	}
 }
 
+// Repository 封装了基本的增删改查操作，方便使用(这里表明repository 属于table层面,不属于业务层面，repository可以对应多个业务模型)
+
+func (t TableConfig) Repository() Repository {
+	return NewRepository(t)
+}
+
 func (t TableConfig) WithTableName(name string) TableConfig {
 	t.DBName = DBName{Name: name}
 	return t
