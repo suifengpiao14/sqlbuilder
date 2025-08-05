@@ -66,6 +66,9 @@ func GormDBMakeMysqlWithDSN(dsn string, gormConfig *gorm.Config) func() *gorm.DB
 	if err != nil {
 		panic(err)
 	}
+	if gormConfig == nil {
+		gormConfig = &gorm.Config{}
+	}
 	return func() *gorm.DB {
 		dialector := mysql.New(mysql.Config{Conn: sqlDB})
 		db, err := gorm.Open(dialector, gormConfig)
