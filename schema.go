@@ -171,6 +171,9 @@ type SchemaType string
 func (st SchemaType) String() string {
 	return string(st)
 }
+func (st SchemaType) IsInt() bool {
+	return st.IsEqual(Schema_Type_int)
+}
 
 func (st SchemaType) IsEqual(other SchemaType) bool {
 	return strings.EqualFold(string(st), string(other))
