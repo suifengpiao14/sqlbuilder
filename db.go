@@ -14,7 +14,7 @@ import (
 	// Register sqlite3 dialect for goqu
 	_ "github.com/doug-martin/goqu/v9/dialect/sqlite3"
 	// Register MySQL driver for sql.DB
-	_ "github.com/go-sql-driver/mysql"
+
 	// Register sqlite3 driver for sql.DB
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/suifengpiao14/sshmysql"
@@ -59,6 +59,22 @@ type DBConfig struct {
 	DatabaseName string
 	QueryParams  string
 	SSHConfig    *sshmysql.SSHConfig
+}
+
+func GormDBMakeMysqlWithDSN(dsn string, gormConfig *gorm.Config) func() *gorm.DB {
+	sqlDB, err := sql.Open(string(Driver_mysql), dsn)
+	if err != nil {
+		panic(err)
+	}
+	return func() *gorm.DB {
+		dialector := mysql.New(mysql.Config{Conn: sqlDB})
+		db, err := gorm.Open(dialector, gormConfig)
+		if err != nil {
+			panic(err)
+		}
+		return db
+	}
+
 }
 
 // GormDBMakeMysql 生成一个gorm.DB的工厂方法，该方法只会执行一次，后续调用直接返回第一次生成的db实例。该方法返回的结果需要保存到变量里面，不然还是会被重新生成。多个mysq 连接实例，可以分别调用后保存到变量
