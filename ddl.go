@@ -335,27 +335,27 @@ func (trs TypeReflects[T]) GetDefault() (tr *TypeReflect[T]) {
 }
 
 var TypeReflectsString = TypeReflects[int]{
-	{UpperLimit: 64, DBType: "char"},                                             // 小于64位往往是ID、日期等类型，长度较为固定，直接使用char 效率高
-	{UpperLimit: 255, DBType: "varchar", IsDefault: true},                        // 小字符串类型，节省空间
-	{UpperLimit: 65535, DBType: "TEXT", Size: -1, NoDefaultValue: true},          // size =-1 不设置大小
-	{UpperLimit: 16777215, DBType: "MEDIUMTEXT", Size: -1, NoDefaultValue: true}, // size =-1 不设置大小
-	{UpperLimit: 4294967295, DBType: "LONGTEXT", Size: -1, NoDefaultValue: true}, // size =-1 不设置大小
+	{UpperLimit: Str_char, DBType: "char"},                                             // 小于64位往往是ID、日期等类型，长度较为固定，直接使用char 效率高
+	{UpperLimit: Str_varchar, DBType: "varchar", IsDefault: true},                      // 小字符串类型，节省空间
+	{UpperLimit: Str_Text, DBType: "TEXT", Size: -1, NoDefaultValue: true},             // size =-1 不设置大小
+	{UpperLimit: Str_MEDIUMTEXT, DBType: "MEDIUMTEXT", Size: -1, NoDefaultValue: true}, // size =-1 不设置大小
+	{UpperLimit: Str_LONGTEXT, DBType: "LONGTEXT", Size: -1, NoDefaultValue: true},     // size =-1 不设置大小
 }
 
 // 无符号整型
 var TypeReflectsUnsinedInt = TypeReflects[uint]{
-	{UpperLimit: 1<<8 - 1, DBType: "TINYINT", Size: 1},
-	{UpperLimit: 1<<16 - 1, DBType: "SMALLINT", Size: 11},
-	{UpperLimit: 1<<24 - 1, DBType: "mediumint", Size: 11},
-	{UpperLimit: 1<<32 - 1, DBType: "int", Size: 11, IsDefault: true},
-	{UpperLimit: 1<<64 - 1, DBType: "bigint", Size: 11},
+	{UpperLimit: UnsinedInt_maximum_tinyint, DBType: "TINYINT", Size: 1},
+	{UpperLimit: UnsinedInt_maximum_smallint, DBType: "SMALLINT", Size: 11},
+	{UpperLimit: UnsinedInt_maximum_mediumint, DBType: "mediumint", Size: 11},
+	{UpperLimit: UnsinedInt_maximum_int, DBType: "int", Size: 11, IsDefault: true},
+	{UpperLimit: UnsinedInt_maximum_bigint, DBType: "bigint", Size: 11},
 }
 var TypeReflectsInt = TypeReflects[int]{
-	{UpperLimit: 1<<7 - 1, DBType: "TINYINT", Size: 1},
-	{UpperLimit: 1<<15 - 1, DBType: "SMALLINT", Size: 11},
-	{UpperLimit: 1<<23 - 1, DBType: "mediumint", Size: 11},
-	{UpperLimit: 1<<31 - 1, DBType: "int", Size: 11, IsDefault: true},
-	{UpperLimit: 1<<63 - 1, DBType: "bigint", Size: 11},
+	{UpperLimit: Int_maximum_tinyint, DBType: "TINYINT", Size: 1},
+	{UpperLimit: Int_maximum_smallint, DBType: "SMALLINT", Size: 11},
+	{UpperLimit: Int_maximum_mediumint, DBType: "mediumint", Size: 11},
+	{UpperLimit: Int_maximum_int, DBType: "int", Size: 11, IsDefault: true},
+	{UpperLimit: Int_maximum_bigint, DBType: "bigint", Size: 11},
 }
 
 func escapeDefault(val any) string {

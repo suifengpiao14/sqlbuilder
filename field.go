@@ -1205,6 +1205,7 @@ type FieldTypeI interface {
 		~float64 |
 		~[]int | ~[]int64 | ~[]uint64 |
 		~[]uint | ~[]uint8 |
+		~bool |
 		~string | ~[]string |
 		ValueFn | ValueFnFn | func(inputValue any, f *Field, fs ...*Field) (any, error)
 }

@@ -201,6 +201,11 @@ const (
 	Int_maximum_mediumint = 1<<23 - 1
 	Int_maximum_int       = 1<<31 - 1
 	Int_maximum_bigint    = 1<<63 - 1
+	Str_char              = 64
+	Str_varchar           = 255
+	Str_Text              = 65535
+	Str_MEDIUMTEXT        = 16777215
+	Str_LONGTEXT          = 4294967295
 )
 
 type Enums []Enum

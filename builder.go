@@ -520,9 +520,7 @@ func (is BatchInsertParam) ToSQL() (sql string, err error) {
 	if err != nil {
 		return "", err
 	}
-	if is._log != nil {
-		is._log.Log(sql)
-	}
+	is.Log(sql)
 	return sql, nil
 }
 func (p BatchInsertParam) Exec() (err error) {
