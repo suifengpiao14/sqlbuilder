@@ -1200,16 +1200,20 @@ func (fn FieldFn[T]) Apply(value T) *Field {
 }
 
 type FieldTypeIntI interface {
+	~int | ~*int | ~int32 | ~int64 | ~uint | ~uint8 | ~uint32 | ~uint64 | ~*int64 | ~*uint64 | ~float64 | ~[]int | ~[]int64 | ~[]uint | ~[]uint8 | ~[]uint64 | ~[]float64 |
+		~[]*int | ~[]*int64 | ~[]*uint | ~[]*uint8 | ~[]*uint64 | ~[]*float64
 }
 
+type FieldTypeStringI interface {
+	~string | ~[]string | ~*string | ~[]*string
+}
+type FieldTypeBoolI interface {
+	~bool | ~*bool | ~[]bool | ~[]*bool | ~*[]bool
+}
 type FieldTypeI interface {
-	~int | ~int64 | ~uint64 | ~*int | ~*int64 | ~*uint64 |
-		~uint | ~uint8 |
-		~float64 |
-		~[]int | ~[]int64 | ~[]uint64 |
-		~[]uint | ~[]uint8 |
-		~bool | ~*bool |
-		~string | ~[]string | ~*string |
+	FieldTypeIntI |
+		FieldTypeStringI |
+		FieldTypeBoolI |
 		ValueFn | ValueFnFn | func(inputValue any, f *Field, fs ...*Field) (any, error)
 }
 
@@ -1247,7 +1251,7 @@ func NewField[T FieldTypeI](value T, middlewareFns ...ApplyFn) (field *Field) {
 	return field
 }
 
-func NewIntField[T ~int | ~*int | ~int64 | ~uint | ~uint8 | ~[]int | ~[]int64 | ~[]uint | ~[]uint8](value T, name string, title string, maximum uint) (f *Field) {
+func NewIntField[T FieldTypeIntI](value T, name string, title string, maximum uint) (f *Field) {
 	f = NewField(value).SetName(name).SetTitle(title).MergeSchema(Schema{
 		Type: Schema_Type_int,
 	})
@@ -1257,7 +1261,7 @@ func NewIntField[T ~int | ~*int | ~int64 | ~uint | ~uint8 | ~[]int | ~[]int64 | 
 	return f
 }
 
-func NewStringField[T ~string | ~[]string](value T, name string, title string, maxLength int) (f *Field) {
+func NewStringField[T FieldTypeStringI](value T, name string, title string, maxLength int) (f *Field) {
 	f = NewField(value).SetName(name).SetTitle(title).MergeSchema(Schema{
 		Type: Schema_Type_string,
 	})
