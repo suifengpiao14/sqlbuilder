@@ -62,33 +62,37 @@ type DBConfig struct {
 }
 
 func GormDBMakeMysqlWithDSN(dsn string, gormConfig *gorm.Config) func() *gorm.DB {
-	sqlDB, err := sql.Open(string(Driver_mysql), dsn)
-	if err != nil {
-		panic(err)
-	}
-	if gormConfig == nil {
-		gormConfig = &gorm.Config{}
-	}
-	return func() *gorm.DB {
-		dialector := mysql.New(mysql.Config{Conn: sqlDB})
-		db, err := gorm.Open(dialector, gormConfig)
+	return GormDBMakeMysqlFn(func() *sql.DB {
+		sqlDB, err := sql.Open(string(Driver_mysql), dsn)
 		if err != nil {
 			panic(err)
 		}
-		return db
-	}
+		return sqlDB
+	}, gormConfig)
+}
 
+func GormDBMakeMysqlFn(sqlDBFn func() *sql.DB, gormConfig *gorm.Config) func() *gorm.DB {
+	if gormConfig == nil {
+		gormConfig = &gorm.Config{}
+	}
+	return sync.OnceValue(func() *gorm.DB {
+		sqlDB := sqlDBFn()
+		dialector := mysql.New(mysql.Config{Conn: sqlDB})
+		gormDB, err := gorm.Open(dialector, gormConfig)
+		if err != nil {
+			panic(err)
+		}
+		listenForExitSignal(gormDB)
+		return gormDB
+	})
 }
 
 // GormDBMakeMysql 生成一个gorm.DB的工厂方法，该方法只会执行一次，后续调用直接返回第一次生成的db实例。该方法返回的结果需要保存到变量里面，不然还是会被重新生成。多个mysq 连接实例，可以分别调用后保存到变量
 func GormDBMakeMysql(dbConfig DBConfig, gormConfig *gorm.Config) func() *gorm.DB {
-	if dbConfig.QueryParams == "" {
-		dbConfig.QueryParams = "charset=utf8mb4&parseTime=False&timeout=300s&loc=Local"
-	}
-	if gormConfig == nil {
-		gormConfig = &gorm.Config{}
-	}
-	gormDB := sync.OnceValue(func() (gormDB *gorm.DB) {
+	return GormDBMakeMysqlFn(func() *sql.DB {
+		if dbConfig.QueryParams == "" {
+			dbConfig.QueryParams = "charset=utf8mb4&parseTime=False&timeout=300s&loc=Local"
+		}
 		dsn := fmt.Sprintf(
 			"%s:%s@tcp(%s:%d)/%s?%s",
 			dbConfig.UserName,
@@ -106,21 +110,15 @@ func GormDBMakeMysql(dbConfig DBConfig, gormConfig *gorm.Config) func() *gorm.DB
 			if err != nil {
 				panic(err)
 			}
-		} else {
-			sqlDB, err = sql.Open(string(Driver_mysql), dsn)
-			if err != nil {
-				panic(err)
-			}
+			return sqlDB
 		}
-		dialector := mysql.New(mysql.Config{Conn: sqlDB})
-		gormDB, err = gorm.Open(dialector, gormConfig)
+
+		sqlDB, err = sql.Open(string(Driver_mysql), dsn)
 		if err != nil {
 			panic(err)
 		}
-		listenForExitSignal(gormDB)
-		return gormDB
-	})
-	return gormDB
+		return sqlDB
+	}, gormConfig)
 }
 
 func listenForExitSignal(gormDB *gorm.DB) {

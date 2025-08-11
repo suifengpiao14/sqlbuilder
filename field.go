@@ -310,8 +310,8 @@ type Field struct {
 	scene         Scene       // 场景
 	sceneFns      SceneFns    // 场景初始化配置
 	tags          Tags        // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
-	dbName        string      //Depricated 废弃，使用DBColumnName代替
-	docName       string      //Depricated 废弃，使用DBColumnName代替
+	dbName        string      //Deprecated 废弃，使用DBColumnName代替
+	docName       string      //Deprecated 废弃，使用DBColumnName代替
 	selectColumns []any       // 查询时列
 	fieldName     string      //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
 	delayApplies  ApplyFns    // 延迟执行函数 在 xxx.ToSQL()中调用，在执行后才执行中间件(如在设置f.SetSelectColumns 时需要获取 f.Table().Columns 信息时，就需要延迟执行中间件)
@@ -1199,14 +1199,17 @@ func (fn FieldFn[T]) Apply(value T) *Field {
 	return fn(value)
 }
 
+type FieldTypeIntI interface {
+}
+
 type FieldTypeI interface {
-	~int | ~int64 | ~uint64 |
+	~int | ~int64 | ~uint64 | ~*int | ~*int64 | ~*uint64 |
 		~uint | ~uint8 |
 		~float64 |
 		~[]int | ~[]int64 | ~[]uint64 |
 		~[]uint | ~[]uint8 |
-		~bool |
-		~string | ~[]string |
+		~bool | ~*bool |
+		~string | ~[]string | ~*string |
 		ValueFn | ValueFnFn | func(inputValue any, f *Field, fs ...*Field) (any, error)
 }
 
@@ -1244,7 +1247,7 @@ func NewField[T FieldTypeI](value T, middlewareFns ...ApplyFn) (field *Field) {
 	return field
 }
 
-func NewIntField[T ~int | ~int64 | ~uint | ~uint8 | ~[]int | ~[]int64 | ~[]uint | ~[]uint8](value T, name string, title string, maximum uint) (f *Field) {
+func NewIntField[T ~int | ~*int | ~int64 | ~uint | ~uint8 | ~[]int | ~[]int64 | ~[]uint | ~[]uint8](value T, name string, title string, maximum uint) (f *Field) {
 	f = NewField(value).SetName(name).SetTitle(title).MergeSchema(Schema{
 		Type: Schema_Type_int,
 	})
@@ -1290,19 +1293,19 @@ var GlobalFnValueFns = func(f Field, fs ...*Field) ValueFns {
 	}
 }
 
-// Depricated: 废弃，就像Field.dbName 一样，交由上层映射，不做内部转换（调用方持有Field.Name,不是Field 持有 docName）
-func (f *Field) SetDocName(docName string) *Field {
-	f.docName = docName
-	return f
-}
+// Deprecated: 废弃，就像Field.dbName 一样，交由上层映射，不做内部转换（调用方持有Field.Name,不是Field 持有 docName）
+// func (f *Field) SetDocName(docName string) *Field {
+// 	f.docName = docName
+// 	return f
+// }
 
-// Depricated: 废弃，就像Field.dbName 一样，交由上层映射，不做内部转换（调用方持有Field.Name,不是Field 持有 docName）
-func (f Field) GetDocName() string {
-	if f.docName == "" {
-		f.docName = f.Name
-	}
-	return f.docName
-}
+// Deprecated: 废弃，就像Field.dbName 一样，交由上层映射，不做内部转换（调用方持有Field.Name,不是Field 持有 docName）
+// func (f Field) GetDocName() string {
+// 	if f.docName == "" {
+// 		f.docName = f.Name
+// 	}
+// 	return f.docName
+// }
 
 // InitBeforeCalValue 实际执行，计算值前的初始化
 func (f *Field) InitBeforeCalValue(fs ...*Field) *Field {
@@ -2437,7 +2440,7 @@ func structToFields(val reflect.Value,
 	m := make(map[string]bool)
 	uFs := Fields{}
 	for _, f := range fs {
-		docName := f.GetDocName()
+		docName := f.Name
 		if !m[docName] {
 			uFs = append(uFs, f)
 		}

@@ -115,14 +115,14 @@ func StructFieldCustom(val reflect.Value, structField reflect.StructField, fs sq
 		if !structField.Anonymous { // 嵌入结构体,文档名称不增加前缀
 			for i := 0; i < len(fs); i++ {
 				f := fs[i]
-				docName := f.GetDocName()
+				docName := f.Name
 				if docName != "" && !strings.HasPrefix(docName, "[]") {
 					docName = fmt.Sprintf(".%s", docName)
 				}
 				getJsonTag := getJsonTag(structField)
 				fName := fmt.Sprintf("%s%s", getJsonTag, docName)
 				fName = strings.TrimSuffix(fName, ".")
-				f.SetDocName(fName)
+				f.SetName(fName)
 			}
 		}
 	}
@@ -131,9 +131,9 @@ func StructFieldCustom(val reflect.Value, structField reflect.StructField, fs sq
 
 func ArrayFieldCustom(fs sqlbuilder.Fields) sqlbuilder.Fields {
 	for _, f := range fs {
-		fName := fmt.Sprintf("[].%s", f.GetDocName())
+		fName := fmt.Sprintf("[].%s", f.Name)
 		fName = strings.TrimSuffix(fName, ".")
-		f.SetDocName(fName) //设置列名称,f 本身为指针，直接修改f.Name
+		f.SetName(fName) //设置列名称,f 本身为指针，直接修改f.Name
 	}
 	return fs
 }

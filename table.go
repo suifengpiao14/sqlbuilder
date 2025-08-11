@@ -283,6 +283,13 @@ func (ts TableConfigs) GetByName(name string) (t *TableConfig, exists bool) {
 	return t, exists
 }
 
+func (ts TableConfigs) Fields() (fs Fields) {
+	for _, t := range ts {
+		fs.Append(t.Columns.Fields()...)
+	}
+	return fs
+}
+
 func (t TableConfig) Copy() TableConfig {
 	cp := t
 	copy(cp.Columns, t.Columns)
