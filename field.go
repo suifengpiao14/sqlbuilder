@@ -826,7 +826,7 @@ func (f *Field) SetMinimum(minimum int) *Field {
 
 // SetDescription 设置描述 针对api 语义化
 func (f *Field) SetDescription(description string) *Field {
-	if f.Schema != nil {
+	if f.Schema == nil {
 		f.Schema = &Schema{}
 	}
 	f.Schema.Comment = description
