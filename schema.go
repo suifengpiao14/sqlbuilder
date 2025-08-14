@@ -632,6 +632,14 @@ var ValueFnForward = ValueFn{
 	Layer: Value_Layer_DBFormat,
 }
 
+var ValueFnNotEqual = ValueFn{
+	Fn: func(in any, f *Field, fs ...*Field) (any, error) {
+		expression := goqu.I(f.DBColumnName().FullName()).Neq(in)
+		return expression, nil
+	},
+	Layer: Value_Layer_DBFormat,
+}
+
 // ValueFnSwich 数据库值固定为2个时，向开关一样转换
 var ValueFnSwich = ValueFn{
 	Fn: func(in any, f *Field, fs ...*Field) (any, error) {

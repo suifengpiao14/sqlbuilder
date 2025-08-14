@@ -871,6 +871,11 @@ func (f *Field) AppendEnum(enums ...Enum) *Field {
 		f.Schema = &Schema{}
 	}
 	f.Schema.Enums = append(f.Schema.Enums, enums...)
+	for _, enum := range enums {
+		if enum.IsDefault {
+			f.Schema.Default = enum.Key
+		}
+	}
 	return f
 }
 func (f *Field) SetRequired(required bool) *Field {
