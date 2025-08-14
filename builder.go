@@ -485,6 +485,7 @@ func (p *BatchInsertParam) AppendFields(fields ...Fields) *BatchInsertParam {
 
 var ErrBatchInsertDataIsNil = errors.New("batch insert err: data is nil")
 var ErrNotFound = errors.New("not found record")
+var ErrWithSQL = false // 正式环境关闭,开发调试可以开启
 
 // Deprecated: use ErrNotFound instead
 var ERROR_NOT_FOUND = ErrNotFound
@@ -645,8 +646,14 @@ func (p DeleteParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
 }
 
 type UpdateParam struct {
+	mustExists           bool
 	_triggerUpdatedEvent EventUpdateTrigger
 	SQLParam[UpdateParam]
+}
+
+func (p *UpdateParam) WithMustExists(mustExists bool) *UpdateParam {
+	p.mustExists = mustExists
+	return p
 }
 
 func (p *UpdateParam) WithTriggerEvent(triggerUpdateEvent EventUpdateTrigger) *UpdateParam {
@@ -677,7 +684,7 @@ func (p *UpdateParam) ApplyCustomFn(customFns ...CustomFnUpdateParam) *UpdatePar
 
 func (p UpdateParam) ToSQL() (sql string, err error) {
 	tableConfig := p.GetTable()
-	fs := p._Fields.Builder(p.context, SCENE_SQL_UPDATE, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs := p._Fields.Builder(p.context, SCENE_SQL_UPDATE, tableConfig, p.customFieldsFns) // 使用复制变量,后续针对场景的特殊化处理不会影响原始变量
 	data, err := fs.Data(layer_order...)
 	if err != nil {
 		return "", err
@@ -730,6 +737,24 @@ func (p UpdateParam) Update() (rowsAffected int64, err error) {
 	if err != nil {
 		return 0, err
 	}
+	if p.mustExists {
+		cp := p._Fields.Copy()
+		existsParam := NewExistsBuilder(p.GetTable()).AppendFields(cp...)
+		exists, err := existsParam.Exists()
+		if err != nil {
+			return 0, err
+		}
+		if !exists {
+			wherePression, _ := existsParam._Fields.Where()
+			existsSql := fmt.Sprintf("sql where :%s", Expression2StringWithDriver(Driver(p.GetTable().GetHandler().GetDialector()), wherePression...))
+			if ErrWithSQL {
+				existsSql, _ = existsParam.ToSQL()
+				existsSql = fmt.Sprintf("sql:%s", existsSql)
+			}
+			err = errors.WithMessagef(ErrNotFound, " UpdateParam.mustExists==true %s", existsSql)
+			return 0, err
+		}
+	}
 	withEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
 		err = p.getEventHandler()(event.RowsAffected)
 		if err != nil {
@@ -740,32 +765,10 @@ func (p UpdateParam) Update() (rowsAffected int64, err error) {
 	return rowsAffected, err
 }
 
+// Deprecated :已废弃,请使用p.WithMustExists(true).Update()(UpdateMustExists 这个名字很难想起来,所以改为配置模式，另外也减少重复代码)
 func (p UpdateParam) UpdateMustExists() (rowsAffected int64, err error) {
-
-	cp := p._Fields.Copy()
-	existsParam := NewExistsBuilder(p.GetTable()).AppendFields(cp...)
-	exists, err := existsParam.Exists()
-	if err != nil {
-		return 0, err
-	}
-	if !exists {
-		existsSql, _ := existsParam.ToSQL()
-		err = errors.Errorf("record not exists with the sql:%s", existsSql)
-		return 0, err
-	}
-
-	sql, err := p.ToSQL()
-	if err != nil {
-		return 0, err
-	}
-	withEventHandler := WithTriggerAsyncEvent(p.GetHandlerWithInitTable(), func(event *Event) {
-		err = p.getEventHandler()(event.RowsAffected)
-		if err != nil {
-			p.Log(sql, err)
-		}
-	})
-	rowsAffected, err = withEventHandler.ExecWithRowsAffected(sql)
-	return rowsAffected, err
+	p.WithMustExists(true)
+	return p.Update()
 }
 
 type Context_Key string

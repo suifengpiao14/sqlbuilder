@@ -2317,7 +2317,7 @@ func TryParseExpressions(field string, value any) (expressions Expressions, ok b
 	return nil, false
 }
 
-// Deprecated: 请使用TryParseExpressions
+// Deprecated: 请使用Expression2StringWithDriver
 func Expression2String(expressions ...goqu.Expression) string {
 	sql, _, _ := Dialect.DialectWrapper().Select().Where(expressions...).ToSQL()
 	return sql
