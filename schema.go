@@ -820,6 +820,17 @@ func ValueFnBetween(left any, right any) ValueFn {
 		Layer: Value_Layer_DBFormat,
 	}
 }
+func ValueFnBetweenWitEmptyNil(left any, right any) ValueFn {
+	return ValueFn{
+		Fn: func(in any, f *Field, fs ...*Field) (value any, err error) {
+			if IsNil(in) {
+				return nil, nil
+			}
+			return Between{Empty2Nil(left), Empty2Nil(right)}, nil
+		},
+		Layer: Value_Layer_DBFormat,
+	}
+}
 
 // ValueFnTrimBlankSpace 删除字符串前后空格
 var ValueFnTrimBlankSpace = ValueFn{

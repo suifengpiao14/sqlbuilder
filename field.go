@@ -2240,6 +2240,7 @@ var GlobalFnFormatTableName = func(tableName string) string {
 	return tableName
 }
 
+// Deprecated  NewBetweenWithoutEmpty 废弃，直接使用ValueFnBetweenWitEmptyNil(start,end)代替
 func NewBetweenWithoutEmpty[T int | int64 | float64 | string](start T, end T) Between {
 	start1, _ := ValueFnEmpty2Nil.Fn(start, nil)
 	end1, _ := ValueFnEmpty2Nil.Fn(end, nil)
