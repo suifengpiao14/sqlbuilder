@@ -722,6 +722,21 @@ var ValueFnEmpty2Nil = ValueFn{ // 空字符串改成nil,值改成nil后,sql语�
 	Layer: Value_Layer_SetFormat,
 }
 
+var ValueFnIsNull = ValueFn{ // 字段 值为null
+	Fn: func(in any, f *Field, fs ...*Field) (any, error) {
+		val := goqu.I(f.DBColumnName().FullName()).IsNull()
+		return val, nil
+	},
+	Layer: Value_Layer_SetFormat,
+}
+var ValueFnIsNotNull = ValueFn{ // 字段 值为null
+	Fn: func(in any, f *Field, fs ...*Field) (any, error) {
+		val := goqu.I(f.DBColumnName().FullName()).IsNotNull()
+		return val, nil
+	},
+	Layer: Value_Layer_SetFormat,
+}
+
 // ValueFnUpdateIfFalse 更新字段 数据库值为false时，更新该字段,否则不更新为输入值（字段值保持已有值,即存在忽略更新）
 var ValueFnUpdateIfFalse = ValueFn{
 	Layer: Value_Layer_DBFormat,
