@@ -727,14 +727,14 @@ var ValueFnIsNull = ValueFn{ // 字段 值为null
 		val := goqu.I(f.DBColumnName().FullName()).IsNull()
 		return val, nil
 	},
-	Layer: Value_Layer_SetFormat,
+	Layer: Value_Layer_DBFormat,
 }
 var ValueFnIsNotNull = ValueFn{ // 字段 值为null
 	Fn: func(in any, f *Field, fs ...*Field) (any, error) {
 		val := goqu.I(f.DBColumnName().FullName()).IsNotNull()
 		return val, nil
 	},
-	Layer: Value_Layer_SetFormat,
+	Layer: Value_Layer_DBFormat,
 }
 
 // ValueFnUpdateIfFalse 更新字段 数据库值为false时，更新该字段,否则不更新为输入值（字段值保持已有值,即存在忽略更新）
