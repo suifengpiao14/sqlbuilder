@@ -544,13 +544,9 @@ const (
 // 	return f
 // }
 
-//Deprecated: Use WithOrderFn instead.
-
+// Deprecated: Use WithOrderFn instead.
 func (f *Field) SetOrderFn(orderFn OrderFn) *Field {
-	f._OrderFnWithSort = OrderFnWithSort{
-		Fn: orderFn,
-	}
-	return f
+	return f.WithOrderFn(0, orderFn)
 }
 func (f *Field) WithOrderFn(sort int, orderFn OrderFn) *Field {
 	f._OrderFnWithSort = OrderFnWithSort{
