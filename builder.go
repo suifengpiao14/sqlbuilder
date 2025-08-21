@@ -695,7 +695,7 @@ func (p UpdateParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 	if len(where) == 0 {
-		err = errors.New("update must have where condition")
+		err = errors.WithMessage(ErrEmptyWhere, "update must have where condition")
 		return "", err
 	}
 	limit := fs.Limit()
@@ -1001,15 +1001,15 @@ func (log EmptyLog) Log(sql string, args ...any) {
 var DefaultLog = ConsoleLog{}
 
 type ExistsParam struct {
-	allowEmptyWhereCondition bool
-	builderFns               SelectBuilderFns
+	//allowEmptyWhereCondition bool // 如果应用中确实容许where 条件为空，请使用 where 1=1 替换
+	builderFns SelectBuilderFns
 	SQLParam[ExistsParam]
 }
 
-func (p *ExistsParam) WithAllowEmptyWhereCondition(allowEmptyWhereCondition bool) *ExistsParam {
-	p.allowEmptyWhereCondition = allowEmptyWhereCondition
-	return p
-}
+// func (p *ExistsParam) WithAllowEmptyWhereCondition(allowEmptyWhereCondition bool) *ExistsParam {
+// 	p.allowEmptyWhereCondition = allowEmptyWhereCondition
+// 	return p
+// }
 
 // WithBuilderFns 配置sql构建器
 func (p *ExistsParam) WithBuilderFns(builderFns ...SelectBuilderFn) *ExistsParam {
@@ -1070,8 +1070,8 @@ func (p ExistsParam) ToSQL() (sql string, err error) {
 		return "", err
 	}
 	p.Log(sql)
-	if len(where) == 0 && !p.allowEmptyWhereCondition { // 默认where 条件不能为空，先写日志，再返回错误，方便用户查看SQL语句
-		err = errors.Errorf("exists sql must have where condition")
+	if len(where) == 0 { // 默认where 条件不能为空，先写日志，再返回错误，方便用户查看SQL语句
+		err = ErrEmptyWhere
 		err = errors.WithMessage(err, errWithMsg)
 		return "", err
 	}
@@ -1339,6 +1339,11 @@ func (p SetParam) ToSQLV0() (existsSql string, insertSql string, updateSql strin
 func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string, deleteSql string, err error) {
 	table := p.GetTable()
 	existsSql, err = NewExistsBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL() // 有些根据场景设置 如枚举值 ""，所有需要复制
+	if errors.Is(err, ErrEmptyWhere) {                                                                                   //查询是否存在，没有where条件，说明需要直接insert 比如 id=0 时，此时不存在，直接新增即可
+		p.WithPolicy(SetPolicy_only_Insert) // 设置为只新增，避免其他报错
+		err = nil                           // 注意，这种情况会输出insertsql，existsSql 为空，所以只需existsSql是，需要判空
+
+	}
 	if err != nil {
 		return "", "", "", "", err
 	}
@@ -1371,6 +1376,7 @@ func (p SetParam) Set() (isNotExits bool, lastInsertId uint64, rowsAffected int6
 	// if err != nil {
 	// 	return false, 0, 0, err
 	// }
+	// 2025-08-21 如果whereData 为空则只能执行新增（比如主键id为0,使得数据必然不存在，可以略过查询是否存在）
 	existsSql, insertSql, updateSql, deleteSql, err := p.ToSQL()
 	if err != nil {
 		return false, 0, 0, err
@@ -1397,9 +1403,12 @@ func (p SetParam) Set() (isNotExits bool, lastInsertId uint64, rowsAffected int6
 		}
 	})
 
-	exists, err := existsHandler(existsSql)
-	if err != nil {
-		return false, 0, 0, err
+	exists := false
+	if existsSql != "" { //where 条件为空，existsSql 返回空，但是  insertSql 不为空，需要执行，所以这里需要判空
+		exists, err = existsHandler(existsSql)
+		if err != nil {
+			return false, 0, 0, err
+		}
 	}
 	isNotExits = !exists
 	switch p.setPolicy {

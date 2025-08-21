@@ -55,8 +55,8 @@ type ValueFnFn func(inputValue any, f *Field, fs ...*Field) (any, error)
 type ValueFn struct {
 	Name        string
 	Fn          ValueFnFn
-	Order       int // 执行顺序，越小越先执行
-	Layer       Layer
+	Order       int    // 执行顺序，越小越先执行
+	Layer       Layer  //Deprecated: 废弃，使用Tags代替
 	Description string // 描述
 }
 
@@ -298,24 +298,28 @@ func Join(ds *goqu.SelectDataset, jionConfigs ...OnUnit) *goqu.SelectDataset {
 
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Name     string   `json:"name"`
+	Name string `json:"name"`
+	//todo 后续迁移到tags(tag 分组名称为 value)
 	ValueFns ValueFns `json:"-"` // 增加error，方便封装字段验证规则
 	// 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
+	//todo 后续迁移到tags(tag 分组名称为 where)
 	WhereFns ValueFns `json:"-"`
 	//_OrderFn          OrderFn         `json:"-"` //deprecated  排序函数
 	_OrderFnWithSort OrderFnWithSort `json:"-"` // 排序函数,支持多个排序规则
 
-	Schema        *Schema     // 可以为空，为空建议设置默认值
-	table         TableConfig // 关联表,方便收集Table全量信息
-	scene         Scene       // 场景
-	sceneFns      SceneFns    // 场景初始化配置
-	tags          Tags        // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
-	dbName        string      //Deprecated 废弃，使用DBColumnName代替
-	docName       string      //Deprecated 废弃，使用DBColumnName代替
-	selectColumns []any       // 查询时列
-	fieldName     string      //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
-	delayApplies  ApplyFns    // 延迟执行函数 在 xxx.ToSQL()中调用，在执行后才执行中间件(如在设置f.SetSelectColumns 时需要获取 f.Table().Columns 信息时，就需要延迟执行中间件)
-	ddlSequence   int         // 生成ddl语句时排序字段，一般不用，在多字段联合唯一索引/主键 时 将多字段值拼接时会使用到
+	Schema *Schema     // 可以为空，为空建议设置默认值
+	table  TableConfig // 关联表,方便收集Table全量信息
+	scene  Scene       // 场景
+	//todo 后续迁移到tags（tag 分组名称为 scene）
+	sceneFns      SceneFns // 场景初始化配置
+	tags          Tags     // 方便搜索到指定列,Name 可能会更改,tag不会,多个tag,拼接,以,开头
+	dbName        string   //Deprecated 废弃，使用DBColumnName代替
+	docName       string   //Deprecated 废弃，使用DBColumnName代替
+	selectColumns []any    // 查询时列
+	fieldName     string   //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
+	//todo 后续迁移到tags(tag 分组名称为 stage)
+	delayApplies ApplyFns // 延迟执行函数 在 xxx.ToSQL()中调用，在执行后才执行中间件(如在设置f.SetSelectColumns 时需要获取 f.Table().Columns 信息时，就需要延迟执行中间件)
+	//ddlSequence   int         // 生成ddl语句时排序字段，一般不用，在多字段联合唯一索引/主键 时 将多字段值拼接时会使用到
 
 	//indexs        Indexs // 索引(索引跟表走，不在领域语言上)
 	//applyFns      ApplyFns // apply 必须当场执行，因为存在apply函数嵌套apply函数,
@@ -526,10 +530,10 @@ func (f *Field) Copy() (copyF *Field) {
 	return &fcp
 }
 
-func (f *Field) SetDDLsequence(DDLsequence int) *Field {
-	f.ddlSequence = DDLsequence
-	return f
-}
+// func (f *Field) SetDDLsequence(DDLsequence int) *Field {
+// 	f.ddlSequence = DDLsequence
+// 	return f
+// }
 
 const (
 	Tag_createdAt     = "createdAt"
@@ -1918,13 +1922,14 @@ func (fs Fields) MakeDBColumnWithAlias(tableColumns ColumnConfigs) (selectColumn
 	return selectColumnWithAlias
 }
 
-// MakeAsOneDBColumnWithAlias 将数据表多个字段值合并成一个，并取别名（主要用于多字段生成唯一标识场景）
+// MakeAsOneDBColumnWithAlias 将数据表多个字段值合并成一个，并取别名（主要用于多字段生成唯一标识场景,注意tableColumns 的顺序就是拼接顺序，调用者可以基于表索引排序，或者自然排序好）
 func (fs Fields) MakeAsOneDBColumnWithAlias(alias string, tableColumns ColumnConfigs) (selectColumnWithAlias any) {
 	if len(fs) == 1 {
 		return fs[0].MakeDBColumnWithAlias(tableColumns)
 	}
 	arr := make([]string, 0)
-	slices.SortStableFunc(fs, func(a *Field, b *Field) int { return a.ddlSequence - b.ddlSequence })
+	//
+	//slices.SortStableFunc(fs, func(a *Field, b *Field) int { return a.ddlSequence - b.ddlSequence })
 	lastIndex := len(fs) - 1
 	//CONCAT(`key`,"-",`value`) as `key_value`
 	for i, f := range fs {
