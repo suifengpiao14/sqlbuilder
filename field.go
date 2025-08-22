@@ -41,7 +41,25 @@ const (
 
 )
 
+type Phase = Layer
+
+// todo 后去重构
+const (
+	//单字段步骤定义
+	PhaseField_ApiSetValue = Value_Layer_SetValue    // api赋值层
+	PhaseField_ApiValidate = Value_Layer_ApiValidate // api验证层
+	PhaseField_ApiFormat   = Value_Layer_ApiFormat   // api格式化层
+	PhaseFields_ApiFormat  = "api_fields_format"
+	PhaseField_DBFormat    = Value_Layer_DBFormat // DB格式化层(scene insert,update,select 等场景归纳到DBFormat层，便于统一处理)
+
+	PhaseField_DBValidate = Value_Layer_DBValidate // DB验证层
+	//多字段步骤定义
+	PhaseFields_DBFormat = "api_fields_modify" // 修正所有列的时机  取代 CustomFieldsFn ValueFnFn func(_ any, f *Field, fs ...*Field),此时重点在于修正fs
+
+)
+
 var (
+	//todo layer 改成 Scope 作用域
 	//layer_order 确保层序,越靠前越先执行
 	layer_order               = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate, Value_Layer_DBFormat, Value_Layer_OnlyForData} // 层序,越靠前越先执行
 	Layer_all                 = layer_order
@@ -57,6 +75,7 @@ type ValueFn struct {
 	Fn          ValueFnFn
 	Order       int    // 执行顺序，越小越先执行
 	Layer       Layer  //Deprecated: 废弃，使用Tags代替
+	Phase       string // 阶段，指定函数在哪个阶段执行，比如：builder-构建阶段执行,running-传入数据后执行
 	Description string // 描述
 }
 
@@ -298,7 +317,9 @@ func Join(ds *goqu.SelectDataset, jionConfigs ...OnUnit) *goqu.SelectDataset {
 
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
-	Name string `json:"name"`
+	Name  string `json:"name"`
+	Value any    //增加原始值记录，和ValueFns 脱钩，后续ValueFns/WhereFns 合并使用pipeLine模式,对原始value 加工
+
 	//todo 后续迁移到tags(tag 分组名称为 value)
 	ValueFns ValueFns `json:"-"` // 增加error，方便封装字段验证规则
 	// 当值作为where条件时，调用该字段格式化值，该字段为nil则不作为where条件查询,没有error，验证需要在ValueFn 中进行,数组支持中间件添加转换函数，转换函数在field.GetWhereValue 统一执行
