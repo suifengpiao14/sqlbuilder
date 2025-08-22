@@ -485,6 +485,13 @@ func newColumnConfig(dbName, fieldName string) ColumnConfig {
 func NewColumn(dbFieldName string, field *Field) ColumnConfig {
 	return newColumnConfig(dbFieldName, field.Name).WithField(field).CopyFieldSchemaIfEmpty()
 }
+func NewColumns(dbFieldName string, fs ...*Field) ColumnConfigs {
+	cols := make([]ColumnConfig, 0)
+	for _, f := range fs {
+		cols = append(cols, newColumnConfig(dbFieldName, f.Name).WithField(f).CopyFieldSchemaIfEmpty())
+	}
+	return cols
+}
 
 // DbNameIsEmpty 字段DbName 为空，对数据表操作来说，是无效字段，但是业务层面封装的模型支持退化，比如keyvalue 模型正常2个字段，但是只保留key 也是常见模型，这是将value映射为""，即可实现key模型，于是诞生 了DbName 为空的数据，此函数协助过滤
 func (c ColumnConfig) DbNameIsEmpty() bool {
@@ -512,6 +519,14 @@ func (cs ColumnConfigs) Fields() (fs Fields) {
 		fs = append(fs, c.GetField())
 	}
 	return fs
+}
+
+func (cs ColumnConfigs) DBNames() (dbNames []string) {
+	for _, c := range cs {
+		dbNames = append(dbNames, c.DbName)
+	}
+	return dbNames
+
 }
 
 func (cs *ColumnConfigs) AddColumns(cols ...ColumnConfig) {
@@ -549,6 +564,28 @@ func (cs ColumnConfigs) WalkColumn(walkFn func(columnConfig ColumnConfig) Column
 	}
 }
 
+// CheckMissOutFieldName 检查缺失的字段名，如果有则返回错误。主要用于在封装模型时，检测必备字段是否存在
+func (cs ColumnConfigs) CheckMissOutFieldName(fieldNames ...string) (err error) {
+	for _, fieldName := range fieldNames {
+		_, exists := cs.GetByFieldName(fieldName)
+		if !exists {
+			err = errors.Errorf("ColumnConfig not found by fieldName: " + string(fieldName))
+			return err
+		}
+	}
+	return nil
+}
+
+// PanicMissFieldName package 封装模块时，用于检测模块内置的字段是否包含到提供的表配置中
+func PanicMissFieldName(tableConfig TableConfig, fieldNames ...string) {
+	err := tableConfig.Columns.CheckMissOutFieldName(fieldNames...)
+	if err != nil {
+		err = errors.WithMessagef(err, "table:%s;table.columnName:Field=1:N;use TableConfig.AddColumn(...) set it", tableConfig.Name)
+		panic(err)
+	}
+
+}
+
 func (cs ColumnConfigs) Merge(others ...ColumnConfig) ColumnConfigs {
 	//cs = append(cs, others...)
 	cs.AddColumns(others...) // 这里使用AddColumns，是为了支持同名覆盖
@@ -557,8 +594,8 @@ func (cs ColumnConfigs) Merge(others ...ColumnConfig) ColumnConfigs {
 
 // GetByFieldName  通过标识获取列配置信息，找不到则panic退出。主要用于生成字段时快速定位列配置信息。
 func (cs ColumnConfigs) GetByFieldNameMust(fieldName string) (c ColumnConfig) {
-	c, exists := cs.GetByFieldName(fieldName)
-	if !exists {
+	c, err := cs.GetByFieldNameAsError(fieldName)
+	if err != nil {
 		err := errors.Errorf("ColumnConfig not found by fieldName: " + string(fieldName))
 		panic(err)
 	}
@@ -595,7 +632,7 @@ func (cs ColumnConfigs) GetByFieldName(fieldName string) (c ColumnConfig, exists
 func (cs ColumnConfigs) GetByFieldNameAsError(fieldName string) (c ColumnConfig, err error) {
 	c, ok := cs.GetByFieldName(fieldName)
 	if !ok {
-		err = errors.Errorf("not found fieldName(%s) in Columns", fieldName)
+		err = errors.Errorf("not found fieldName(%s) in Columns(dbNames:%s)", fieldName, strings.Join(cs.DBNames(), ","))
 		return c, err
 	}
 	return c, nil
