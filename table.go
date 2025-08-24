@@ -600,14 +600,14 @@ func (cs ColumnConfigs) CheckMissOutFieldName(fieldNames ...string) (err error) 
 	return nil
 }
 
-// PanicMissFieldName package 封装模块时，用于检测模块内置的字段是否包含到提供的表配置中
-func PanicMissFieldName(tableConfig TableConfig, fieldNames ...string) {
-	err := tableConfig.Columns.CheckMissOutFieldName(fieldNames...)
+// CheckMissFieldName package 封装模块时，用于检测模块内置的字段是否包含到提供的表配置中
+func CheckMissFieldName(tableConfig TableConfig, fieldNames ...string) (err error) {
+	err = tableConfig.Columns.CheckMissOutFieldName(fieldNames...)
 	if err != nil {
 		err = errors.WithMessagef(err, "table:%s;table.columnName:Field=1:N;use TableConfig.AddColumn(...) set it", tableConfig.Name)
-		panic(err)
+		return err
 	}
-
+	return nil
 }
 
 func (cs ColumnConfigs) Merge(others ...ColumnConfig) ColumnConfigs {
