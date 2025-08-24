@@ -198,3 +198,10 @@ func TestPopFirstMain(t *testing.T) {
 	table, _ := on.Condition()
 	require.Equal(t, table2.AliasOrTableExpr(), table)
 }
+
+func TestAddAlias(t *testing.T) {
+	f := &sqlbuilder.Field{}
+	f2 := sqlbuilder.Field{}
+	fWithAlais := f.AppendAlias(&f2)
+	fmt.Println(fWithAlais.GetAlias())
+}

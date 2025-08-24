@@ -219,6 +219,10 @@ func (es *Enums) Sort() *Enums {
 	return es
 }
 
+func (es Enums) Copy() Enums {
+	return append(Enums{}, es...)
+}
+
 // append 排重后面再融入优化
 func (es *Enums) Append(enums ...Enum) {
 	exists := false

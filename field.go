@@ -338,6 +338,7 @@ type Field struct {
 	docName       string   //Deprecated 废弃，使用DBColumnName代替
 	selectColumns []any    // 查询时列
 	fieldName     string   //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
+	alias         Fields   // 别名字段,方便在查询时使用别名做为字段名
 	//todo 后续迁移到tags(tag 分组名称为 stage)
 	delayApplies ApplyFns // 延迟执行函数 在 xxx.ToSQL()中调用，在执行后才执行中间件(如在设置f.SetSelectColumns 时需要获取 f.Table().Columns 信息时，就需要延迟执行中间件)
 	//ddlSequence   int         // 生成ddl语句时排序字段，一般不用，在多字段联合唯一索引/主键 时 将多字段值拼接时会使用到
@@ -355,6 +356,14 @@ func (f Field) MakeDBColumnWithAlias(tableColumns ColumnConfigs) any {
 	col := tableColumns.GetByFieldNameMust(f.Name)
 	alias := goqu.I(col.DbName).As(f.Name)
 	return alias
+}
+
+func (f Field) AppendAlias(fs ...*Field) Field {
+	f.alias = append(f.alias, fs...)
+	return f
+}
+func (f Field) GetAlias() Fields {
+	return f.alias
 }
 
 type Index struct {

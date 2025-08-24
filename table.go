@@ -152,7 +152,19 @@ func (t TableConfig) isShardedTable() (isShardedTable bool) {
 }
 
 func (t TableConfig) AddColumns(columns ...ColumnConfig) TableConfig {
-	t.Columns.AddColumns(columns...)
+	allCols := make(ColumnConfigs, 0)
+	for _, c := range columns {
+		allCols = append(allCols, c)
+		if c.field != nil {
+			for _, aliaField := range c.field.alias {
+				aliaCol := c.Copy()
+				aliaCol.FieldName = aliaField.Name
+				aliaCol.field = aliaField
+				allCols = append(allCols, aliaCol)
+			}
+		}
+	}
+	t.Columns.AddColumns(allCols...)
 	return t
 }
 
@@ -406,6 +418,17 @@ func (c ColumnConfig) WithEnums(enums ...Enum) ColumnConfig {
 	c.Enums = Enums(enums)
 	return c
 }
+func (c ColumnConfig) Copy() ColumnConfig {
+	cp := c
+	if cp.field != nil {
+		cp.field = cp.field.Copy()
+	}
+	if c.Enums != nil {
+		cp.Enums = cp.Enums.Copy()
+
+	}
+	return cp
+}
 
 func (c ColumnConfig) CopyFieldSchemaIfEmpty() ColumnConfig {
 	if c.field == nil || c.field.Schema == nil {
@@ -483,6 +506,7 @@ func newColumnConfig(dbName, fieldName string) ColumnConfig {
 
 // NewColumn 新建列配置，用于封装模型时，将字段映射为数据库字段,使用*Field作为参数，能减少硬编码，减少硬编码带来的维护成本
 func NewColumn(dbFieldName string, field *Field) ColumnConfig {
+
 	return newColumnConfig(dbFieldName, field.Name).WithField(field).CopyFieldSchemaIfEmpty()
 }
 func NewColumns(dbFieldName string, fs ...*Field) ColumnConfigs {
