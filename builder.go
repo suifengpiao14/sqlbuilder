@@ -1276,6 +1276,7 @@ const (
 var setPolicy_need_insert_sql = []SetPolicy{SetPolicy_only_Insert, SetPolicy_Insert_or_Update, SetPolicy_Delete_and_insert}
 var setPolicy_need_update_sql = []SetPolicy{SetPolicy_only_Update, SetPolicy_Insert_or_Update}
 var setPolicy_need_delete_sql = []SetPolicy{SetPolicy_Delete_and_insert}
+var setPolicy_no_exits_sql = []SetPolicy{SetPolicy_only_Insert} // 指明只新增，不需要查询是否存在，直接新增
 
 type SetParam struct {
 	setPolicy             SetPolicy // 更新策略,默认根据主键判断是否需要更新
@@ -1338,12 +1339,14 @@ func (p SetParam) ToSQLV0() (existsSql string, insertSql string, updateSql strin
 
 func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string, deleteSql string, err error) {
 	table := p.GetTable()
-	existsSql, err = NewExistsBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL() // 有些根据场景设置 如枚举值 ""，所有需要复制
-	if errors.Is(err, ErrEmptyWhere) {                                                                                   //查询是否存在，没有where条件，说明需要直接insert 比如 id=0 时，此时不存在，直接新增即可
-		p.WithPolicy(SetPolicy_only_Insert) // 设置为只新增，避免其他报错
-		err = nil                           // 注意，这种情况会输出insertsql，existsSql 为空，所以只需existsSql是，需要判空
-
+	if !slices.Contains(setPolicy_no_exits_sql, p.setPolicy) { // 如果指定只新增则不需要查询是否存在
+		existsSql, err = NewExistsBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL() // 有些根据场景设置 如枚举值 ""，所有需要复制
+		if errors.Is(err, ErrEmptyWhere) {                                                                                   //查询是否存在，没有where条件，说明需要直接insert 比如 id=0 时，此时不存在，直接新增即可
+			p.WithPolicy(SetPolicy_only_Insert) // 设置为只新增，避免其他报错
+			err = nil                           // 注意，这种情况会输出insertsql，existsSql 为空，所以只需existsSql是，需要判空
+		}
 	}
+
 	if err != nil {
 		return "", "", "", "", err
 	}
