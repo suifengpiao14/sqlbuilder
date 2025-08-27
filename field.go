@@ -358,7 +358,7 @@ func (f Field) MakeDBColumnWithAlias(tableColumns ColumnConfigs) any {
 	return alias
 }
 
-func (f Field) AppendAlias(fs ...*Field) Field {
+func (f *Field) AddAlias(fs ...*Field) *Field {
 	f.alias = append(f.alias, fs...)
 	return f
 }
