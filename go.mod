@@ -10,6 +10,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/suifengpiao14/cache v0.0.10
 	github.com/suifengpiao14/funcs v0.0.25
+	github.com/suifengpiao14/memorytable v0.1.5
 	github.com/suifengpiao14/sshmysql v0.0.6
 	golang.org/x/sync v0.10.0
 	gorm.io/driver/mysql v1.5.7

@@ -13,6 +13,7 @@ import (
 	_ "github.com/doug-martin/goqu/v9/dialect/sqlite3"
 	"github.com/doug-martin/goqu/v9/exp"
 	"github.com/pkg/errors"
+	"github.com/suifengpiao14/memorytable"
 	_ "gorm.io/driver/mysql"
 	_ "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -1569,4 +1570,32 @@ func (p *SQLParam[T]) Log(sql string, args ...any) {
 	if p._log != nil {
 		p._log.Log(sql, args...)
 	}
+}
+
+type IdentityI interface {
+	GetIdentity() string
+}
+
+// SplitAddUpdateDelete 拆分新增、更新、删除数据，方便批量处理
+
+func SplitAddUpdateDelete[T IdentityI](newSet []T, oldSet []T) (addSet []T, updateSet []T, deleteSet []T) {
+	oldTable := memorytable.NewTable(oldSet...)
+	newTable := memorytable.NewTable(newSet...)
+
+	//取交集，即需要更新的行为
+	intersect, _ := newTable.Intersection(oldTable, func(row T) string {
+		return row.GetIdentity()
+	})
+	updateTaskBehaviors, _ := intersect.ToSliceWithEmpty()
+
+	//取差集，在新集合内，不在旧集合内的数据即为需要新增的数据
+	addTaskBehaviors, _ := newTable.Diff(oldTable, func(row T) string {
+		return row.GetIdentity()
+	}).ToSliceWithEmpty()
+
+	// 取差集，在旧集合内，不在新集合内的数据即为需要删除的数据
+	deleteTaskBehaviors, _ := newTable.Diff(oldTable, func(row T) string {
+		return row.GetIdentity()
+	}).ToSliceWithEmpty()
+	return addTaskBehaviors, updateTaskBehaviors, deleteTaskBehaviors
 }
