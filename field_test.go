@@ -202,6 +202,6 @@ func TestPopFirstMain(t *testing.T) {
 func TestAddAlias(t *testing.T) {
 	f := &sqlbuilder.Field{}
 	f2 := sqlbuilder.Field{}
-	fWithAlais := f.AppendAlias(&f2)
+	fWithAlais := f.AddAlias(&f2)
 	fmt.Println(fWithAlais.GetAlias())
 }
