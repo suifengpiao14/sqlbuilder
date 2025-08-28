@@ -16,6 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 	"github.com/suifengpiao14/funcs"
+	"github.com/suifengpiao14/memorytable"
 )
 
 type Layer string
@@ -914,6 +915,9 @@ func (f *Field) SetRequired(required bool) *Field {
 	}
 	f.Schema.Required = required // 此处 requied 可以为false,通过MergerSchema 达不到效果
 	return f
+}
+func (f *Field) IsRequired() bool {
+	return f.Schema != nil && f.Schema.Required
 }
 func (f *Field) SetAllowZero(zeroAsEmpty bool) *Field {
 	if f.Schema == nil {
@@ -1887,6 +1891,29 @@ func (fs Fields) Select() (columns []any) {
 		columns = append(columns, f.Select()...)
 	}
 	return columns
+}
+
+// Intersection 交集，多用于模型封装时求表字段交集
+func (fs Fields) Intersection(assistant Fields) (intersection Fields) {
+	primaryTable := memorytable.NewTable(fs...)
+	assistantTable := memorytable.NewTable(assistant...)
+	out, _ := primaryTable.Intersection(assistantTable, func(row *Field) string {
+		return row.Name
+	})
+	intersection, _ = out.ToSliceWithEmpty()
+	return intersection
+}
+
+// SplitRequired 区分必填和非必填字段，模型封装时分离出非必要字段和表字段求交集,必填字段不能缺失
+func (fs Fields) SplitRequired() (requiredFields, nonRequiredFields Fields) {
+	for _, f := range fs {
+		if f.IsRequired() {
+			requiredFields = append(requiredFields, f)
+		} else {
+			nonRequiredFields = append(nonRequiredFields, f)
+		}
+	}
+	return requiredFields, nonRequiredFields
 }
 
 func (fs Fields) Pagination() (index uint, size uint) {
