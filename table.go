@@ -713,3 +713,31 @@ func Slice2Any[T any](arr []T) (out []any) {
 	}
 	return out
 }
+
+type SelectColumnsFieldI interface {
+	GetSelectColumnsFields() Fields
+}
+
+func SafeGetSelectColumns(table TableConfig, in SelectColumnsFieldI) []any {
+	all := []any{"*"}
+	if in == nil {
+		return all
+	}
+	selectColumnFields := in.GetSelectColumnsFields()
+	if len(selectColumnFields) == 0 {
+		return all
+	}
+	columns := table.Columns.FilterByFieldName(selectColumnFields.Names()...).DbNameWithAlias().AsAny()
+	return columns
+}
+
+type ModelWithgSelectColumnsField struct {
+	selectColumnsFields Fields
+}
+
+func (m *ModelWithgSelectColumnsField) SetSelectColumnsFields(fs ...*Field) {
+	m.selectColumnsFields = fs
+}
+func (m *ModelWithgSelectColumnsField) GetSelectColumnsFields() Fields {
+	return m.selectColumnsFields
+}
