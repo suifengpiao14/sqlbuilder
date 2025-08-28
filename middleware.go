@@ -65,6 +65,14 @@ func (sis *SceneFns) Append(sceneFns ...SceneFn) {
 
 }
 
+var ValueFnCount ValueFn = ValueFn{
+	Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
+		val := goqu.L(fmt.Sprintf("count(%s)", goqu.I(f.DBColumnName().FullName())))
+		return val, nil
+	},
+	Layer: Value_Layer_DBFormat,
+}
+
 // ApplyFnIncrease 字段值递增中间件
 // Deprecated: 请使用 ValueFnIncrease
 var ApplyFnIncrease ApplyFn = func(f *Field, fs ...*Field) {
