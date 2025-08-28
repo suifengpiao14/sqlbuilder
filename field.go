@@ -1734,6 +1734,9 @@ func NewFields(fs ...*Field) Fields {
 func (fs Fields) Fields() Fields {
 	return fs
 }
+func (fs Fields) IsEmpty() bool {
+	return len(fs) == 0
+}
 
 func (fs Fields) FirstMust() *Field {
 	if len(fs) == 0 {
@@ -1902,6 +1905,12 @@ func (fs Fields) Intersection(assistant Fields) (intersection Fields) {
 	})
 	intersection, _ = out.ToSliceWithEmpty()
 	return intersection
+}
+func (fs Fields) IntersectionUnionRequired(assistant Fields) (IntersectionUnionRequired Fields) {
+	requiredFields, nonRequiredFields := fs.SplitRequired()
+	intersection := nonRequiredFields.Intersection(assistant)
+	IntersectionUnionRequired = requiredFields.Add(intersection...)
+	return IntersectionUnionRequired
 }
 
 // SplitRequired 区分必填和非必填字段，模型封装时分离出非必要字段和表字段求交集,必填字段不能缺失
