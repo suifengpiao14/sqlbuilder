@@ -27,3 +27,8 @@ func TestMysqlRealEscapeString(t *testing.T) {
 	})
 
 }
+
+func TestNilSlice(t *testing.T) {
+	var a []string
+	fmt.Println(len(a))
+}

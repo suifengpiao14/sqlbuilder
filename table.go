@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -671,6 +672,9 @@ func (cs ColumnConfigs) GetByDbName(dbName string) (c ColumnConfig, exists bool)
 }
 
 func (cs ColumnConfigs) FilterByFieldName(fieldNames ...string) (result ColumnConfigs) {
+	if len(fieldNames) == 0 {
+		return result
+	}
 	for _, c := range cs {
 		if slices.Contains(fieldNames, c.FieldName) {
 			result.AddColumns(c)
@@ -714,22 +718,32 @@ func Slice2Any[T any](arr []T) (out []any) {
 	return out
 }
 
-type _SelectColumnsFieldI interface {
-	GetSelectColumnsFields() Fields
-}
-
 func SafeGetSelectColumns(table TableConfig, in any) (columns []any) {
 	all := []any{"*"}
 	if in == nil {
 		return all
 	}
-	if in, ok := in.(_SelectColumnsFieldI); ok {
-		selectColumnFields := in.GetSelectColumnsFields()
-		if len(selectColumnFields) == 0 {
+
+	rt := reflect.TypeOf(in)
+	// 归约到基础类型
+	for rt.Kind() == reflect.Ptr || rt.Kind() == reflect.Slice {
+		rt = rt.Elem()
+	}
+
+	// 优先尝试 User 零值
+	var fieldsI FieldsI
+	var ok bool
+	zeroRv := reflect.New(rt)
+	fieldsI, ok = zeroRv.Interface().(FieldsI) // 尝试 *User 零值
+	if !ok {
+		fieldsI, ok = zeroRv.Elem().Interface().(FieldsI) // 尝试 User 零值
+	}
+	if ok {
+		fs := fieldsI.Fields()
+		columns = table.Columns.FilterByFieldName(fs.Names()...).DbNameWithAlias().AsAny()
+		if len(columns) == 0 {
 			return all
 		}
-		columns = table.Columns.FilterByFieldName(selectColumnFields.Names()...).DbNameWithAlias().AsAny()
-		return columns
 	}
 	return all
 }
