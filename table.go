@@ -748,13 +748,13 @@ func SafeGetSelectColumns(table TableConfig, in any) (columns []any) {
 	return all
 }
 
-type ModelWithgSelectColumnsField struct {
+type ModelWithFields struct {
 	selectColumnsFields Fields
 }
 
-func (m *ModelWithgSelectColumnsField) SetSelectColumnsFields(fs ...*Field) {
+func (m *ModelWithFields) SetFields(fs ...*Field) {
 	m.selectColumnsFields = fs
 }
-func (m *ModelWithgSelectColumnsField) GetSelectColumnsFields() Fields {
+func (m *ModelWithFields) Fields() Fields {
 	return m.selectColumnsFields
 }
