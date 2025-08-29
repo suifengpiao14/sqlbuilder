@@ -714,7 +714,7 @@ func Slice2Any[T any](arr []T) (out []any) {
 	return out
 }
 
-type SelectColumnsFieldI interface {
+type _SelectColumnsFieldI interface {
 	GetSelectColumnsFields() Fields
 }
 
@@ -723,7 +723,7 @@ func SafeGetSelectColumns(table TableConfig, in any) (columns []any) {
 	if in == nil {
 		return all
 	}
-	if in, ok := in.(SelectColumnsFieldI); ok {
+	if in, ok := in.(_SelectColumnsFieldI); ok {
 		selectColumnFields := in.GetSelectColumnsFields()
 		if len(selectColumnFields) == 0 {
 			return all
