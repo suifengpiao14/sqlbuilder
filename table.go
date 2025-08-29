@@ -718,17 +718,20 @@ type SelectColumnsFieldI interface {
 	GetSelectColumnsFields() Fields
 }
 
-func SafeGetSelectColumns(table TableConfig, in SelectColumnsFieldI) []any {
+func SafeGetSelectColumns(table TableConfig, in any) (columns []any) {
 	all := []any{"*"}
 	if in == nil {
 		return all
 	}
-	selectColumnFields := in.GetSelectColumnsFields()
-	if len(selectColumnFields) == 0 {
-		return all
+	if in, ok := in.(SelectColumnsFieldI); ok {
+		selectColumnFields := in.GetSelectColumnsFields()
+		if len(selectColumnFields) == 0 {
+			return all
+		}
+		columns = table.Columns.FilterByFieldName(selectColumnFields.Names()...).DbNameWithAlias().AsAny()
+		return columns
 	}
-	columns := table.Columns.FilterByFieldName(selectColumnFields.Names()...).DbNameWithAlias().AsAny()
-	return columns
+	return all
 }
 
 type ModelWithgSelectColumnsField struct {
