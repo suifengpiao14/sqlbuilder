@@ -338,6 +338,7 @@ type Field struct {
 	dbName        string   //Deprecated 废弃，使用DBColumnName代替
 	docName       string   //Deprecated 废弃，使用DBColumnName代替
 	selectColumns []any    // 查询时列
+	countColumns  []any    // 统计时列
 	fieldName     string   //列名称,方便通过列名称找到列,列名称根据业务取名,比如NewDeletedAtField 取名 deletedAt
 	alias         Fields   // 别名字段,方便在查询时使用别名做为字段名
 	//todo 后续迁移到tags(tag 分组名称为 stage)
@@ -347,6 +348,21 @@ type Field struct {
 	//indexs        Indexs // 索引(索引跟表走，不在领域语言上)
 	//applyFns      ApplyFns // apply 必须当场执行，因为存在apply函数嵌套apply函数,
 }
+
+const (
+	/*
+			使用select 列表语句作为计数列
+			案例
+			SELECT COUNT(*) AS `count` FROM (
+		    SELECT DISTINCT t_xian_yu_product_map.*
+		    FROM t_xian_yu_product_map
+		    LEFT JOIN t_xian_yu_product_scene_state
+		        ON t_xian_yu_product_map.Fxy_spu_id = t_xian_yu_product_scene_state.Fxy_spu_id
+		    WHERE t_xian_yu_product_map.Fdelete_flag = 0
+		) AS sub;
+	*/
+	CountColumns_use_select_sql = "countColumns_select_sql" // 使用select 列表语句作为计数列（）
+)
 
 func (f Field) Fields() Fields {
 	return Fields{&f}
@@ -758,7 +774,8 @@ func ColumnToString(col any) string {
 // 	return s
 // }
 
-func (f *Field) SetSelectColumns(columns ...any) *Field {
+func formatSelectColumns(columns []any) (formatedColumns []any) {
+	formatedColumns = make([]any, 0)
 	//colMap := make(map[any]struct{}, 0)// 并非所有类型都可以作为map的key(runtime error: hash of unhashable type exp.sqlFunctionExpression)，此处使用string 作为key 更安全
 	colMap := make(map[string]struct{}, 0)
 	for _, col := range columns { // 保持稳定顺序
@@ -768,14 +785,29 @@ func (f *Field) SetSelectColumns(columns ...any) *Field {
 		key := fmt.Sprint(col)
 		if _, ok := colMap[key]; !ok { // 去重
 			colMap[key] = struct{}{}
-			f.selectColumns = append(f.selectColumns, col)
+			formatedColumns = append(formatedColumns, col)
 		}
 	}
+	return formatedColumns
+}
+
+func (f *Field) SetSelectColumns(columns ...any) *Field {
+	columns = formatSelectColumns(columns)
+	f.selectColumns = append(f.selectColumns, columns...)
+	return f
+}
+
+func (f *Field) SetCountColumns(columns ...any) *Field {
+	columns = formatSelectColumns(columns)
+	f.countColumns = append(f.countColumns, columns...)
 	return f
 }
 
 func (f *Field) Select() (columns []any) {
 	return f.selectColumns
+}
+func (f *Field) CountColumn() (columns []any) {
+	return f.countColumns
 }
 
 func (f *Field) SetName(name string) *Field {
@@ -1028,6 +1060,9 @@ func (f *Field) Combine(combinedFields ...*Field) *Field {
 		}
 		if len(f.selectColumns) == 0 {
 			f.selectColumns = combined.selectColumns
+		}
+		if len(f.countColumns) == 0 {
+			f.countColumns = combined.countColumns
 		}
 		// f.indexs.Append(combined.indexs...)
 		// if f.fieldName == "" {
@@ -1896,6 +1931,15 @@ func (fs Fields) Select() (columns []any) {
 	return columns
 }
 
+// CountColumn 统计字段，select count(xxx) 时使用,有时候需要 select count(distinct xxx) 时使用,此时需要使用CountColumn()方法
+func (fs Fields) CountColumn() (columns []any) {
+	columns = make([]any, 0)
+	for _, f := range fs {
+		columns = append(columns, f.CountColumn()...)
+	}
+	return columns
+}
+
 // Intersection 交集，多用于模型封装时求表字段交集
 func (fs Fields) Intersection(assistant Fields) (intersection Fields) {
 	primaryTable := memorytable.NewTable(fs...)
@@ -1938,6 +1982,17 @@ func (fs Fields) Pagination() (index uint, size uint) {
 	index, size = max(index, 0), max(size, 0)
 	return index, size
 }
+func (fs Fields) RemovePagination() Fields {
+	withoutPaginationFields := Fields{}
+	for _, f := range fs.Copy() {
+		if f.HastTag(Field_tag_pageIndex) || f.HastTag(Field_tag_pageSize) {
+			continue
+		}
+		withoutPaginationFields = append(withoutPaginationFields, f)
+	}
+	return withoutPaginationFields
+}
+
 func (fs Fields) DeletedAt() (f *Field, err error) {
 	f, ok := fs.GetByFieldName(Field_name_deletedAt)
 	if !ok {

@@ -920,14 +920,14 @@ func NewListBuilder(tableConfig TableConfig) *ListParam {
 	return p
 }
 
-func (p ListParam) ToSQL() (sql string, err error) {
+func (p ListParam) MakeSelectDataset() (ds *goqu.SelectDataset, err error) {
 	tableConfig := p.GetTable()
 	fs := p._Fields.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	errWithMsg := fmt.Sprintf("ListParam.ToSQL(),table:%s", tableConfig.Name)
 	where, err := fs.Where()
 	if err != nil {
 		err = errors.WithMessage(err, errWithMsg)
-		return "", err
+		return nil, err
 	}
 	pageIndex, pageSize := fs.Pagination()
 	ofsset := max(pageIndex*pageSize, 0)
@@ -946,7 +946,7 @@ func (p ListParam) ToSQL() (sql string, err error) {
 		}
 	}
 
-	ds := p.GetGoquDialect().Select(selec...).
+	ds = p.GetGoquDialect().Select(selec...).
 		From(tableConfig.AliasOrTableExpr()).
 		Where(where...).
 		Order(order...)
@@ -955,8 +955,17 @@ func (p ListParam) ToSQL() (sql string, err error) {
 		ds = ds.Offset(uint(ofsset)).Limit(uint(pageSize))
 	}
 	ds = p.builderFns.Apply(ds)
+	return ds, nil
+}
+func (p ListParam) ToSQL() (sql string, err error) {
+	ds, err := p.MakeSelectDataset()
+	if err != nil {
+		return "", err
+	}
 	sql, _, err = ds.ToSQL()
 	if err != nil {
+		tableConfig := p.GetTable()
+		errWithMsg := fmt.Sprintf("ListParam.ToSQL(),table:%s", tableConfig.Name)
 		err = errors.WithMessage(err, errWithMsg)
 		return "", err
 	}
@@ -1155,7 +1164,32 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 		From(tableConfig.AliasOrTableExpr()).
 		Where(where...)
 	ds = p.builderFns.Apply(ds)
-	ds = ds.Select(goqu.COUNT(goqu.Star()).As("count")) // 确保select 部分固定
+	var countColumn any = goqu.Star()
+	countColumns := fs.CountColumn()
+	if len(countColumns) > 0 { // 使用自定义计数列
+		countColumn = countColumns[0] // 此处只取第一个，设置多个，第二个及以后的计数列将被忽略
+		if countColumnStr, ok := countColumn.(string); ok && countColumnStr == CountColumns_use_select_sql {
+			/*
+				实现如下案例
+								SELECT COUNT(*) AS `count`
+					FROM (
+					    SELECT DISTINCT t_xian_yu_product_map.*
+					    FROM t_xian_yu_product_map
+					    LEFT JOIN t_xian_yu_product_scene_state
+					        ON t_xian_yu_product_map.Fxy_spu_id = t_xian_yu_product_scene_state.Fxy_spu_id
+					    WHERE t_xian_yu_product_map.Fdelete_flag = 0
+					) AS sub;
+			*/
+			fs := p._Fields.RemovePagination() // 复制并移除分页信息
+			subQuery, err := NewListBuilder(tableConfig).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(fs...).WithBuilderFns(p.builderFns...).MakeSelectDataset()
+			if err != nil {
+				return "", err
+			}
+			ds = p.GetGoquDialect().From(subQuery.As("sub")) // 重新生成ds
+			countColumn = goqu.Star()                        //设置常规化
+		}
+	}
+	ds = ds.Select(goqu.COUNT(countColumn).As("count")) // 确保select 部分固定
 	sql, _, err = ds.ToSQL()
 	if err != nil {
 		err = errors.WithMessage(err, errWithMsg)
@@ -1176,10 +1210,13 @@ func (p TotalParam) Count() (total int64, err error) {
 type PaginationParam struct {
 	builderFns SelectBuilderFns
 	SQLParam[PaginationParam]
+	countColumns []any
 }
 
 func NewPaginationBuilder(tableConfig TableConfig) *PaginationParam {
-	p := &PaginationParam{}
+	p := &PaginationParam{
+		countColumns: make([]any, 0),
+	}
 	p.SQLParam = NewSQLParam(p, tableConfig)
 	return p
 }
