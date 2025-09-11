@@ -937,8 +937,10 @@ func (p ListParam) ToSQL() (sql string, err error) {
 	if len(order) == 0 { // 没有排序字段,则默认按主键降序排列
 		primary, exists := p.GetTable().Indexs.GetPrimary()
 		if exists {
+			table := p.GetTable()
 			for _, columnName := range primary.ColumnNames(p.GetTable().Columns) {
-				subOrder := goqu.I(columnName).Asc()
+				fullName := fmt.Sprintf("%s.%s", table.BaseName(), columnName) // 增加表名，避免jion查询多表字段冲突
+				subOrder := goqu.I(fullName).Asc()
 				order = append(order, subOrder)
 			}
 		}
