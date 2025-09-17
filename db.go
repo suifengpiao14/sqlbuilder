@@ -35,6 +35,17 @@ var GetDB func() *sql.DB = sync.OnceValue(func() (db *sql.DB) {
 	return db
 })
 
+func GetMysqlDB(dsn string) func() *sql.DB {
+	return sync.OnceValue(func() *sql.DB {
+		sqlDB, err := sql.Open(string(Driver_mysql), dsn)
+		if err != nil {
+			panic(err)
+		}
+		listenForExitSignal(sqlDB)
+		return sqlDB
+	})
+}
+
 type DBConfig struct {
 	UserName     string
 	Password     string
@@ -60,17 +71,7 @@ func (dbConfig DBConfig) DSN() string {
 	)
 }
 
-func MakeMysqlDB(dsn string) func() *sql.DB {
-	return sync.OnceValue(func() *sql.DB {
-		sqlDB, err := sql.Open(string(Driver_mysql), dsn)
-		if err != nil {
-			panic(err)
-		}
-		listenForExitSignal(sqlDB)
-		return sqlDB
-	})
-}
-func MakeMysqlDBWithConfig(dbConfig DBConfig) func() *sql.DB {
+func GetMysqlDBWithConfig(dbConfig DBConfig) func() *sql.DB {
 	return sync.OnceValue(func() *sql.DB {
 		dsn := dbConfig.DSN()
 		if dbConfig.SSHConfig != nil {
@@ -79,10 +80,11 @@ func MakeMysqlDBWithConfig(dbConfig DBConfig) func() *sql.DB {
 				panic(err)
 			}
 		}
-		return MakeMysqlDB(dsn)()
+		return GetMysqlDB(dsn)()
 	})
 }
 
+// DB2Gorm 将sql.DB转为gorm.DB
 func DB2Gorm(sqlDBFn func() *sql.DB, gormConfig *gorm.Config) func() *gorm.DB {
 	return sync.OnceValue(func() *gorm.DB {
 		if gormConfig == nil {
