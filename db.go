@@ -61,20 +61,45 @@ type DBConfig struct {
 	SSHConfig    *sshmysql.SSHConfig
 }
 
-func GormDBMakeMysqlWithDSN(dsn string, gormConfig *gorm.Config) func() *gorm.DB {
-	return GormDBMakeMysqlFn(func() *sql.DB {
+func (dbConfig DBConfig) DSN() string {
+	if dbConfig.QueryParams == "" {
+		dbConfig.QueryParams = "charset=utf8mb4&parseTime=False&timeout=300s&loc=Local"
+	}
+	return fmt.Sprintf(
+		"%s:%s@tcp(%s:%d)/%s?%s",
+		dbConfig.UserName,
+		dbConfig.Password,
+		dbConfig.Host,
+		dbConfig.Port,
+		dbConfig.DatabaseName,
+		dbConfig.QueryParams,
+	)
+}
+
+func MakeMysqlDB(dsn string) func() *sql.DB {
+	return sync.OnceValue(func() *sql.DB {
 		sqlDB, err := sql.Open(string(Driver_mysql), dsn)
 		if err != nil {
 			panic(err)
 		}
+		listenForExitSignal(sqlDB)
 		return sqlDB
-	}, gormConfig)
+	})
+}
+func MakeMysqlDBWithConfig(dbConfig DBConfig) func() *sql.DB {
+	return sync.OnceValue(func() *sql.DB {
+		dsn := dbConfig.DSN()
+		if dbConfig.SSHConfig != nil {
+			err := dbConfig.SSHConfig.RegisterNetwork(dsn)
+			if err != nil {
+				panic(err)
+			}
+		}
+		return MakeMysqlDB(dsn)()
+	})
 }
 
-func GormDBMakeMysqlFn(sqlDBFn func() *sql.DB, gormConfig *gorm.Config) func() *gorm.DB {
-	if gormConfig == nil {
-		gormConfig = &gorm.Config{}
-	}
+func DB2Gorm(sqlDBFn func() *sql.DB, gormConfig *gorm.Config) func() *gorm.DB {
 	return sync.OnceValue(func() *gorm.DB {
 		sqlDB := sqlDBFn()
 		dialector := mysql.New(mysql.Config{Conn: sqlDB})
@@ -82,53 +107,17 @@ func GormDBMakeMysqlFn(sqlDBFn func() *sql.DB, gormConfig *gorm.Config) func() *
 		if err != nil {
 			panic(err)
 		}
-		listenForExitSignal(gormDB)
 		return gormDB
 	})
 }
 
-// GormDBMakeMysql 生成一个gorm.DB的工厂方法，该方法只会执行一次，后续调用直接返回第一次生成的db实例。该方法返回的结果需要保存到变量里面，不然还是会被重新生成。多个mysq 连接实例，可以分别调用后保存到变量
-func GormDBMakeMysql(dbConfig DBConfig, gormConfig *gorm.Config) func() *gorm.DB {
-	return GormDBMakeMysqlFn(func() *sql.DB {
-		if dbConfig.QueryParams == "" {
-			dbConfig.QueryParams = "charset=utf8mb4&parseTime=False&timeout=300s&loc=Local"
-		}
-		dsn := fmt.Sprintf(
-			"%s:%s@tcp(%s:%d)/%s?%s",
-			dbConfig.UserName,
-			dbConfig.Password,
-			dbConfig.Host,
-			dbConfig.Port,
-			dbConfig.DatabaseName,
-			dbConfig.QueryParams,
-		)
-		var sqlDB *sql.DB
-		var err error
-
-		if dbConfig.SSHConfig != nil {
-			sqlDB, err = dbConfig.SSHConfig.Tunnel(dsn)
-			if err != nil {
-				panic(err)
-			}
-			return sqlDB
-		}
-
-		sqlDB, err = sql.Open(string(Driver_mysql), dsn)
-		if err != nil {
-			panic(err)
-		}
-		return sqlDB
-	}, gormConfig)
-}
-
-func listenForExitSignal(gormDB *gorm.DB) {
+func listenForExitSignal(db *sql.DB) {
 	go func() {
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 
 		sig := <-c
 		log.Printf("[DB] received signal: %s, closing db connections...", sig)
-		db, _ := gormDB.DB()
 		if db != nil {
 			db.Close()
 		}
