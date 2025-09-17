@@ -46,31 +46,6 @@ func GetMysqlDB(dsn string) func() *sql.DB {
 	})
 }
 
-type DBConfig struct {
-	UserName     string
-	Password     string
-	Host         string
-	Port         int
-	DatabaseName string
-	QueryParams  string
-	SSHConfig    *sshmysql.SSHConfig
-}
-
-func (dbConfig DBConfig) DSN() string {
-	if dbConfig.QueryParams == "" {
-		dbConfig.QueryParams = "charset=utf8mb4&parseTime=False&timeout=300s&loc=Local"
-	}
-	return fmt.Sprintf(
-		"%s:%s@tcp(%s:%d)/%s?%s",
-		dbConfig.UserName,
-		dbConfig.Password,
-		dbConfig.Host,
-		dbConfig.Port,
-		dbConfig.DatabaseName,
-		dbConfig.QueryParams,
-	)
-}
-
 func GetMysqlDBWithConfig(dbConfig DBConfig) func() *sql.DB {
 	return sync.OnceValue(func() *sql.DB {
 		dsn := dbConfig.DSN()
@@ -98,6 +73,31 @@ func DB2Gorm(sqlDBFn func() *sql.DB, gormConfig *gorm.Config) func() *gorm.DB {
 		}
 		return gormDB
 	})
+}
+
+type DBConfig struct {
+	UserName     string
+	Password     string
+	Host         string
+	Port         int
+	DatabaseName string
+	QueryParams  string
+	SSHConfig    *sshmysql.SSHConfig
+}
+
+func (dbConfig DBConfig) DSN() string {
+	if dbConfig.QueryParams == "" {
+		dbConfig.QueryParams = "charset=utf8mb4&parseTime=False&timeout=300s&loc=Local"
+	}
+	return fmt.Sprintf(
+		"%s:%s@tcp(%s:%d)/%s?%s",
+		dbConfig.UserName,
+		dbConfig.Password,
+		dbConfig.Host,
+		dbConfig.Port,
+		dbConfig.DatabaseName,
+		dbConfig.QueryParams,
+	)
 }
 
 func listenForExitSignal(db *sql.DB) {
