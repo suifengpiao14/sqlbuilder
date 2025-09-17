@@ -19,7 +19,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/suifengpiao14/sshmysql"
 	"gorm.io/driver/mysql"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -30,21 +29,6 @@ var DriverName = Driver_sqlite3
 // Deprecated: use GormDBForSqlite3
 var GetDB func() *sql.DB = sync.OnceValue(func() (db *sql.DB) {
 	db, err := sql.Open(Driver_sqlite3.String(), "sqlbuilder_example.db")
-	if err != nil {
-		panic(err)
-	}
-	return db
-})
-
-var GormDBForSqlite3 func() *gorm.DB = sync.OnceValue(func() (db *gorm.DB) {
-	var dialector gorm.Dialector
-	var err error
-	sqlDB, err := sql.Open(Driver_sqlite3.String(), "sqlbuilder_example.db")
-	if err != nil {
-		panic(err)
-	}
-	dialector = sqlite.Dialector{Conn: sqlDB}
-	db, err = gorm.Open(dialector, &gorm.Config{})
 	if err != nil {
 		panic(err)
 	}
@@ -101,6 +85,9 @@ func MakeMysqlDBWithConfig(dbConfig DBConfig) func() *sql.DB {
 
 func DB2Gorm(sqlDBFn func() *sql.DB, gormConfig *gorm.Config) func() *gorm.DB {
 	return sync.OnceValue(func() *gorm.DB {
+		if gormConfig == nil {
+			gormConfig = &gorm.Config{}
+		}
 		sqlDB := sqlDBFn()
 		dialector := mysql.New(mysql.Config{Conn: sqlDB})
 		gormDB, err := gorm.Open(dialector, gormConfig)
