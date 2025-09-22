@@ -35,28 +35,33 @@ var GetDB func() *sql.DB = sync.OnceValue(func() (db *sql.DB) {
 	return db
 })
 
-func GetMysqlDB(dsn string) func() *sql.DB {
+func DBHandler2Singleton(sqlDBFn func() *sql.DB) func() *sql.DB {
 	return sync.OnceValue(func() *sql.DB {
+		sqlDB := sqlDBFn()
+		return sqlDB
+	})
+}
+
+func GetMysqlDB(dsn string) func() *sql.DB {
+	return func() *sql.DB {
 		sqlDB, err := sql.Open(string(Driver_mysql), dsn)
 		if err != nil {
 			panic(err)
 		}
 		listenForExitSignal(sqlDB)
 		return sqlDB
-	})
+	}
 }
 
 func GetMysqlDBWithConfig(dbConfig DBConfig) func() *sql.DB {
-	return sync.OnceValue(func() *sql.DB {
-		dsn := dbConfig.DSN()
-		if dbConfig.SSHConfig != nil {
-			err := dbConfig.SSHConfig.RegisterNetwork(dsn)
-			if err != nil {
-				panic(err)
-			}
+	dsn := dbConfig.DSN()
+	if dbConfig.SSHConfig != nil {
+		err := dbConfig.SSHConfig.RegisterNetwork(dsn)
+		if err != nil {
+			panic(err)
 		}
-		return GetMysqlDB(dsn)()
-	})
+	}
+	return GetMysqlDB(dsn)
 }
 
 // DB2Gorm 将sql.DB转为gorm.DB
