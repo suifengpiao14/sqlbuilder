@@ -381,6 +381,10 @@ func (c ColumnConfig) WithType(dbColType SchemaType) ColumnConfig {
 	c.Type = dbColType
 	return c
 }
+func (c ColumnConfig) Identity() string {
+	key := fmt.Sprintf("%s_%s", c.DbName, c.FieldName)
+	return key
+}
 func (c ColumnConfig) WithLength(length int) ColumnConfig {
 	c.Length = length
 	return c
@@ -562,7 +566,18 @@ func (cs *ColumnConfigs) AddColumns(cols ...ColumnConfig) {
 	if *cs == nil {
 		*cs = make([]ColumnConfig, 0)
 	}
-	*cs = append(*cs, cols...)
+	m := make(map[string]struct{})
+	for _, c := range *cs {
+		key := c.Identity()
+		m[key] = struct{}{}
+	}
+	for _, c := range cols {
+		key := c.Identity()
+		if _, exists := m[key]; !exists {
+			m[key] = struct{}{}
+			*cs = append(*cs, c)
+		}
+	}
 }
 
 // Uniqueue 去重,同名覆盖（保留最后设置）,由于预先写模型时，fieldName 是固定的，dbName是后期根据业务定义的，所以这里支持fieldName覆盖
