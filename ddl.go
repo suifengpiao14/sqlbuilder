@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
+	"github.com/suifengpiao14/funcs"
 )
 
 var (
@@ -210,7 +211,8 @@ func Column2DDLMysql(col ColumnConfig) (ddl string) {
 	notNil := ""
 	comment := ""
 	if col.Comment != "" {
-		comment = fmt.Sprintf(`COMMENT "%s"`, col.Comment)
+		com := funcs.Addslashes(col.Comment)
+		comment = fmt.Sprintf(`COMMENT "%s"`, com)
 	}
 	defaul := col.Default
 
@@ -278,7 +280,7 @@ func Column2DDLMysql(col ColumnConfig) (ddl string) {
 	if defaul != nil {
 		notNil = " not null "
 	}
-	ddl = fmt.Sprintf("%s %s %s %s %s %s", col.DbName, typ, notNil, autoIncrement, defaulStr, comment)
+	ddl = fmt.Sprintf("`%s` %s %s %s %s %s", col.DbName, typ, notNil, autoIncrement, defaulStr, comment)
 	return ddl
 }
 
