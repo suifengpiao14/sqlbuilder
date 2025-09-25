@@ -69,15 +69,14 @@ func MakeColumnsAndIndexs(driver Driver, table TableConfig) (lines []string, err
 	arr := make([]string, 0)
 	switch driver {
 	case Driver_mysql:
-		primary, exists := table.Indexs.GetPrimary()
-		if !exists {
-			primary = &Index{IsPrimary: true}
+		primary, _ := table.Indexs.GetPrimary()
+		var primaryCols []string
+		if primary != nil && primary.ColumnNames != nil {
+			primaryCols = primary.ColumnNames(table.Columns)
 		}
 		for _, col := range table.Columns {
-			primaryCols := primary.ColumnNames(table.Columns)
 			if len(primaryCols) == 1 && slices.Contains(primaryCols, col.DbName) && col.Type.IsInt() {
 				col.AutoIncrement = true //整型主键自动增长
-
 			}
 			col = col.CopyFieldSchemaIfEmpty()
 			ddl := Column2DDLMysql(col)
