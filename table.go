@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -166,6 +167,10 @@ func (t TableConfig) AddColumns(columns ...ColumnConfig) TableConfig {
 		}
 	}
 	t.Columns.AddColumns(allCols...)
+	return t
+}
+func (t TableConfig) InitDDLSort() TableConfig {
+	t.Columns = t.Columns.InitDDLSort()
 	return t
 }
 
@@ -374,7 +379,18 @@ type ColumnConfig struct {
 	Comment       string     `json:"comment"`
 	Enums         Enums      `json:"enums"`
 	Tags          Tags       `json:"tags"`
+	ddlSort       int        //DDL 排序位置，用于DDL生成顺序(before xxx,after xxx xxx 代表字段，last 代表最后，first 代表最前)
 	field         *Field
+}
+
+const (
+	DDLSort_First = math.MinInt
+	DDLSort_Last  = math.MaxInt
+)
+
+func (c ColumnConfig) WithDDLSort(sort int) ColumnConfig {
+	c.ddlSort = sort
+	return c
 }
 
 func (c ColumnConfig) WithType(dbColType SchemaType) ColumnConfig {
@@ -542,6 +558,29 @@ func (c ColumnConfig) MakeField(value any) *Field {
 }
 
 type ColumnConfigs []ColumnConfig
+
+func (cs ColumnConfigs) sort() {
+	slices.SortStableFunc(cs, func(a, b ColumnConfig) int {
+		return a.ddlSort - b.ddlSort
+	})
+}
+
+func (cs ColumnConfigs) InitDDLSort() ColumnConfigs {
+	for i := range cs {
+		cs[i].ddlSort = 1 * 100 // 列与列之间预留100个位置，便于后续插入列
+	}
+	return cs
+}
+
+// GetDDLSort 获取字段DDL排序位置，如果不存在返回0,false,使用前确保ColumnConfigs已经设置好DDL排序位置，否则结果不准确（可以使用ColumnConfigs.InitDDLSort先设置）
+func (cs ColumnConfigs) GetDDLSort(dbName string) (sort int, exitst bool) {
+	for _, c := range cs {
+		if strings.EqualFold(c.DbName, dbName) {
+			return c.ddlSort, true
+		}
+	}
+	return 0, false
+}
 
 func (cs ColumnConfigs) Fields() (fs Fields) {
 	for _, c := range cs {

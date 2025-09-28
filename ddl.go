@@ -75,16 +75,21 @@ func MakeColumnsAndIndexs(driver Driver, table TableConfig) (lines []string, err
 		if primary != nil && primary.ColumnNames != nil {
 			primaryCols = primary.ColumnNames(table.Columns)
 		}
+		cols := make(ColumnConfigs, 0)
 		for _, col := range table.Columns {
 			if len(primaryCols) == 1 && slices.Contains(primaryCols, col.DbName) && col.Type.IsInt() {
 				col.AutoIncrement = true //整型主键自动增长
+				col = col.WithDDLSort(DDLSort_First)
 			}
+			cols = append(cols, col)
+		}
+		cols.sort() // 按DDL排序位置排序
+		for _, col := range cols {
 			col = col.CopyFieldSchemaIfEmpty()
 			ddl := Column2DDLMysql(col)
 			if strings.TrimSpace(ddl) != "" {
 				arr = append(arr, ddl)
 			}
-
 		}
 		for _, index := range table.Indexs {
 			ddl := Index2DDLMysql(index, table)
