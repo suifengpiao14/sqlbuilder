@@ -9,6 +9,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
 	"github.com/doug-martin/goqu/v9"
 	"github.com/doug-martin/goqu/v9/exp"
 	"github.com/pkg/errors"
@@ -110,7 +113,109 @@ type TableConfig struct {
 	// 表级别的字段（值产生方式和实际数据无关），比如创建时间、更新时间、删除字段等，这些字段设置好后，相关操作可从此获取字段信息,增加该字段，方便封装delete操作、冗余字段自动填充等操作, 增加ctx 入参 方便使用ctx专递数据，比如 业务扩展多租户，只需表增加相关字段，在ctx中传递租户信息，并设置表级别字段场景即可
 	TableLevelFieldsHook func(ctx context.Context, fs ...*Field) (hookedFields Fields)
 	shardedTableNameFn   func(fs ...Field) (shardedTableNames []string) // 分表策略，比如按时间分表，此处传入字段信息，返回多个表名
+	pubSub               *gochannel.GoChannel
+	pubSubLoger          watermill.LoggerAdapter
+}
 
+func MakeMessage(event any) (msg *message.Message, err error) {
+	b, err := json.Marshal(event)
+	if err != nil {
+		return nil, err
+	}
+	msg = message.NewMessage(watermill.NewUUID(), b)
+	return msg, nil
+}
+
+type EventMessage interface {
+	ToMessage() (msg *message.Message, err error)
+}
+
+func (t *TableConfig) SetPubSubLoger(log watermill.LoggerAdapter) {
+	t.pubSubLoger = log
+}
+
+func (t *TableConfig) getPubSubLoger() watermill.LoggerAdapter {
+	if t.pubSubLoger != nil {
+		return t.pubSubLoger
+	}
+	t.pubSubLoger = watermill.NewStdLogger(false, false)
+	return t.pubSubLoger
+
+}
+
+func (t *TableConfig) getPubSub() *gochannel.GoChannel {
+	if t.pubSub != nil {
+		return t.pubSub
+	}
+	t.pubSub = gochannel.NewGoChannel(
+		gochannel.Config{
+			BlockPublishUntilSubscriberAck: false, // 等待订阅者ack消息,防止消息丢失（关闭前一定已经消费完，内部的主要用于数据异构，所以需要确保数据已经处理完）
+		},
+		t.getPubSubLoger(),
+	)
+	return t.pubSub
+}
+
+func (t TableConfig) GetTopic() string {
+	topic := fmt.Sprintf("Topic_%s", t.Name)
+	return topic
+}
+
+// GetSubscriber 获取订阅者，方便后续扩展，比如增加订阅者持久化等操作
+func (t TableConfig) GetSubscriber() message.Subscriber {
+	return t.getPubSub()
+}
+
+func (t TableConfig) Publish(event EventMessage) (err error) {
+	var pubSub = t.getPubSub()
+	msg, err := event.ToMessage()
+	if err != nil {
+		return err
+	}
+	err = pubSub.Publish(t.GetTopic(), msg)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// 这里定义对象，方便增加说明信息，方便后续扩展
+type Subscriber struct {
+	Description  string
+	Subscriber   message.Subscriber
+	SubscriberFn func(message *message.Message) (err error)
+}
+
+// Subscribe 订阅消息，这个方法没有什么功能，只是提倡将订阅者关联到表上面，只是表明这些订阅归属于当前表
+func (t TableConfig) Subscribe(subscribers ...Subscriber) (err error) {
+	for i := range subscribers {
+		subscriber := subscribers[i]
+		if subscriber.SubscriberFn == nil {
+			err = errors.New("订阅者函数不能为空")
+			return err
+		}
+		if subscriber.Subscriber == nil {
+			err = errors.New("订阅器不能为空")
+			return err
+		}
+		go func() {
+			msgChan, err := subscriber.Subscriber.Subscribe(context.Background(), t.GetTopic())
+			if err != nil {
+				t.getPubSubLoger().Error("添加订阅者失败", err, nil)
+				return
+			}
+			for msg := range msgChan {
+				func() { // 使用函数包裹，提供defer 处理 ack 操作，防止消息丢失
+					defer msg.Ack()
+					err = subscriber.SubscriberFn(msg)
+					if err != nil {
+						t.getPubSubLoger().Error("订阅任务执行结果", err, nil)
+					}
+				}()
+			}
+		}()
+	}
+	return nil
 }
 
 func NewTableConfig(name string) TableConfig {

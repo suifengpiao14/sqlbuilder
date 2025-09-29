@@ -828,6 +828,7 @@ var ValueFnLte = ValueFn{
 	Layer: Value_Layer_DBFormat,
 }
 
+// Deprecated: 废弃，使用 ValueFnBetweenWitEmptyNil 代替
 func ValueFnBetween(left any, right any) ValueFn {
 	return ValueFn{
 		Fn: func(in any, f *Field, fs ...*Field) (value any, err error) {
