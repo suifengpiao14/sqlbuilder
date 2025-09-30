@@ -9,9 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
 	"github.com/doug-martin/goqu/v9"
 	"github.com/doug-martin/goqu/v9/exp"
 	"github.com/pkg/errors"
@@ -102,6 +100,10 @@ func (fn CustomTableConfigFn[T]) Apply(original T) (customd T) {
 	return customd
 }
 
+type TableView interface {
+	TableView() TableConfig
+}
+
 type TableConfig struct {
 	DBName
 	Columns                  ColumnConfigs            // 后续吧table 纳入，通过 Column.Identity 生成 Field 操作
@@ -113,61 +115,93 @@ type TableConfig struct {
 	// 表级别的字段（值产生方式和实际数据无关），比如创建时间、更新时间、删除字段等，这些字段设置好后，相关操作可从此获取字段信息,增加该字段，方便封装delete操作、冗余字段自动填充等操作, 增加ctx 入参 方便使用ctx专递数据，比如 业务扩展多租户，只需表增加相关字段，在ctx中传递租户信息，并设置表级别字段场景即可
 	TableLevelFieldsHook func(ctx context.Context, fs ...*Field) (hookedFields Fields)
 	shardedTableNameFn   func(fs ...Field) (shardedTableNames []string) // 分表策略，比如按时间分表，此处传入字段信息，返回多个表名
-	pubSub               *gochannel.GoChannel
-	pubSubLoger          watermill.LoggerAdapter
+	//publisher            message.Publisher table 只和gochannel publisher 交互，不直接和外部交互，如果需要发布到外部(如mq,kafka等)时，监听内部gochannel 转发即可，这样设计的目的是将领域内事件和领域外事件分离，方便内聚和聚合
+	comsumerMakers []func(table TableConfig) Consumer // 当前表级别的消费者(主要用于在表级别同步数据)
+	views          TableConfigs
 }
 
-func MakeMessage(event any) (msg *message.Message, err error) {
-	b, err := json.Marshal(event)
+func (t TableConfig) WithConsumerMakers(consumerMakers ...func(table TableConfig) (consumer Consumer)) TableConfig { // 使用tableGetter 能延迟获取table，主要是等待 handler 初始化完毕
+	t.comsumerMakers = consumerMakers
+	return t
+}
+
+// AddViews 别名配置的columns 必须被完整包含，否则会panic, 主要用于不同模型映射同一张运行表(应用封装的package 必备入口)
+func (t *TableConfig) AddViews(views ...TableConfig) (err error) {
+	//别名配置的columns 必须被完整包含
+	for _, aliaTableConfig := range views {
+		fieldNames := aliaTableConfig.Columns.Fields().Names()
+		err := t.Columns.CheckMissOutFieldName(fieldNames...)
+		if err != nil {
+			err = errors.WithMessagef(err, "缺失别名表(%s)配置字段", aliaTableConfig.Name)
+			return err
+		}
+	}
+	t.views = append(t.views, views...)
+	return nil
+}
+
+// GetConsumerMakers 获取订阅者制造器(制造者一般会封装到package内部，使用方需要复制maker，然后在具体运行时启动订阅者，所以这里提供获取已经封装好的制造者)
+func (t TableConfig) GetConsumerMakers() []func(table TableConfig) (consumer Consumer) {
+	return t.comsumerMakers
+}
+
+func (t TableConfig) Init() (err error) {
+	err = t.Consume()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	msg = message.NewMessage(watermill.NewUUID(), b)
-	return msg, nil
-}
-
-type EventMessage interface {
-	ToMessage() (msg *message.Message, err error)
-}
-
-func (t *TableConfig) SetPubSubLoger(log watermill.LoggerAdapter) {
-	t.pubSubLoger = log
-}
-
-func (t *TableConfig) getPubSubLoger() watermill.LoggerAdapter {
-	if t.pubSubLoger != nil {
-		return t.pubSubLoger
+	err = t.views.Init() // 初始化别名表配置，主要是为了在别名表上也能启用消费者监听,避免调用方复制package内置table 的comsumerMakers 等配置
+	if err != nil {
+		return err
 	}
-	t.pubSubLoger = watermill.NewStdLogger(false, false)
-	return t.pubSubLoger
-
+	return nil
 }
 
-func (t *TableConfig) getPubSub() *gochannel.GoChannel {
-	if t.pubSub != nil {
-		return t.pubSub
+// Consume 启动表级别 消费订阅者，主要用于在表级别同步数据, 比如品类发生变化时更新品类id集合等操作
+func (t TableConfig) Consume() (err error) {
+	if t.handler == nil {
+		err := errors.New("TableConfig.handler 未初始化,请先初始化handler再启用消费者监听")
+		return err
 	}
-	t.pubSub = gochannel.NewGoChannel(
-		gochannel.Config{
-			BlockPublishUntilSubscriberAck: false, // 等待订阅者ack消息,防止消息丢失（关闭前一定已经消费完，内部的主要用于数据异构，所以需要确保数据已经处理完）
-		},
-		t.getPubSubLoger(),
-	)
-	return t.pubSub
+	for _, consumerMaker := range t.comsumerMakers {
+		subscriber := consumerMaker(t)
+		err = subscriber.Consume()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// func (t *TableConfig) SetPubSubLoger(log watermill.LoggerAdapter) {
+// 	t.pubSubLoger = log
+// }
+
+// func (t *TableConfig) getPubSubLoger() watermill.LoggerAdapter {
+// 	if t.pubSubLoger != nil {
+// 		return t.pubSubLoger
+// 	}
+// 	t.pubSubLoger = MessageLogger
+// 	return t.pubSubLoger
+
+// }
+
+func (t *TableConfig) GetPublisher() message.Publisher {
+	return GetPublisher(t.GetTopic())
 }
 
 func (t TableConfig) GetTopic() string {
-	topic := fmt.Sprintf("Topic_%s", t.Name)
+	topic := fmt.Sprintf("topic_table_%s", t.Name)
 	return topic
 }
 
-// GetSubscriber 获取订阅者，方便后续扩展，比如增加订阅者持久化等操作
-func (t TableConfig) GetSubscriber() message.Subscriber {
-	return t.getPubSub()
-}
+// // GetConsumer 获取订阅者，方便后续扩展，比如增加订阅者持久化等操作
+// func (t TableConfig) GetConsumer() message.Subscriber {
+// 	return t.getPubSub()
+// }
 
 func (t TableConfig) Publish(event EventMessage) (err error) {
-	var pubSub = t.getPubSub()
+	var pubSub = t.GetPublisher()
 	msg, err := event.ToMessage()
 	if err != nil {
 		return err
@@ -179,44 +213,38 @@ func (t TableConfig) Publish(event EventMessage) (err error) {
 	return nil
 }
 
-// 这里定义对象，方便增加说明信息，方便后续扩展
-type Subscriber struct {
-	Description  string
-	Subscriber   message.Subscriber
-	SubscriberFn func(message *message.Message) (err error)
-}
+// SubscriberAggregation 订阅消息，这个方法没有什么功能，只是提倡将订阅者关联到表上面，只是表明这些订阅归属于当前表
+// func (t TableConfig) SubscriberAggregation(subscriberMakers ...func() Subscriber) (err error) {
+// 	for i := range subscriberMakers {
+// 		subscriber := subscriberMakers[i]()
+// 		subscriber.Consume()
+// 	}
+// 	return nil
+// }
 
-// Subscribe 订阅消息，这个方法没有什么功能，只是提倡将订阅者关联到表上面，只是表明这些订阅归属于当前表
-func (t TableConfig) Subscribe(subscribers ...Subscriber) (err error) {
-	for i := range subscribers {
-		subscriber := subscribers[i]
-		if subscriber.SubscriberFn == nil {
-			err = errors.New("订阅者函数不能为空")
-			return err
-		}
-		if subscriber.Subscriber == nil {
-			err = errors.New("订阅器不能为空")
-			return err
-		}
-		go func() {
-			msgChan, err := subscriber.Subscriber.Subscribe(context.Background(), t.GetTopic())
-			if err != nil {
-				t.getPubSubLoger().Error("添加订阅者失败", err, nil)
-				return
-			}
-			for msg := range msgChan {
-				func() { // 使用函数包裹，提供defer 处理 ack 操作，防止消息丢失
-					defer msg.Ack()
-					err = subscriber.SubscriberFn(msg)
-					if err != nil {
-						t.getPubSubLoger().Error("订阅任务执行结果", err, nil)
-					}
-				}()
-			}
-		}()
-	}
-	return nil
-}
+// SubscribeSelfTopic 订阅消息，这个方法没有什么功能，只是提倡为订阅当前表消息的消费者做代理，减少使用者代码量，经常在package为订阅领域内部表事件的消费者做代理
+// 使得package使用更简洁
+// func (t TableConfig) SubscribeSelfTopic(subscriberMakers ...func() Subscriber) (err error) {
+// 	subscriberMakersWithSelfTopic := make([]func() Subscriber, 0)
+// 	for i := range subscriberMakers {
+// 		subscriber := subscriberMakers[i]()
+// 		if subscriber.SubscriberFn == nil {
+// 			err = errors.New("订阅者函数不能为空")
+// 			return err
+// 		}
+// 		subscriber.Consumer = t.GetConsumer()
+// 		subscriber.Topic = t.GetTopic()
+// 		if subscriber.Logger == nil {
+// 			subscriber.Logger = t.getPubSubLoger()
+// 		}
+// 		subscriberMakersWithSelfTopic = append(subscriberMakersWithSelfTopic, func() Subscriber { return subscriber })
+// 	}
+// 	err = t.SubscriberAggregation(subscriberMakersWithSelfTopic...)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return nil
+// }
 
 func NewTableConfig(name string) TableConfig {
 	return TableConfig{
@@ -398,6 +426,15 @@ func (t TableConfig) FullNameWithQuotes() string {
 
 type TableConfigs []TableConfig
 
+func (ts TableConfigs) Init() (err error) {
+	for _, t := range ts {
+		err = t.Init()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 func (ts TableConfigs) GetByName(name string) (t *TableConfig, exists bool) {
 	if name == "" {
 		return nil, false
@@ -760,7 +797,7 @@ func (cs ColumnConfigs) CheckMissOutFieldName(fieldNames ...string) (err error) 
 	return nil
 }
 
-// CheckMissFieldName package 封装模块时，用于检测模块内置的字段是否包含到提供的表配置中
+// deprecated 请使用TableConfig.WithAlaisTableConfig 代替 CheckMissFieldName package 封装模块时，用于检测模块内置的字段是否包含到提供的表配置中
 func CheckMissFieldName(tableConfig TableConfig, fieldNames ...string) (err error) {
 	err = tableConfig.Columns.CheckMissOutFieldName(fieldNames...)
 	if err != nil {
@@ -840,6 +877,20 @@ func (cs ColumnConfigs) FilterByFieldName(fieldNames ...string) (result ColumnCo
 		}
 	}
 	return result
+}
+
+// EqualForFieldName 判断两个列配置是否包含相同的字段名，但不考虑字段别名等其他属性。可用于判断2个表模型是否一致
+func (cs ColumnConfigs) EqualForFieldName(otherCS ColumnConfigs) bool {
+	if len(cs) != len(otherCS) {
+		return false
+	}
+	csFieldNames := cs.Fields().Names()
+	for _, c := range otherCS {
+		if !slices.Contains(csFieldNames, c.FieldName) {
+			return false
+		}
+	}
+	return true
 }
 
 func (cs ColumnConfigs) FilterByEmptyDbName(fieldNames ...string) (result ColumnConfigs) {
