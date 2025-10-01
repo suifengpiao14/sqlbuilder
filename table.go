@@ -117,7 +117,7 @@ type TableConfig struct {
 	shardedTableNameFn   func(fs ...Field) (shardedTableNames []string) // 分表策略，比如按时间分表，此处传入字段信息，返回多个表名
 	//publisher            message.Publisher table 只和gochannel publisher 交互，不直接和外部交互，如果需要发布到外部(如mq,kafka等)时，监听内部gochannel 转发即可，这样设计的目的是将领域内事件和领域外事件分离，方便内聚和聚合
 	comsumerMakers []func(table TableConfig) Consumer // 当前表级别的消费者(主要用于在表级别同步数据)
-	views          TableConfigs
+	//views          TableConfigs view概念没有用 table在这里不是一等公民,Field才是一等公民,view功能通过FieldsI 接口实现,并且更合适
 }
 
 func (t TableConfig) WithConsumerMakers(consumerMakers ...func(table TableConfig) (consumer Consumer)) TableConfig { // 使用tableGetter 能延迟获取table，主要是等待 handler 初始化完毕
@@ -126,6 +126,7 @@ func (t TableConfig) WithConsumerMakers(consumerMakers ...func(table TableConfig
 }
 
 // AddViews 别名配置的columns 必须被完整包含，否则会panic, 主要用于不同模型映射同一张运行表(应用封装的package 必备入口)
+/*
 func (t *TableConfig) AddViews(views ...TableConfig) (err error) {
 	//别名配置的columns 必须被完整包含
 	for _, aliaTableConfig := range views {
@@ -137,10 +138,11 @@ func (t *TableConfig) AddViews(views ...TableConfig) (err error) {
 		}
 		t.AddIndexs(aliaTableConfig.Indexs...)
 	}
-	t.views = append(t.views, views...)
+	//t.views = append(t.views, views...)
 	return nil
 }
-
+*/
+/*
 func (t TableConfig) GetColumnsWithViewColumns() (columnConfigs ColumnConfigs) {
 	columnConfigs = append(columnConfigs, t.Columns...)
 	for _, view := range t.views {
@@ -148,6 +150,7 @@ func (t TableConfig) GetColumnsWithViewColumns() (columnConfigs ColumnConfigs) {
 	}
 	return columnConfigs
 }
+*/
 
 // GetConsumerMakers 获取订阅者制造器(制造者一般会封装到package内部，使用方需要复制maker，然后在具体运行时启动订阅者，所以这里提供获取已经封装好的制造者)
 func (t TableConfig) GetConsumerMakers() []func(table TableConfig) (consumer Consumer) {
@@ -159,10 +162,10 @@ func (t TableConfig) Init() (err error) {
 	if err != nil {
 		return err
 	}
-	err = t.views.Init() // 初始化别名表配置，主要是为了在别名表上也能启用消费者监听,避免调用方复制package内置table 的comsumerMakers 等配置
-	if err != nil {
-		return err
-	}
+	// err = t.views.Init() // 初始化别名表配置，主要是为了在别名表上也能启用消费者监听,避免调用方复制package内置table 的comsumerMakers 等配置
+	// if err != nil {
+	// 	return err
+	// }
 	return nil
 }
 

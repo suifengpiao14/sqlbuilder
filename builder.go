@@ -938,7 +938,7 @@ func (p ListParam) MakeSelectDataset() (ds *goqu.SelectDataset, err error) {
 		table := p.GetTable()
 		primary, exists := table.Indexs.GetPrimary()
 		if exists {
-			for _, columnName := range primary.ColumnNames(table.GetColumnsWithViewColumns()) {
+			for _, columnName := range primary.ColumnNames(table.Columns) {
 				fullName := fmt.Sprintf("%s.%s", table.BaseName(), columnName) // 增加表名，避免jion查询多表字段冲突
 				subOrder := goqu.I(fullName).Asc()
 				order = append(order, subOrder)
