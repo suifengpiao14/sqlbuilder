@@ -389,8 +389,8 @@ type Index struct {
 	IsPrimary bool `json:"isPrimary"` // 是否主键索引
 	Unique    bool `json:"unique"`    // 是否唯一索引
 	//Name        string   `json:"name"`   // 索引名称
-	ColumnNames func(tableColumns ColumnConfigs) (columnNames []string) //在实际封装模块时,已知 Field.Name ,DB.Column.Name 未知，需要支持通过 Field.Name 转DB.Column.Name,所以设计成函数格式
-	Weight      int                                                     `json:"weight"` // 索引权重,越大的表明越重要，能优先作为记录的唯一标识（程序自动识别记录唯一标识时会用到）
+	ColumnNames func(table ColumnConfigs) (columnNames []string) //在实际封装模块时,已知 Field.Name ,DB.Column.Name 未知，需要支持通过 Field.Name 转DB.Column.Name,所以设计成函数格式
+	Weight      int                                              `json:"weight"` // 索引权重,越大的表明越重要，能优先作为记录的唯一标识（程序自动识别记录唯一标识时会用到）
 
 }
 

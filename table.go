@@ -135,9 +135,18 @@ func (t *TableConfig) AddViews(views ...TableConfig) (err error) {
 			err = errors.WithMessagef(err, "缺失别名表(%s)配置字段", aliaTableConfig.Name)
 			return err
 		}
+		t.AddIndexs(aliaTableConfig.Indexs...)
 	}
 	t.views = append(t.views, views...)
 	return nil
+}
+
+func (t TableConfig) GetColumnsWithViewColumns() (columnConfigs ColumnConfigs) {
+	columnConfigs = append(columnConfigs, t.Columns...)
+	for _, view := range t.views {
+		columnConfigs = append(columnConfigs, view.Columns...)
+	}
+	return columnConfigs
 }
 
 // GetConsumerMakers 获取订阅者制造器(制造者一般会封装到package内部，使用方需要复制maker，然后在具体运行时启动订阅者，所以这里提供获取已经封装好的制造者)
