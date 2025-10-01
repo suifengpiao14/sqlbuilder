@@ -838,7 +838,7 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 		err = errors.Wrap(err, errWithMsg)
 		return "", err
 	}
-	ds := p.GetGoquDialect().Select(fs.Select()...).
+	ds := p.GetGoquDialect().Select(p.getSelectColumns(tableConfig, fs)...).
 		From(tableConfig.AliasOrTableExpr()).
 		Where(where...).
 		Order(fs.Order()...).
@@ -854,6 +854,7 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 }
 
 func (p FirstParam) First(result any) (exists bool, err error) {
+	p.resultDst = result
 	sql, err := p.ToSQL()
 	if err != nil {
 		return false, err
@@ -920,7 +921,7 @@ func NewListBuilder(tableConfig TableConfig) *ListParam {
 	return p
 }
 
-func (p ListParam) MakeSelectDataset() (ds *goqu.SelectDataset, err error) {
+func (p ListParam) makeSelectDataset() (ds *goqu.SelectDataset, err error) {
 	tableConfig := p.GetTable()
 	fs := p._Fields.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	errWithMsg := fmt.Sprintf("ListParam.ToSQL(),table:%s", tableConfig.Name)
@@ -932,7 +933,7 @@ func (p ListParam) MakeSelectDataset() (ds *goqu.SelectDataset, err error) {
 	pageIndex, pageSize := fs.Pagination()
 	ofsset := max(pageIndex*pageSize, 0)
 
-	selec := fs.Select()
+	selec := p.getSelectColumns(tableConfig, fs)
 	order := fs.Order()
 	if len(order) == 0 { // 没有排序字段,则默认按主键降序排列
 		table := p.GetTable()
@@ -958,7 +959,7 @@ func (p ListParam) MakeSelectDataset() (ds *goqu.SelectDataset, err error) {
 	return ds, nil
 }
 func (p ListParam) ToSQL() (sql string, err error) {
-	ds, err := p.MakeSelectDataset()
+	ds, err := p.makeSelectDataset()
 	if err != nil {
 		return "", err
 	}
@@ -978,6 +979,7 @@ func (p ListParam) Query(result any) (err error) {
 	return p.List(result)
 }
 func (p ListParam) List(result any) (err error) {
+	p.resultDst = result
 	sql, err := p.ToSQL()
 	if err != nil {
 		return err
@@ -1181,7 +1183,7 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 					) AS sub;
 			*/
 			fs := p._Fields.RemovePagination() // 复制并移除分页信息
-			subQuery, err := NewListBuilder(tableConfig).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(fs...).WithBuilderFns(p.builderFns...).MakeSelectDataset()
+			subQuery, err := NewListBuilder(tableConfig).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(fs...).WithBuilderFns(p.builderFns...).makeSelectDataset()
 			if err != nil {
 				return "", err
 			}
@@ -1541,6 +1543,7 @@ type SQLParam[T any] struct {
 	_Fields         Fields
 	_log            LogI
 	context         context.Context
+	resultDst       any
 	customFieldsFns CustomFieldsFns // 定制化字段处理函数，可用于局部封装字段处理逻辑，比如通用模型中，用于设置查询字段的别名
 }
 
@@ -1604,6 +1607,20 @@ func (p *SQLParam[T]) GetTable() TableConfig {
 func (p *SQLParam[T]) SetLog(log LogI) *T {
 	p._log = log
 	return p.self
+}
+func (p *SQLParam[T]) getSelectColumns(table TableConfig, fs Fields) (selectColumns []any) {
+	selectColumns = fs.Select()
+	if len(selectColumns) > 0 {
+		return selectColumns
+	}
+	if p.resultDst != nil {
+		if fieldI, ok := p.resultDst.(FieldsI); ok {
+			selectColumns = fieldI.Fields().MakeDBColumnWithAlias(table.Columns)
+			return selectColumns
+		}
+	}
+
+	return selectColumns
 }
 func (p *SQLParam[T]) Log(sql string, args ...any) {
 	if p._log != nil {
