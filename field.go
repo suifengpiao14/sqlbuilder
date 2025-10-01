@@ -329,9 +329,9 @@ type Field struct {
 	//_OrderFn          OrderFn         `json:"-"` //deprecated  排序函数
 	_OrderFnWithSort OrderFnWithSort `json:"-"` // 排序函数,支持多个排序规则
 
-	Schema    *Schema      // 可以为空，为空建议设置默认值
-	table     TableConfig  // 关联表,方便收集Table全量信息
-	tableView *TableConfig // 视图配置,主要用于 select a as b 用于字段转换别名，方便后续映射到模型字段
+	Schema *Schema     // 可以为空，为空建议设置默认值
+	table  TableConfig // 关联表,方便收集Table全量信息
+	//tableView *TableConfig // 视图配置,主要用于 select a as b 用于字段转换别名，方便后续映射到模型字段
 
 	scene Scene // 场景
 	//todo 后续迁移到tags（tag 分组名称为 scene）
@@ -793,10 +793,10 @@ func formatSelectColumns(columns []any) (formatedColumns []any) {
 	return formatedColumns
 }
 
-func (f *Field) WithTableView(tableView TableConfig) *Field {
-	f.tableView = &tableView
-	return f
-}
+// func (f *Field) WithTableView(tableView TableConfig) *Field {
+// 	f.tableView = &tableView
+// 	return f
+// }
 
 func (f *Field) SetSelectColumns(columns ...any) *Field {
 	columns = formatSelectColumns(columns)
@@ -814,9 +814,9 @@ func (f *Field) Select() (columns []any) {
 	if len(f.selectColumns) > 0 { // 优先使用设置的字段
 		return f.selectColumns
 	}
-	if f.tableView != nil && !f.table.Columns.EqualForFieldName(f.table.Columns) { // 存在视图表模型，并且和本表模型字段不一致，则使用视图表模型字段（如果一致，不能使用 字段别名）
-		return f.tableView.Columns.DbNameWithAlias().AsAny()
-	}
+	// if f.tableView != nil && !f.table.Columns.EqualForFieldName(f.table.Columns) { // 存在视图表模型，并且和本表模型字段不一致，则使用视图表模型字段（如果一致，不能使用 字段别名）
+	// 	return f.tableView.Columns.DbNameWithAlias().AsAny()
+	// }
 	return
 }
 func (f *Field) CountColumn() (columns []any) {
@@ -1794,12 +1794,12 @@ func (fs Fields) FirstMust() *Field {
 	return fs[0]
 }
 
-func (fs Fields) WithTableView(tableView TableConfig) Fields {
-	if len(fs) > 0 {
-		fs[0].tableView = &tableView
-	}
-	return fs
-}
+// func (fs Fields) WithTableView(tableView TableConfig) Fields {
+// 	if len(fs) > 0 {
+// 		fs[0].tableView = &tableView
+// 	}
+// 	return fs
+// }
 
 //GetBySampleField 根据样板(未完全配置的初始化字段)获取对应的配置完备的字段，如果没有则返回样板本身，常用于从fields集合中筛选字段
 

@@ -945,7 +945,24 @@ func SafeGetSelectColumns(table TableConfig, in any) (columns []any) {
 	if in == nil {
 		return all
 	}
+	fs, ok := TryGetFields(in)
+	if ok {
+		table.Columns.FilterByFieldName(fs.Names()...).DbNameWithAlias().AsAny()
+	}
 
+	return all
+}
+
+func TryGetFields(in any) (fs Fields, ok bool) {
+	if fs, ok := in.(Fields); ok { // 优先尝试 Fields,提升性能
+		return fs, true
+	}
+
+	if fsI, ok := in.(FieldsI); ok { // 优先尝试 FieldsI,提升性能
+		return fsI.Fields(), true
+	}
+
+	//通用解决方案
 	rt := reflect.TypeOf(in)
 	// 归约到基础类型
 	for rt.Kind() == reflect.Ptr || rt.Kind() == reflect.Slice {
@@ -954,7 +971,6 @@ func SafeGetSelectColumns(table TableConfig, in any) (columns []any) {
 
 	// 优先尝试 User 零值
 	var fieldsI FieldsI
-	var ok bool
 	zeroRv := reflect.New(rt)
 	fieldsI, ok = zeroRv.Interface().(FieldsI) // 尝试 *User 零值
 	if !ok {
@@ -962,12 +978,9 @@ func SafeGetSelectColumns(table TableConfig, in any) (columns []any) {
 	}
 	if ok {
 		fs := fieldsI.Fields()
-		columns = table.Columns.FilterByFieldName(fs.Names()...).DbNameWithAlias().AsAny()
-		if len(columns) == 0 {
-			return all
-		}
+		return fs, true
 	}
-	return all
+	return nil, false
 }
 
 type ModelWithFields struct {

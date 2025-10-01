@@ -1614,8 +1614,9 @@ func (p *SQLParam[T]) getSelectColumns(table TableConfig, fs Fields) (selectColu
 		return selectColumns
 	}
 	if p.resultDst != nil {
-		if fieldI, ok := p.resultDst.(FieldsI); ok {
-			selectColumns = fieldI.Fields().MakeDBColumnWithAlias(table.Columns)
+		resultFs, ok := TryGetFields(p.resultDst)
+		if ok {
+			selectColumns = resultFs.MakeDBColumnWithAlias(table.Columns)
 			return selectColumns
 		}
 	}
