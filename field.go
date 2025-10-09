@@ -346,6 +346,7 @@ type Field struct {
 	//todo 后续迁移到tags(tag 分组名称为 stage)
 	delayApplies ApplyFns // 延迟执行函数 在 xxx.ToSQL()中调用，在执行后才执行中间件(如在设置f.SetSelectColumns 时需要获取 f.Table().Columns 信息时，就需要延迟执行中间件)
 	//ddlSequence   int         // 生成ddl语句时排序字段，一般不用，在多字段联合唯一索引/主键 时 将多字段值拼接时会使用到
+	isModelRequered bool // 模型是否必须包含该字段，主要用于模型字段校验
 
 	//indexs        Indexs // 索引(索引跟表走，不在领域语言上)
 	//applyFns      ApplyFns // apply 必须当场执行，因为存在apply函数嵌套apply函数,
@@ -961,6 +962,10 @@ func (f *Field) SetRequired(required bool) *Field {
 	f.Schema.Required = required // 此处 requied 可以为false,通过MergerSchema 达不到效果
 	return f
 }
+func (f *Field) SetModelRequered(isModelRequered bool) *Field {
+	f.isModelRequered = isModelRequered
+	return f
+}
 func (f *Field) IsRequired() bool {
 	return f.Schema != nil && f.Schema.Required
 }
@@ -1064,6 +1069,9 @@ func (f *Field) Combine(combinedFields ...*Field) *Field {
 		f.table = combined.table.Merge(f.table)
 		if f.scene == "" {
 			f.scene = combined.scene
+		}
+		if !f.isModelRequered {
+			f.isModelRequered = combined.isModelRequered
 		}
 		if f.dbName == "" {
 			f.dbName = combined.dbName
@@ -2175,6 +2183,12 @@ func (fs Fields) AppendWhereValueFn(whereValueFns ...ValueFn) Fields {
 	}
 
 	return fs
+}
+
+func (fs Fields) FilterByModelRequired() Fields { // 筛选出模型必须的字段，用于校验模型字段是否完整
+	return fs.Fielter(func(f Field) bool {
+		return f.isModelRequered
+	})
 }
 
 func (fs Fields) Names() (names []string) {

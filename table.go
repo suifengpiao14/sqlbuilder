@@ -152,6 +152,10 @@ func (t TableConfig) GetColumnsWithViewColumns() (columnConfigs ColumnConfigs) {
 }
 */
 
+func (t TableConfig) IsContainsModel(modelTable TableConfig) (err error) { //校验当前表是否包含给定表所包含的模型
+	return t.Columns.CheckMissOutFieldName(modelTable.Columns.Fields().FilterByModelRequired().Names()...)
+}
+
 // GetConsumerMakers 获取订阅者制造器(制造者一般会封装到package内部，使用方需要复制maker，然后在具体运行时启动订阅者，所以这里提供获取已经封装好的制造者)
 func (t TableConfig) GetConsumerMakers() []func(table TableConfig) (consumer Consumer) {
 	return t.comsumerMakers
