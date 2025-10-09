@@ -372,9 +372,17 @@ func (f Field) Fields() Fields {
 }
 
 // MakeDBColumnWithAlias 生成数据库列别名，方便在查询时使用别名做为字段名,比如模块封装，基本都会用到提前设置好的别名
-func (f Field) MakeDBColumnWithAlias(tableColumns ColumnConfigs) any {
-	col := tableColumns.GetByFieldNameMust(f.Name)
-	alias := goqu.I(col.DbName).As(f.Name)
+func (f Field) MakeDBColumnWithAlias(tableColumns ColumnConfigs) (alias any, exists bool) {
+	col, exists := tableColumns.GetByFieldName(f.Name) // 这里容许列不在表中，主要是封装模型中非模型必须字段,在使用时可能没有赋值，内置模型不但包含必须字段，还会包含常规情况有的一些辅助字段，比如创建时间、更新时间等
+	if exists {
+		alias = goqu.I(col.DbName).As(f.Name)
+	}
+	return alias, exists
+}
+
+func (f Field) MakeDBColumnWithAliasMust(tableColumns ColumnConfigs) (alias any) {
+	col := tableColumns.GetByFieldNameMust(f.Name) // 这里容许列不在表中，主要是封装模型中非模型必须字段,在使用时可能没有赋值，内置模型不但包含必须字段，还会包含常规情况有的一些辅助字段，比如创建时间、更新时间等
+	alias = goqu.I(col.DbName).As(f.Name)
 	return alias
 }
 
@@ -2066,7 +2074,10 @@ func (fs Fields) ApplyDelay() Fields {
 func (fs Fields) MakeDBColumnWithAlias(tableColumns ColumnConfigs) (selectColumnWithAlias []any) {
 	selectColumnWithAlias = make([]any, 0)
 	for _, f := range fs {
-		selectColumnWithAlias = append(selectColumnWithAlias, f.MakeDBColumnWithAlias(tableColumns))
+		alias, exists := f.MakeDBColumnWithAlias(tableColumns)
+		if exists {
+			selectColumnWithAlias = append(selectColumnWithAlias, alias)
+		}
 	}
 	return selectColumnWithAlias
 }
@@ -2074,7 +2085,7 @@ func (fs Fields) MakeDBColumnWithAlias(tableColumns ColumnConfigs) (selectColumn
 // MakeAsOneDBColumnWithAlias 将数据表多个字段值合并成一个，并取别名（主要用于多字段生成唯一标识场景,注意tableColumns 的顺序就是拼接顺序，调用者可以基于表索引排序，或者自然排序好）
 func (fs Fields) MakeAsOneDBColumnWithAlias(alias string, tableColumns ColumnConfigs) (selectColumnWithAlias any) {
 	if len(fs) == 1 {
-		return fs[0].MakeDBColumnWithAlias(tableColumns)
+		return fs[0].MakeDBColumnWithAliasMust(tableColumns)
 	}
 	arr := make([]string, 0)
 	//
