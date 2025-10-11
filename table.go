@@ -176,10 +176,6 @@ func (t TableConfig) Init() (err error) {
 	if err != nil {
 		return err
 	}
-	// err = t.views.Init() // 初始化别名表配置，主要是为了在别名表上也能启用消费者监听,避免调用方复制package内置table 的comsumerMakers 等配置
-	// if err != nil {
-	// 	return err
-	// }
 	return nil
 }
 
@@ -1015,8 +1011,14 @@ func GetRecordForUpdate[Model any](fs Fields) (record *Model, err error) {
 		return nil, err
 	}
 	first := fs.FirstMust()
-	if first.scene != SCENE_SQL_UPDATE {
-		err = errors.Errorf("字段场景必须是更新场景")
+	switch first.scene {
+	case SCENE_SQL_INSERT:
+		record = new(Model)
+		return record, nil //新增场景，数据数据为空，直接返回空记录即可
+	case SCENE_SQL_UPDATE:
+		//继续后续代码
+	default:
+		err = errors.Errorf("字段场景必须是新增/更新场景")
 		return nil, err
 	}
 	fs1 := fs.Copy()
@@ -1052,7 +1054,7 @@ type HookField struct {
 func MakeFieldHook(hookFields ...HookField) (hookFn HookFn) {
 	return func(ctx context.Context, scena Scene) (hookedFields Fields) {
 		for _, hookField := range hookFields {
-			f := hookField.DestField.ResetValueFn(ValueFnSetValue(func(inputValue any, f *Field, fs ...*Field) (any, error) {
+			f := hookField.DestField.ResetValueFn(ValueFnSetValue(ValueFnPreventDeadLoop(func(inputValue any, f *Field, fs ...*Field) (any, error) {
 				fs1 := Fields(fs)
 				if len(fs1) == 0 {
 					return nil, nil
@@ -1076,9 +1078,19 @@ func MakeFieldHook(hookFields ...HookField) (hookFn HookFn) {
 					return nil, err
 				}
 				return val, nil
-			}))
+			})))
 			hookedFields = hookedFields.Append(f)
 		}
 		return hookedFields
+	}
+}
+
+// ValueFnPreventDeadLoop 防止冗余字段的valueFn陷入死循环,使用传入的fs 修改当前列的值, 忽略当前列，防止陷入死循环（这个问题已经遇见几次了，所以这里封装一个函数）
+func ValueFnPreventDeadLoop(valueFnFn ValueFnFn) ValueFnFn {
+	return func(inputValue any, f *Field, fs ...*Field) (any, error) {
+		fs1 := Fields(fs).Filter(func(f1 Field) bool { // 需要忽略当前列，不然  fs1.GetChangingData() 会陷入死循环
+			return f.Name != f1.Name
+		})
+		return valueFnFn(inputValue, f, fs1...)
 	}
 }

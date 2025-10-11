@@ -49,11 +49,11 @@ func GetSubscriber(topic string) (subscriber message.Subscriber) {
 }
 
 type Consumer struct {
-	Description string                                     `json:"description"`
-	Topic       string                                     `json:"topic"`
-	Subscriber  message.Subscriber                         `json:"-"` // 消费者，支持自定义消费者，例如：gochannel,rabbitmq,kafka等
-	WorkFn      func(message *message.Message) (err error) `json:"-"`
-	Logger      watermill.LoggerAdapter                    `json:"-"` // 日志适配器，如果不设置则使用默认日志适配器
+	Description string                             `json:"description"`
+	Topic       string                             `json:"topic"`
+	Subscriber  message.Subscriber                 `json:"-"` // 消费者，支持自定义消费者，例如：gochannel,rabbitmq,kafka等
+	WorkFn      func(message *Message) (err error) `json:"-"`
+	Logger      watermill.LoggerAdapter            `json:"-"` // 日志适配器，如果不设置则使用默认日志适配器
 }
 
 func (c Consumer) String() string {
@@ -97,7 +97,7 @@ func (s Consumer) Consume() (err error) {
 	return nil
 }
 
-func MakeMessage(event any) (msg *message.Message, err error) {
+func MakeMessage(event any) (msg *Message, err error) {
 	b, err := json.Marshal(event)
 	if err != nil {
 		return nil, err
@@ -106,6 +106,8 @@ func MakeMessage(event any) (msg *message.Message, err error) {
 	return msg, nil
 }
 
+type Message = message.Message
+
 type EventMessage interface {
-	ToMessage() (msg *message.Message, err error)
+	ToMessage() (msg *Message, err error)
 }
