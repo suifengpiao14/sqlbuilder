@@ -1046,7 +1046,7 @@ func GetRecordForUpdate[Model any](fs Fields) (record *Model, err error) {
 type HookField struct {
 	ObserveFields Fields
 	DestField     *Field
-	GetValueFn    func(scene Scene, newRecord map[string]any, fs ...*Field) (val any, err error)
+	GetValueFn    func(scene Scene, updatingData map[string]any, dbData map[string]any, fs ...*Field) (val any, err error)
 }
 
 func MakeFieldHook(hookFields ...HookField) (hookFn HookFn) {
@@ -1067,11 +1067,11 @@ func MakeFieldHook(hookFields ...HookField) (hookFn HookFn) {
 					return nil, nil
 				}
 
-				recordData, err := fs1.GetRecordMergeUpdatingData()
+				updatingData, dbData, err := fs1.GetChangingData() //全量更新数据
 				if err != nil {
 					return nil, err
 				}
-				val, err := hookField.GetValueFn(scene, recordData, fs1...)
+				val, err := hookField.GetValueFn(scene, updatingData, dbData, fs1...)
 				if err != nil {
 					return nil, err
 				}

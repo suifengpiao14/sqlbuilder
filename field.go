@@ -2375,21 +2375,20 @@ func (fs Fields) DataMapFieldNameAsKey() (dataMapFieldNameKey map[string]any, er
 	return DataMapConvertFieldNameKey(data, fs), nil
 }
 
-// GetRecordMergeUpdatingData 获取记录并合并更新数据，主要用于生成冗余字段的值fs
-func (fs Fields) GetRecordMergeUpdatingData() (record map[string]any, err error) {
+// GetChangingData 获取记录并合并更新数据，主要用于更新记录时广播更新前后变化数据
+func (fs Fields) GetChangingData() (updatingData map[string]any, dbRecord map[string]any, err error) {
+	//获取新数据
+	updatingData, err = fs.DataAsMap(Layer_get_value_before_db...)
+	if err != nil {
+		return nil, nil, err
+	}
+	//获取数据库数据
 	mapRef, err := GetRecordForUpdate[map[string]any](fs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	//获取新数据
-	newValueDBMap, err := fs.DataAsMap(Layer_get_value_before_db...)
-	if err != nil {
-		return nil, err
-	}
-	newValueFieldNameMap := DataMapConvertFieldNameKey(newValueDBMap, fs)
-	//合并新数据到旧数据
-	maps.Copy(*mapRef, newValueFieldNameMap)
-	return *mapRef, nil
+	dbRecord = DataMapConvertFieldNameKey(*mapRef, fs)
+	return updatingData, dbRecord, nil
 }
 
 func DataMapConvertFieldNameKey(dataMap map[string]any, fs Fields) (dataMapFieldNameKey map[string]any) {
