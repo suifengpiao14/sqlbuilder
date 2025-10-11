@@ -404,6 +404,7 @@ type Index struct {
 
 }
 
+// GetColumnNames 程序中建议使用这个函数获取索引字段名称，能提前校验出致命错误
 func (i Index) GetColumnNames(tableColumns ColumnConfigs) []string {
 	if i.ColumnNames == nil {
 		err := errors.Errorf("Index.ColumnNames is nil")
