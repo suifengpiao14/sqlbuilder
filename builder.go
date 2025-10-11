@@ -293,14 +293,15 @@ const (
 	SCENE_SQL_DELETE Scene = "delete"
 	SCENE_SQL_SELECT Scene = "select"
 	//SCENE_SQL_EXISTS   Scene = "exists"
-	SCENE_SQL_VIEW     Scene = "view"
-	SCENE_SQL_INCREASE Scene = "increse" // 字段递增
-	SCENE_SQL_DECREASE Scene = "decrese" // 字段递减
-	SCENE_SQL_FINAL    Scene = "final"   // 最终状态(所有场景执行完成后再执行的场景 ,有时需要清除公共库设置的所有场景，只有在这里清除最保险)
+	//SCENE_SQL_VIEW Scene = "view" // 视图查询，就是select查询，暂时废弃，视图查询，不能作为一种场景，污染场景定义
+	//SCENE_SQL_INCREASE Scene = "increse" // 字段递增 2025-01-25 暂时废弃，递增递减，不能作为一种场景，污染场景定义
+	//SCENE_SQL_DECREASE Scene = "decrese" // 字段递减 2025-01-25 暂时废弃，递增递减，不能作为一种场景，污染场景定义
+	SCENE_SQL_FINAL Scene = "final" // 最终状态(所有场景执行完成后再执行的场景 ,有时需要清除公共库设置的所有场景，只有在这里清除最保险)
 )
 
 // 操作数据库场景
-var SCENE_Commands = Scenes{SCENE_SQL_INSERT, SCENE_SQL_UPDATE, SCENE_SQL_DELETE, SCENE_SQL_INCREASE, SCENE_SQL_DECREASE}
+// var SCENE_Commands = Scenes{SCENE_SQL_INSERT, SCENE_SQL_UPDATE, SCENE_SQL_DELETE, SCENE_SQL_INCREASE, SCENE_SQL_DECREASE}
+var SCENE_Commands = Scenes{SCENE_SQL_INSERT, SCENE_SQL_UPDATE, SCENE_SQL_DELETE}
 
 type TableI interface {
 	TableConfig() (table TableConfig)

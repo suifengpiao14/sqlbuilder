@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"reflect"
 	"regexp"
 	"slices"
@@ -575,16 +576,36 @@ const (
 	Field_tag_CanWriteWhenDeleted = "CanWriteWhenDeleted" // 标记为删除场景下，可以更新数据库字段（如操作人 ，Field_name_deletedAt 自带该标签功能）
 )
 
-// 不复制whereFns，ValueFns
 func (f *Field) Copy() (copyF *Field) {
 	fcp := *f
 	if f.Schema != nil { // schema 为地址引用，需要单独复制
 		fcp.Schema = f.Schema.Copy()
 	}
-	tags := f.tags
-	fcp.tags = tags
-	// indexs := f.indexs
-	// fcp.indexs = indexs
+	//深度拷贝所有值,防止后续修改影响拷贝对象
+	fcp.ValueFns = make(ValueFns, len(f.ValueFns))
+	copy(fcp.ValueFns, f.ValueFns)
+
+	fcp.WhereFns = make(ValueFns, len(f.WhereFns))
+	copy(fcp.WhereFns, f.WhereFns)
+
+	fcp.sceneFns = make(SceneFns, len(f.sceneFns))
+	copy(fcp.sceneFns, f.sceneFns)
+
+	fcp.tags = make(Tags, len(f.tags))
+	copy(fcp.tags, f.tags)
+
+	fcp.selectColumns = make([]any, len(f.selectColumns))
+	copy(fcp.selectColumns, f.selectColumns)
+
+	fcp.countColumns = make([]any, len(f.countColumns))
+	copy(fcp.countColumns, f.countColumns)
+
+	fcp.alias = make(Fields, len(f.alias))
+	copy(fcp.alias, f.alias)
+
+	fcp.delayApplies = make(ApplyFns, len(f.delayApplies))
+	copy(fcp.delayApplies, f.delayApplies)
+
 	return &fcp
 }
 
@@ -813,6 +834,11 @@ func (f *Field) SetSelectColumns(columns ...any) *Field {
 	return f
 }
 
+// CleanSelectColumns  清理选择的字段，一般用于中间件构造查询语句
+func (f *Field) CleanSelectColumns() *Field {
+	f.selectColumns = make([]any, 0)
+	return f
+}
 func (f *Field) SetCountColumns(columns ...any) *Field {
 	columns = formatSelectColumns(columns)
 	f.countColumns = append(f.countColumns, columns...)
@@ -1827,7 +1853,12 @@ func (fs Fields) GetBySampleField(field *Field) (f *Field) {
 	return f
 }
 
+// Deprecated: 请使用Fielter(历史上这个单词写错了)
 func (fs Fields) Fielter(fn FieldFilterFn) (fields Fields) {
+	return fs.Filter(fn)
+
+}
+func (fs Fields) Filter(fn FieldFilterFn) (fields Fields) {
 	fields = make(Fields, 0)
 	for _, f := range fs {
 		if fn(*f) {
@@ -1869,7 +1900,7 @@ func (fs Fields) Builder(ctx context.Context, scene Scene, tableConfig TableConf
 	fields = fields.ApplyCunstomFn(customFns...)
 
 	fields = fields.SetTable(tableConfig) // 确保新增字段有table信息
-	fields = tableConfig.MergeTableLevelFields(ctx, fields...)
+	fields = tableConfig.MergeTableLevelFields(ctx, scene, fields...)
 
 	fields = fields.SetTable(tableConfig) // 确保新增字段有table信息
 	fields = fields.ApplyDelay()          // 复制完成后再执行延迟中间件，因为Builder可能运行多次，不能污染最初的fs 变量
@@ -1892,7 +1923,7 @@ func (fs Fields) Validate() (err error) {
 }
 
 func (fs Fields) SetSceneIfEmpty(scene Scene) Fields {
-	for i := 0; i < len(fs); i++ {
+	for i := range fs {
 		fs[i].SetSceneIfEmpty(scene)
 	}
 	return fs
@@ -1965,6 +1996,12 @@ func (fs Fields) Select() (columns []any) {
 		columns = append(columns, f.Select()...)
 	}
 	return columns
+}
+func (fs Fields) CleanSelectColumns() Fields {
+	for i := range fs {
+		fs[i].CleanSelectColumns()
+	}
+	return fs
 }
 
 // CountColumn 统计字段，select count(xxx) 时使用,有时候需要 select count(distinct xxx) 时使用,此时需要使用CountColumn()方法
@@ -2044,10 +2081,12 @@ func (fs Fields) Limit() (limit uint) {
 	return limit
 }
 
-func (fs Fields) Contains(field Field) (exists bool) {
+func (fs Fields) Contains(fields ...*Field) (exists bool) {
 	for _, f := range fs {
-		if strings.EqualFold(f.Name, field.Name) { // 暂时值判断名称,后续根据需求,再增加类型
-			return true
+		for _, f2 := range fields {
+			if strings.EqualFold(f.Name, f2.Name) { // 暂时值判断名称,后续根据需求,再增加类型
+				return true
+			}
 		}
 	}
 	return false
@@ -2118,8 +2157,7 @@ func (fs *Fields) AddRef(moreFs ...*Field) Fields {
 	return *fs
 }
 
-// Deprecated: 废弃，使用 Add 方法代替 Fields 容许重复
-func (fs *Fields) Append(moreFields ...*Field) *Fields {
+func (fs *Fields) Append(moreFields ...*Field) Fields {
 	if *fs == nil {
 		*fs = make(Fields, 0)
 	}
@@ -2135,7 +2173,7 @@ func (fs *Fields) Append(moreFields ...*Field) *Fields {
 			*fs = append(*fs, f)
 		}
 	}
-	return fs
+	return *fs
 }
 
 func (fs *Fields) Replace(fields ...*Field) *Fields {
@@ -2162,8 +2200,8 @@ func (fs *Fields) Replace(fields ...*Field) *Fields {
 func (fs Fields) Remove(fields ...*Field) *Fields {
 	subFs := make(Fields, 0)
 	removeFields := Fields(fields)
-	for i := 0; i < len(fs); i++ {
-		if !removeFields.Contains(*fs[i]) {
+	for i := range fs {
+		if !removeFields.Contains(fs[i]) {
 			subFs = append(subFs, fs[i])
 		}
 	}
@@ -2197,7 +2235,7 @@ func (fs Fields) AppendWhereValueFn(whereValueFns ...ValueFn) Fields {
 }
 
 func (fs Fields) FilterByModelRequired() Fields { // 筛选出模型必须的字段，用于校验模型字段是否完整
-	return fs.Fielter(func(f Field) bool {
+	return fs.Filter(func(f Field) bool {
 		return f.isModelRequered
 	})
 }
@@ -2316,6 +2354,79 @@ func (fs Fields) Order() (orderedExpressions []exp.OrderedExpression) {
 	}
 	return orderedExpressions
 }
+func (fs Fields) DataAsMap(layers ...Layer) (dataMap map[string]any, err error) {
+	data, err := fs.Data(layers...)
+	if err != nil {
+		return nil, err
+	}
+	dataMap, ok := data.(map[string]any)
+	if !ok {
+		return nil, errors.Errorf("data is not map[string]any")
+	}
+	return dataMap, nil
+}
+
+func (fs Fields) DataMapFieldNameAsKey() (dataMapFieldNameKey map[string]any, err error) {
+	dataMapFieldNameKey = make(map[string]any)
+	data, err := fs.DataAsMap(Layer_get_value_before_db...)
+	if err != nil {
+		return nil, err
+	}
+	return DataMapConvertFieldNameKey(data, fs), nil
+}
+
+// GetRecordMergeUpdatingData 获取记录并合并更新数据，主要用于生成冗余字段的值fs
+func (fs Fields) GetRecordMergeUpdatingData() (record map[string]any, err error) {
+	mapRef, err := GetRecordForUpdate[map[string]any](fs)
+	if err != nil {
+		return nil, err
+	}
+	//获取新数据
+	newValueDBMap, err := fs.DataAsMap(Layer_get_value_before_db...)
+	if err != nil {
+		return nil, err
+	}
+	newValueFieldNameMap := DataMapConvertFieldNameKey(newValueDBMap, fs)
+	//合并新数据到旧数据
+	maps.Copy(*mapRef, newValueFieldNameMap)
+	return *mapRef, nil
+}
+
+func DataMapConvertFieldNameKey(dataMap map[string]any, fs Fields) (dataMapFieldNameKey map[string]any) {
+	dataMapFieldNameKey = make(map[string]any)
+	keyMap := make(map[string]string)
+
+	for _, f := range fs {
+		dbName := f.DBColumnName().BaseName()
+		fieldName := f.Name
+		keyMap[dbName] = fieldName
+	}
+
+	for dbName, val := range dataMap {
+		fieldName, ok := keyMap[dbName]
+		if !ok {
+			fieldName = dbName // 找不到映射字段,使用数据库字段名作为key
+		}
+		dataMapFieldNameKey[fieldName] = val
+	}
+	return dataMapFieldNameKey
+}
+
+/*
+	//获取新数据
+	newValueDBMap, err := fs1.DataAsMap(sqlbuilder.Layer_get_value_before_db...)
+	if err != nil {
+		return nil, err
+	}
+	newValueFieldNameMap := make(map[string]any)
+	for _, f := range fs1 {
+		dbName := f.DBColumnName().BaseName()
+		fieldName := f.Name
+		if val, ok := newValueDBMap[dbName]; ok {
+			newValueFieldNameMap[fieldName] = val
+		}
+	}
+*/
 
 func (fs Fields) Data(layers ...Layer) (data any, err error) {
 	if len(layers) == 0 {
@@ -2331,9 +2442,7 @@ func (fs Fields) Data(layers ...Layer) (data any, err error) {
 			continue
 		}
 		if m, ok := data.(map[string]any); ok { // 值接收map[string]any 格式
-			for k, v := range m {
-				dataMap[k] = v
-			}
+			maps.Copy(dataMap, m)
 		}
 	}
 	isNil := true

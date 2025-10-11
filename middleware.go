@@ -170,20 +170,36 @@ var ApplyFnWhereLte ApplyFn = func(f *Field, fs ...*Field) {
 	})
 }
 
-// ApplyFnWhereFindInColumnSet 传入的值在列字段集合内
+var ValueFnFindInSet = ValueFn{
+	Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
+		if IsNil(inputValue) {
+			return nil, nil
+		}
+		val := cast.ToString(inputValue)
+		column := goqu.I(f.DBColumnName().FullName())
+		expression := goqu.L("FIND_IN_SET(?,?)", val, column)
+		return expression, nil
+	},
+	Layer: Value_Layer_DBFormat,
+}
+
+// ValueFnFindInSetOrColumnIsEmpty 对数据库字段有值的情况使用FIND_IN_SET, 结果集为数据库字段为空或者包含指定值时返回true,否则返回false
+var ValueFnFindInSetOrColumnIsEmpty = ValueFn{
+	Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
+		if IsNil(inputValue) {
+			return nil, nil
+		}
+		val := cast.ToString(inputValue)
+		column := goqu.I(f.DBColumnName().FullName())
+		expression := goqu.L("if ( ?, FIND_IN_SET(?,?),true) ", column, val, column)
+		return expression, nil
+	},
+	Layer: Value_Layer_DBFormat,
+}
+
+// Deprecated use ValueFnFindeInSet ApplyFnWhereFindInColumnSet 传入的值在列字段集合内
 var ApplyFnWhereFindInColumnSet ApplyFn = func(f *Field, fs ...*Field) {
-	f.WhereFns.Append(ValueFn{
-		Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
-			if IsNil(inputValue) {
-				return nil, nil
-			}
-			val := cast.ToString(inputValue)
-			column := goqu.I(f.DBColumnName().FullName())
-			expression := goqu.L("FIND_IN_SET(?,?)", val, column)
-			return expression, nil
-		},
-		Layer: Value_Layer_DBFormat,
-	})
+	f.WhereFns.Append(ValueFnFindInSet)
 }
 
 // ApplyFnValueFnSetIfEmpty 数据库值为空则修改,否则不修改,用于update

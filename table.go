@@ -113,11 +113,21 @@ type TableConfig struct {
 	Comment                  string // 表注释
 	Indexs                   Indexs // 索引信息，唯一索引，在新增时会自动校验是否存在,更新时会自动保护
 	// 表级别的字段（值产生方式和实际数据无关），比如创建时间、更新时间、删除字段等，这些字段设置好后，相关操作可从此获取字段信息,增加该字段，方便封装delete操作、冗余字段自动填充等操作, 增加ctx 入参 方便使用ctx专递数据，比如 业务扩展多租户，只需表增加相关字段，在ctx中传递租户信息，并设置表级别字段场景即可
-	TableLevelFieldsHook func(ctx context.Context, fs ...*Field) (hookedFields Fields)
+	// 比如规则模型，表中cityId,classId,productId 字段只是方便后台查询设置,api 侧只需要规则表达式(expresson)即可,expresson 往往是其它字段按照按照需求生成的字符串,
+	//此时使用hook确保关注的字段发生变化时，自动更新冗余数据(在构造sql 的Fields 内追加冗余字段Field)
+	tableLevelFieldsHook HookFn
 	shardedTableNameFn   func(fs ...Field) (shardedTableNames []string) // 分表策略，比如按时间分表，此处传入字段信息，返回多个表名
 	//publisher            message.Publisher table 只和gochannel publisher 交互，不直接和外部交互，如果需要发布到外部(如mq,kafka等)时，监听内部gochannel 转发即可，这样设计的目的是将领域内事件和领域外事件分离，方便内聚和聚合
 	comsumerMakers []func(table TableConfig) Consumer // 当前表级别的消费者(主要用于在表级别同步数据)
 	//views          TableConfigs view概念没有用 table在这里不是一等公民,Field才是一等公民,view功能通过FieldsI 接口实现,并且更合适
+}
+
+type HookFn func(ctx context.Context, scene Scene) (hookedFields Fields)
+
+// WithFieldHook 数据变更时，自动填充冗余字段, 比如品类id集合发生变化时，自动更新品类id集合等操作
+func (t TableConfig) WithFieldHook(hooks HookFn) TableConfig {
+	t.tableLevelFieldsHook = hooks
+	return t
 }
 
 func (t TableConfig) WithConsumerMakers(consumerMakers ...func(table TableConfig) (consumer Consumer)) TableConfig { // 使用tableGetter 能延迟获取table，主要是等待 handler 初始化完毕
@@ -265,7 +275,7 @@ func (t TableConfig) Publish(event EventMessage) (err error) {
 func NewTableConfig(name string) TableConfig {
 	return TableConfig{
 		DBName: DBName{Name: name},
-		TableLevelFieldsHook: func(ctx context.Context, fs ...*Field) (hookedFields Fields) {
+		tableLevelFieldsHook: func(ctx context.Context, scene Scene) (hookedFields Fields) {
 			return
 		},
 	}
@@ -377,11 +387,11 @@ func (t TableConfig) GetDBNameByFieldName(fieldName string) (dbName string) {
 	return col.DbName
 }
 
-func (t TableConfig) MergeTableLevelFields(ctx context.Context, fs ...*Field) Fields {
+func (t TableConfig) MergeTableLevelFields(ctx context.Context, scene Scene, fs ...*Field) Fields {
 	fs1 := Fields(fs) //修改类型
-	if t.TableLevelFieldsHook != nil {
-		moreFields := t.TableLevelFieldsHook(ctx, fs1...)
-		fs1.Append(moreFields...)
+	if t.tableLevelFieldsHook != nil {
+		moreFields := t.tableLevelFieldsHook(ctx, scene)
+		fs1 = fs1.Append(moreFields...)
 	}
 	return fs1
 }
@@ -996,4 +1006,79 @@ func (m *ModelWithFields) SetFields(fs ...*Field) {
 }
 func (m *ModelWithFields) Fields() Fields {
 	return m.selectColumnsFields
+}
+
+// GetRecordForUpdate 根据主键获取记录，主要用于生成冗余字段的值fs 必须包含主键字段值
+func GetRecordForUpdate[Model any](fs Fields) (record *Model, err error) {
+	if len(fs) == 0 {
+		err = errors.Errorf("为更新查询的字段不能为空")
+		return nil, err
+	}
+	first := fs.FirstMust()
+	if first.scene != SCENE_SQL_UPDATE {
+		err = errors.Errorf("字段场景必须是更新场景")
+		return nil, err
+	}
+	fs1 := fs.Copy()
+	table := first.GetTable()
+
+	limitField := NewIntField(2, "limit", "数量", 0).SetTag(Field_tag_pageSize) //最多查询2条记录
+	fs1 = fs1.Add(limitField)
+	records := make([]Model, 0)
+	fs1.CleanSelectColumns() // 清理select字段，重新设置
+	err = table.Repository().All(&records, fs1)
+	if err != nil {
+		return nil, err
+	}
+	if len(records) == 0 {
+		err = errors.Errorf("没有查询到记录")
+
+		return nil, err
+	}
+	if len(records) > 1 {
+		err = errors.Errorf("查询到多条记录，无法确定要更新的记录")
+		return nil, err
+	}
+	record = &records[0]
+	return record, nil
+}
+
+type HookField struct {
+	ObserveFields Fields
+	DestField     *Field
+	GetValueFn    func(scene Scene, newRecord map[string]any, fs ...*Field) (val any, err error)
+}
+
+func MakeFieldHook(hookFields ...HookField) (hookFn HookFn) {
+	return func(ctx context.Context, scena Scene) (hookedFields Fields) {
+		for _, hookField := range hookFields {
+			f := hookField.DestField.ResetValueFn(ValueFnSetValue(func(inputValue any, f *Field, fs ...*Field) (any, error) {
+				fs1 := Fields(fs)
+				if len(fs1) == 0 {
+					return nil, nil
+				}
+				if !Fields(fs1).Contains(hookField.ObserveFields...) { // 本次操作不涉及关注的字段，则不操作冗余字段
+					return nil, nil
+				}
+
+				scene := fs1.FirstMust().scene
+
+				if !slices.Contains(SCENE_Commands, scene) { // 非命令场景，无需变更冗余数据, 这里的命令场景包含 删除、新增、修改场景，调用方可视情况屏蔽删除场景
+					return nil, nil
+				}
+
+				recordData, err := fs1.GetRecordMergeUpdatingData()
+				if err != nil {
+					return nil, err
+				}
+				val, err := hookField.GetValueFn(scene, recordData, fs1...)
+				if err != nil {
+					return nil, err
+				}
+				return val, nil
+			}))
+			hookedFields = hookedFields.Append(f)
+		}
+		return hookedFields
+	}
 }
