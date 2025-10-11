@@ -510,6 +510,10 @@ func (t TableConfig) IsNil() bool {
 
 func (t TableConfig) Merge(tables ...TableConfig) TableConfig {
 	for _, table := range tables {
+		if t.Name == "" {
+			t = table
+			continue
+		}
 		if t.Name != "" && table.Name != t.Name { //表名存在并且不同，忽略合并操作，表名不存在，使用第一个表名作为基准表名
 			continue
 		}
@@ -525,6 +529,27 @@ func (t TableConfig) Merge(tables ...TableConfig) TableConfig {
 		}
 		if table.Columns != nil {
 			t.Columns = t.Columns.Merge(table.Columns...)
+		}
+		if table.Indexs != nil {
+			t.Indexs = t.Indexs.Merge(table.Columns, table.Indexs...)
+		}
+		if table.handler == nil {
+			t.handler = table.handler
+		}
+		if table.Comment != "" {
+			t.Comment = table.Comment
+		}
+		if table.tableLevelFieldsHook != nil {
+			t.tableLevelFieldsHook = table.tableLevelFieldsHook
+		}
+		if table.shardedTableNameFn != nil {
+			t.shardedTableNameFn = table.shardedTableNameFn
+		}
+		if table.comsumerMakers != nil {
+			t.comsumerMakers = append(t.comsumerMakers, table.comsumerMakers...)
+		}
+		if table.Schema.Name != "" {
+			t.Schema = table.Schema
 		}
 	}
 	return t

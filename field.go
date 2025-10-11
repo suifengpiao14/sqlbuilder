@@ -459,6 +459,12 @@ func (indexs *Indexs) Append(tableColumns ColumnConfigs, subIndexs ...Index) {
 		*indexs = append(*indexs, index)
 	}
 }
+func (indexs Indexs) Merge(tableColumns ColumnConfigs, otherIndexs ...Index) Indexs {
+	newIndexs := make(Indexs, len(indexs))
+	copy(newIndexs, indexs)
+	newIndexs.Append(tableColumns, otherIndexs...)
+	return newIndexs
+}
 func (indexs Indexs) HasIndex(index Index, tableColumns ColumnConfigs) bool {
 	for _, i := range indexs {
 		if index.IndexName(tableColumns) == i.IndexName(tableColumns) && index.Unique == i.Unique {
@@ -1939,7 +1945,7 @@ func (fs Fields) SetSceneIfEmpty(scene Scene) Fields {
 
 // SetTable 设置表,不存在直接设置,存在则合并表配置信息
 func (fs Fields) SetTable(table TableConfig) Fields {
-	for i := 0; i < len(fs); i++ {
+	for i := range fs {
 		fs[i].SetTable(table)
 	}
 	return fs
@@ -1948,7 +1954,7 @@ func (fs Fields) SetTable(table TableConfig) Fields {
 // MergeMatchedTable 匹配表，更新表字段表配置信息，用于多表查询时，字段归属表不清晰的情况。例如： 多表join查询
 func (fs Fields) MergeMatchedTable(tables ...TableConfig) Fields {
 	ts := TableConfigs(tables)
-	for i := 0; i < len(fs); i++ {
+	for i := range fs {
 		t, exists := ts.GetByName(fs[i].table.Name)
 		if exists {
 			fs[i].SetTable(*t)
@@ -1959,7 +1965,7 @@ func (fs Fields) MergeMatchedTable(tables ...TableConfig) Fields {
 
 func (fs Fields) Tables() []string {
 	m := map[string]struct{}{}
-	for i := 0; i < len(fs); i++ {
+	for i := range fs {
 		m[fs[i].table.Name] = struct{}{}
 	}
 	tables := make([]string, 0)
@@ -1972,20 +1978,20 @@ func (fs Fields) Tables() []string {
 }
 
 func (fs Fields) SetScene(scene Scene) Fields {
-	for i := 0; i < len(fs); i++ {
+	for i := range fs {
 		fs[i].SetScene(scene)
 	}
 	return fs
 }
 func (fs Fields) SceneInsert(fn ApplyFn) Fields {
-	for i := 0; i < len(fs); i++ {
+	for i := range fs {
 		fs[i].SceneInsert(fn)
 	}
 	return fs
 }
 
 func (fs Fields) MiddlewareSceneUpdate(fn ApplyFn) Fields {
-	for i := 0; i < len(fs); i++ {
+	for i := range fs {
 		fs[i].SceneUpdate(fn)
 	}
 	return fs
@@ -2374,15 +2380,7 @@ func (fs Fields) DataAsMap(layers ...Layer) (dataMap map[string]any, err error) 
 	return dataMap, nil
 }
 
-func (fs Fields) DataMapFieldNameAsKey() (dataMapFieldNameKey map[string]any, err error) {
-	data, err := fs.DataAsMap(Layer_get_value_before_db...)
-	if err != nil {
-		return nil, err
-	}
-	return DataMapConvertFieldNameKey(data, fs), nil
-}
-
-// GetChangingData 获取记录并合并更新数据，主要用于更新记录时广播更新前后变化数据
+// GetChangingData 获取记录并合并更新数据，主要用于更新记录时广播更新前后变化数据,调用这个函数需要使用ValueFnPreventDeadLoop 防止死循环
 func (fs Fields) GetChangingData() (updatingData map[string]any, dbRecord map[string]any, err error) {
 	//获取新数据
 	updatingData, err = fs.DataAsMap(Layer_get_value_before_db...)
@@ -2394,7 +2392,8 @@ func (fs Fields) GetChangingData() (updatingData map[string]any, dbRecord map[st
 	if err != nil {
 		return nil, nil, err
 	}
-	dbRecord = DataMapConvertFieldNameKey(*mapRef, fs)
+	updatingData = DataMapConvertFieldNameKey(updatingData, fs) //使用Field.Name 作为key,方便脱离db字段定义
+	dbRecord = DataMapConvertFieldNameKey(*mapRef, fs)          //使用Field.Name 作为key,方便脱离db字段定义
 	return updatingData, dbRecord, nil
 }
 
