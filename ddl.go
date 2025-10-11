@@ -73,7 +73,7 @@ func MakeColumnsAndIndexs(driver Driver, table TableConfig) (lines []string, err
 		primary, _ := table.Indexs.GetPrimary()
 		var primaryCols []string
 		if primary != nil && primary.ColumnNames != nil {
-			primaryCols = primary.ColumnNames(table.Columns)
+			primaryCols = primary.GetColumnNames(table.Columns)
 		}
 		cols := make(ColumnConfigs, 0)
 		for _, col := range table.Columns {
@@ -133,7 +133,7 @@ func Column2DDLSQLite(col ColumnConfig) (ddl string) {
 }
 
 func Index2DDLSQLitePrimaryAndUniqueIndex(index Index, table TableConfig) (ddl string) {
-	columnNames := index.ColumnNames(table.Columns)
+	columnNames := index.GetColumnNames(table.Columns)
 	if len(columnNames) == 0 {
 		return ""
 	}
@@ -155,7 +155,7 @@ func Index2DDLSQLitePrimaryAndUniqueIndex(index Index, table TableConfig) (ddl s
 func Index2DDLSQLiteNormalIndexs(indexs Indexs, table TableConfig) (ddl string) {
 	arr := make([]string, 0)
 	for _, index := range indexs {
-		columnNames := index.ColumnNames(table.Columns)
+		columnNames := index.GetColumnNames(table.Columns)
 		if len(columnNames) == 0 || index.IsPrimary || index.Unique {
 			return ""
 		}
@@ -174,7 +174,7 @@ func Index2DDLSQLiteNormalIndexs(indexs Indexs, table TableConfig) (ddl string) 
 }
 
 func Index2DDLMysql(index Index, table TableConfig) (ddl string) {
-	columnNames := index.ColumnNames(table.Columns)
+	columnNames := index.GetColumnNames(table.Columns)
 	if len(columnNames) == 0 {
 		return ""
 	}

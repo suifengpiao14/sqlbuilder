@@ -399,8 +399,8 @@ type Index struct {
 	IsPrimary bool `json:"isPrimary"` // 是否主键索引
 	Unique    bool `json:"unique"`    // 是否唯一索引
 	//Name        string   `json:"name"`   // 索引名称
-	ColumnNames func(table ColumnConfigs) (columnNames []string) //在实际封装模块时,已知 Field.Name ,DB.Column.Name 未知，需要支持通过 Field.Name 转DB.Column.Name,所以设计成函数格式
-	Weight      int                                              `json:"weight"` // 索引权重,越大的表明越重要，能优先作为记录的唯一标识（程序自动识别记录唯一标识时会用到）
+	ColumnNames func(tableColumns ColumnConfigs) (columnNames []string) //在实际封装模块时,已知 Field.Name ,DB.Column.Name 未知，需要支持通过 Field.Name 转DB.Column.Name,所以设计成函数格式
+	Weight      int                                                     `json:"weight"` // 索引权重,越大的表明越重要，能优先作为记录的唯一标识（程序自动识别记录唯一标识时会用到）
 
 }
 
@@ -410,6 +410,13 @@ func (i Index) GetColumnNames(tableColumns ColumnConfigs) []string {
 		panic(err)
 	}
 	columnNames := i.ColumnNames(tableColumns)
+	allColumnNames := tableColumns.DBNames()
+	for _, columnName := range columnNames { //校验索引字段是否在表中存在，防止误写,返回了Field.Name
+		if !slices.Contains(allColumnNames, columnName) {
+			err := errors.Errorf("Index columnName(%s) not in table columns %s", columnName, strings.Join(allColumnNames, ","))
+			panic(err)
+		}
+	}
 	return columnNames
 }
 
@@ -2367,7 +2374,6 @@ func (fs Fields) DataAsMap(layers ...Layer) (dataMap map[string]any, err error) 
 }
 
 func (fs Fields) DataMapFieldNameAsKey() (dataMapFieldNameKey map[string]any, err error) {
-	dataMapFieldNameKey = make(map[string]any)
 	data, err := fs.DataAsMap(Layer_get_value_before_db...)
 	if err != nil {
 		return nil, err
@@ -2394,7 +2400,6 @@ func (fs Fields) GetChangingData() (updatingData map[string]any, dbRecord map[st
 func DataMapConvertFieldNameKey(dataMap map[string]any, fs Fields) (dataMapFieldNameKey map[string]any) {
 	dataMapFieldNameKey = make(map[string]any)
 	keyMap := make(map[string]string)
-
 	for _, f := range fs {
 		dbName := f.DBColumnName().BaseName()
 		fieldName := f.Name
