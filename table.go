@@ -135,6 +135,11 @@ func (t TableConfig) WithConsumerMakers(consumerMakers ...func(table TableConfig
 	return t
 }
 
+func (t TableConfig) Subscribe(consumerMakers ...func(table TableConfig) (consumer Consumer)) TableConfig {
+	t.WithConsumerMakers(consumerMakers...)
+	return t
+}
+
 // AddViews 别名配置的columns 必须被完整包含，否则会panic, 主要用于不同模型映射同一张运行表(应用封装的package 必备入口)
 /*
 func (t *TableConfig) AddViews(views ...TableConfig) (err error) {
