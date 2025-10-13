@@ -44,7 +44,7 @@ func (b Builder) WithHandler(handler Handler) Builder { // transaction 时候需
 }
 
 func (b Builder) Handler() (handler Handler) { // 提供给外部使用
-	return b.table.handler
+	return b.table.GetHandler()
 }
 
 func (b Builder) TotalParam(fs Fields) *TotalParam {
@@ -1581,8 +1581,8 @@ func (p *SQLParam[T]) GetHandlerWithInitTable() (handler Handler) {
 
 func (p *SQLParam[T]) GetGoquDialect() goqu.DialectWrapper {
 	dialect := string(Driver_mysql)
-	if p._Table.handler != nil {
-		dialect = p._Table.handler.GetDialector()
+	if p._Table._handler != nil {
+		dialect = p._Table.GetHandler().GetDialector()
 	}
 	return goqu.Dialect(dialect)
 }

@@ -2368,7 +2368,7 @@ func (fs Fields) Order() (orderedExpressions []exp.OrderedExpression) {
 	}
 	return orderedExpressions
 }
-func (fs Fields) DataAsMap(layers ...Layer) (dataMap map[string]any, err error) {
+func (fs Fields) DataAsMap(layers ...Layer) (dataMap DBDataMap, err error) {
 	data, err := fs.Data(layers...)
 	if err != nil {
 		return nil, err
@@ -2380,8 +2380,21 @@ func (fs Fields) DataAsMap(layers ...Layer) (dataMap map[string]any, err error) 
 	return dataMap, nil
 }
 
+type DBDataMap map[string]any
+
+func (m DBDataMap) GetByField(f *Field) (val any) {
+	return m[f.DBColumnName().BaseName()]
+}
+func (m DBDataMap) Merge(dbDataMap DBDataMap) DBDataMap {
+	maps.Copy(m, dbDataMap) // 使用更新数据覆盖数据库数据
+	return m
+}
+
 // GetChangingData 获取记录并合并更新数据，主要用于更新记录时广播更新前后变化数据,调用这个函数需要使用ValueFnPreventDeadLoop 防止死循环
-func (fs Fields) GetChangingData() (updatingData map[string]any, dbRecord map[string]any, err error) {
+func (fs Fields) GetChangingData() (updatingData DBDataMap, dbRecord DBDataMap, err error) {
+	if len(fs) == 0 {
+		return nil, nil, errors.Errorf("Fields is empty")
+	}
 	//获取新数据
 	updatingData, err = fs.DataAsMap(Layer_get_value_before_db...)
 	if err != nil {
@@ -2392,29 +2405,32 @@ func (fs Fields) GetChangingData() (updatingData map[string]any, dbRecord map[st
 	if err != nil {
 		return nil, nil, err
 	}
-	updatingData = DataMapConvertFieldNameKey(updatingData, fs) //使用Field.Name 作为key,方便脱离db字段定义
-	dbRecord = DataMapConvertFieldNameKey(*mapRef, fs)          //使用Field.Name 作为key,方便脱离db字段定义
+	dbRecord = *mapRef
+	// updatingData = DataMapConvertFieldNameKey(updatingData, fs) //使用Field.Name 作为key,方便脱离db字段定义
+	// dbRecord = DataMapConvertFieldNameKey(*mapRef, fs) //使用Field.Name 作为key,方便脱离db字段定义
 	return updatingData, dbRecord, nil
 }
 
-func DataMapConvertFieldNameKey(dataMap map[string]any, fs Fields) (dataMapFieldNameKey map[string]any) {
-	dataMapFieldNameKey = make(map[string]any)
-	keyMap := make(map[string]string)
-	for _, f := range fs {
-		dbName := f.DBColumnName().BaseName()
-		fieldName := f.Name
-		keyMap[dbName] = fieldName
-	}
+//这个方法不行，由于需要使用表字段，但是字段有别名，所以这里feild.Name 不能作为key，只能使用数据表字段
+// func DataMapConvertFieldNameKey(dataMap map[string]any, fs Fields) (dataMapFieldNameKey map[string]any) {
+// 	dataMapFieldNameKey = make(map[string]any)
+// 	keyMap := make(map[string]string)
+// 	tableFs := fs.FirstMust().table.Columns.Fields() //这里需要使用表的字段,确保每个字段都会被映射
+// 	for _, f := range tableFs {
+// 		dbName := f.DBColumnName().BaseName()
+// 		fieldName := f.Name
+// 		keyMap[dbName] = fieldName
+// 	}
 
-	for dbName, val := range dataMap {
-		fieldName, ok := keyMap[dbName]
-		if !ok {
-			fieldName = dbName // 找不到映射字段,使用数据库字段名作为key
-		}
-		dataMapFieldNameKey[fieldName] = val
-	}
-	return dataMapFieldNameKey
-}
+// 	for dbName, val := range dataMap {
+// 		fieldName, ok := keyMap[dbName]
+// 		if !ok {
+// 			fieldName = dbName // 找不到映射字段,使用数据库字段名作为key
+// 		}
+// 		dataMapFieldNameKey[fieldName] = val
+// 	}
+// 	return dataMapFieldNameKey
+// }
 
 /*
 	//获取新数据

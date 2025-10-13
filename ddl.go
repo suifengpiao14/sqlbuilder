@@ -28,7 +28,7 @@ func shouldCrateTable(driver Driver) bool {
 
 func (tableConfig TableConfig) GenerateDDL() (ddl string, err error) {
 	dialector := Driver_mysql
-	handler := tableConfig.handler // 这里可以不指定句柄，默认使用mysql驱动
+	handler := tableConfig._handler // 这里可以不指定句柄，默认使用mysql驱动
 	if handler != nil {
 		dialector = Driver(handler.GetDialector())
 	}

@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/doug-martin/goqu/v9"
@@ -109,9 +110,9 @@ type TableConfig struct {
 	Columns                  ColumnConfigs            // 后续吧table 纳入，通过 Column.Identity 生成 Field 操作
 	FieldName2DBColumnNameFn FieldName2DBColumnNameFn `json:"-"`
 	Schema                   SchemaConfig
-	handler                  Handler
-	Comment                  string // 表注释
-	Indexs                   Indexs // 索引信息，唯一索引，在新增时会自动校验是否存在,更新时会自动保护
+	_handler                 Handler // 内部获取，使用GetHandler方法（GetHander 方法挂载一些初始化动作）
+	Comment                  string  // 表注释
+	Indexs                   Indexs  // 索引信息，唯一索引，在新增时会自动校验是否存在,更新时会自动保护
 	// 表级别的字段（值产生方式和实际数据无关），比如创建时间、更新时间、删除字段等，这些字段设置好后，相关操作可从此获取字段信息,增加该字段，方便封装delete操作、冗余字段自动填充等操作, 增加ctx 入参 方便使用ctx专递数据，比如 业务扩展多租户，只需表增加相关字段，在ctx中传递租户信息，并设置表级别字段场景即可
 	// 比如规则模型，表中cityId,classId,productId 字段只是方便后台查询设置,api 侧只需要规则表达式(expresson)即可,expresson 往往是其它字段按照按照需求生成的字符串,
 	//此时使用hook确保关注的字段发生变化时，自动更新冗余数据(在构造sql 的Fields 内追加冗余字段Field)
@@ -120,6 +121,8 @@ type TableConfig struct {
 	//publisher            message.Publisher table 只和gochannel publisher 交互，不直接和外部交互，如果需要发布到外部(如mq,kafka等)时，监听内部gochannel 转发即可，这样设计的目的是将领域内事件和领域外事件分离，方便内聚和聚合
 	comsumerMakers []func(table TableConfig) Consumer // 当前表级别的消费者(主要用于在表级别同步数据)
 	//views          TableConfigs view概念没有用 table在这里不是一等公民,Field才是一等公民,view功能通过FieldsI 接口实现,并且更合适
+	oneceInitFunc func() (err error) // 初始化动作，比如初始化字段默认值等,只执行一次
+
 }
 
 type HookFn func(ctx context.Context, scene Scene) (hookedFields Fields)
@@ -177,16 +180,22 @@ func (t TableConfig) GetConsumerMakers() []func(table TableConfig) (consumer Con
 }
 
 func (t TableConfig) Init() (err error) {
-	err = t.Consume()
+	if t.oneceInitFunc != nil {
+		return t.oneceInitFunc()
+	}
+	return nil
+}
+func (t TableConfig) init() (err error) {
+	err = t.consume()
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// Consume 启动表级别 消费订阅者，主要用于在表级别同步数据, 比如品类发生变化时更新品类id集合等操作
-func (t TableConfig) Consume() (err error) {
-	if t.handler == nil {
+// consume 启动表级别 消费订阅者，主要用于在表级别同步数据, 比如品类发生变化时更新品类id集合等操作
+func (t TableConfig) consume() (err error) {
+	if t._handler == nil {
 		err := errors.New("TableConfig.handler 未初始化,请先初始化handler再启用消费者监听")
 		return err
 	}
@@ -274,12 +283,14 @@ func (t TableConfig) Publish(event EventMessage) (err error) {
 // }
 
 func NewTableConfig(name string) TableConfig {
-	return TableConfig{
+	t := TableConfig{
 		DBName: DBName{Name: name},
 		tableLevelFieldsHook: func(ctx context.Context, scene Scene) (hookedFields Fields) {
 			return
 		},
 	}
+	t.oneceInitFunc = sync.OnceValue(func() (err error) { return t.init() })
+	return t
 }
 
 // Repository 封装了基本的增删改查操作，方便使用(这里表明repository 属于table层面,不属于业务层面，repository可以对应多个业务模型)
@@ -345,17 +356,18 @@ func (t TableConfig) AddIndexs(indexs ...Index) TableConfig {
 }
 
 func (t TableConfig) WithHandler(handler Handler) TableConfig {
-	t.handler = handler // 此处需要兼容事务句柄设置，不可影响已有的handler设置,所以不能使用地址引用方式覆盖，而是返回一个新的TableConfig实例
+	t._handler = handler // 此处需要兼容事务句柄设置，不可影响已有的handler设置,所以不能使用地址引用方式覆盖，而是返回一个新的TableConfig实例
 
 	return t
 }
 
 func (t TableConfig) GetHandler() (handler Handler) {
-	if t.handler == nil {
+	if t._handler == nil {
 		err := errors.New("database handler is nil, please use TableConfig.WithHandler to set handler")
 		panic(err)
 	}
-	return t.handler
+	t.Init() //初始化数据表，比如启用事件订阅等
+	return t._handler
 }
 
 func (t TableConfig) GetHandlerWithInitTable() (handler Handler) {
@@ -413,7 +425,7 @@ func (t TableConfig) CheckUniqueIndex(allFields ...*Field) (err error) {
 		if len(uFs) != len(columnNames) { // 如果唯一标识字段数量和筛选条件字段数量不一致，则忽略该唯一索引校验（如 update 时不涉及到指定唯一索引）
 			continue
 		}
-		exists, err := NewExistsBuilder(t).WithHandler(t.handler).AppendFields(uFs...).Exists()
+		exists, err := NewExistsBuilder(t).WithHandler(t.GetHandler()).AppendFields(uFs...).Exists()
 		if err != nil {
 			return err
 		}
@@ -538,8 +550,8 @@ func (t TableConfig) Merge(tables ...TableConfig) TableConfig {
 		if table.Indexs != nil {
 			t.Indexs = t.Indexs.Merge(table.Columns, table.Indexs...)
 		}
-		if table.handler == nil {
-			t.handler = table.handler
+		if table._handler == nil {
+			t._handler = table._handler
 		}
 		if table.Comment != "" {
 			t.Comment = table.Comment
@@ -1078,7 +1090,7 @@ func GetRecordForUpdate[Model any](fs Fields) (record *Model, err error) {
 type HookField struct {
 	ObserveFields Fields
 	DestField     *Field
-	GetValueFn    func(scene Scene, updatingData map[string]any, dbData map[string]any, fs ...*Field) (val any, err error)
+	GetValueFn    func(scene Scene, updatingData DBDataMap, dbData DBDataMap, fs ...*Field) (val any, err error)
 }
 
 func MakeFieldHook(hookFields ...HookField) (hookFn HookFn) {
