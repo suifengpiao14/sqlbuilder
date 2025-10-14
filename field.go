@@ -2406,6 +2406,13 @@ func (fs Fields) GetChangingData() (updatingData DBDataMap, dbRecord DBDataMap, 
 		return nil, nil, err
 	}
 	dbRecord = *mapRef
+	//这里确保2个map不为空，减少调用方判空逻辑，，也减少调用方忘记判空引起的panic问题
+	if updatingData == nil {
+		updatingData = make(DBDataMap)
+	}
+	if dbRecord == nil {
+		dbRecord = make(DBDataMap)
+	}
 	// updatingData = DataMapConvertFieldNameKey(updatingData, fs) //使用Field.Name 作为key,方便脱离db字段定义
 	// dbRecord = DataMapConvertFieldNameKey(*mapRef, fs) //使用Field.Name 作为key,方便脱离db字段定义
 	return updatingData, dbRecord, nil

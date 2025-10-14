@@ -121,7 +121,6 @@ type TableConfig struct {
 	//publisher            message.Publisher table 只和gochannel publisher 交互，不直接和外部交互，如果需要发布到外部(如mq,kafka等)时，监听内部gochannel 转发即可，这样设计的目的是将领域内事件和领域外事件分离，方便内聚和聚合
 	comsumerMakers []func(table TableConfig) Consumer // 当前表级别的消费者(主要用于在表级别同步数据)
 	//views          TableConfigs view概念没有用 table在这里不是一等公民,Field才是一等公民,view功能通过FieldsI 接口实现,并且更合适
-	oneceInitFunc func() (err error) // 初始化动作，比如初始化字段默认值等,只执行一次
 
 }
 
@@ -179,18 +178,27 @@ func (t TableConfig) GetConsumerMakers() []func(table TableConfig) (consumer Con
 	return t.comsumerMakers
 }
 
-func (t TableConfig) Init() (err error) {
-	if t.oneceInitFunc != nil {
-		return t.oneceInitFunc()
+var tableInitMark sync.Map
+
+func initTableOnce(table TableConfig, initFn func() (err error)) (err error) {
+	_, ok := tableInitMark.LoadOrStore(table.Name, true)
+	if ok { //已经初始化过
+		return nil
 	}
-	return nil
-}
-func (t TableConfig) init() (err error) {
-	err = t.consume()
+	err = initFn()
 	if err != nil {
-		return err
+		tableInitMark.Delete(table.Name)
 	}
-	return nil
+	return err
+
+}
+
+func (t TableConfig) Init() (err error) { //init 会挂载在 t.GetHandler 方法中，会多次调用，所以需要确保只执行一次
+	err = initTableOnce(t, func() (err error) {
+		err = t.consume()
+		return err
+	})
+	return err
 }
 
 // consume 启动表级别 消费订阅者，主要用于在表级别同步数据, 比如品类发生变化时更新品类id集合等操作
@@ -201,7 +209,7 @@ func (t TableConfig) consume() (err error) {
 	}
 	for _, consumerMaker := range t.comsumerMakers {
 		subscriber := consumerMaker(t)
-		err = subscriber.Consume()
+		err = StartSubscriberOnce(t.GetTopic(), subscriber)
 		if err != nil {
 			return err
 		}
@@ -289,7 +297,6 @@ func NewTableConfig(name string) TableConfig {
 			return
 		},
 	}
-	t.oneceInitFunc = sync.OnceValue(func() (err error) { return t.init() })
 	return t
 }
 

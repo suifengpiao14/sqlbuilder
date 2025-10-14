@@ -12,6 +12,7 @@ import (
 )
 
 var gochannelPool sync.Map
+var subscriberLookPool sync.Map // 用于存储订阅者，防止重复创建
 var MessageLogger = watermill.NewStdLogger(false, false)
 
 func newGoChannel() (pubsub *gochannel.GoChannel) {
@@ -46,6 +47,19 @@ func GetSubscriber(topic string) (subscriber message.Subscriber) {
 	gochannelPool.Store(topic, pubsub)
 	subscriber = pubsub
 	return subscriber
+}
+
+// StartSubscriberOnce 防止重复创建订阅者，例如：重复调用订阅者，会导致重复消费消息
+func StartSubscriberOnce(topic string, consumer Consumer) (err error) {
+	_, ok := subscriberLookPool.LoadOrStore(topic, true)
+	if ok { //已经存在
+		return nil
+	}
+	err = consumer.Consume()
+	if err != nil {
+		subscriberLookPool.Delete(topic)
+	}
+	return err
 }
 
 type Consumer struct {
