@@ -127,11 +127,87 @@ type EventMessage interface {
 }
 
 type ExchangedEvent struct {
-	Identity string `json:"identity"`
+	Identity          string `json:"identity" validate:"required"`
+	IdentityFieldName string `json:"identityFieldName" validate:"required"`
+}
+
+func (e ExchangedEvent) String() string {
+	b, err := json.Marshal(e)
+	if err != nil {
+		return err.Error()
+	}
+	return string(b)
 }
 
 func (e ExchangedEvent) ToMessage() (msg *Message, err error) {
 	return MakeMessage(e)
+}
+
+type IdentityEventI interface {
+	GetIdentityValue() string
+	GetIdentityFieldName() string
+	String() string
+}
+type IdentityEvent struct {
+	IdentityValue     string `json:"identityValue"`
+	IdentityFieldName string `json:"identityFieldName"`
+}
+
+func (e IdentityEvent) GetIdentityValue() string {
+	return e.IdentityValue
+}
+
+func (e IdentityEvent) GetIdentityFieldName() string {
+	return e.IdentityFieldName
+}
+
+func (e IdentityEvent) String() string {
+	b, err := json.Marshal(e)
+	if err != nil {
+		return err.Error()
+	}
+	return string(b)
+}
+
+func MakeIdentityEventSubscriber[Model any](table TableConfig, workFn func(ruleModel Model) (err error)) (subscriber Consumer) {
+	return makeIdentityEventISubscriber[IdentityEvent](table, workFn)
+}
+
+func makeIdentityEventISubscriber[IdentityEvent IdentityEventI, Model any](table TableConfig, workFn func(ruleModel Model) (err error)) (subscriber Consumer) {
+	topic := table.GetTopic()
+	return Consumer{
+		Description: "数据变更订阅者",
+		Topic:       topic,
+		Subscriber:  GetSubscriber(topic),
+		WorkFn: MakeWorkFn(func(event IdentityEvent) (err error) {
+			fieldName := event.GetIdentityFieldName()
+			if fieldName == "" {
+				err = errors.Errorf("事件(%s)中没有包含字段名", event.String())
+				return err
+			}
+			identity := event.GetIdentityValue()
+			if identity == "" {
+				err = errors.Errorf("事件(%s)中没有包含唯一标识", event.String())
+				return err
+			}
+			col, err := table.Columns.GetByFieldNameAsError(fieldName)
+			if err != nil {
+				return err
+			}
+			field := col.GetField().SetModelRequered(true).SetValue(event.GetIdentityValue())
+			fs := Fields{field}
+			ruleModel := new(Model)
+			err = table.Repository().FirstMustExists(ruleModel, fs)
+			if err != nil {
+				return err
+			}
+			err = workFn(*ruleModel)
+			if err != nil {
+				return err
+			}
+			return nil
+		}),
+	}
 }
 
 type InsertEvent struct {
