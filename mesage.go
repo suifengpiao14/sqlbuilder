@@ -125,3 +125,42 @@ type Message = message.Message
 type EventMessage interface {
 	ToMessage() (msg *Message, err error)
 }
+
+type ExchangedEvent struct {
+	Identity string `json:"identity"`
+}
+
+func (e ExchangedEvent) ToMessage() (msg *Message, err error) {
+	return MakeMessage(e)
+}
+
+type InsertEvent struct {
+	Identity string `json:"identity"`
+}
+
+func (e InsertEvent) ToMessage() (msg *Message, err error) {
+	return MakeMessage(e)
+}
+
+type UpdateEvent struct {
+	Identity string `json:"identity"`
+}
+
+func (e UpdateEvent) ToMessage() (msg *Message, err error) {
+	return MakeMessage(e)
+}
+
+func MakeWorkFn[Event any](doFn func(event Event) (err error)) (fn func(msg *Message) error) {
+	return func(msg *Message) error {
+		var event Event
+		err := json.Unmarshal(msg.Payload, &event)
+		if err != nil {
+			return err
+		}
+		err = doFn(event)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+}
