@@ -358,7 +358,7 @@ func (t TableConfig) WalkColumn(walkColumnFn func(columnConfig ColumnConfig) Col
 }
 
 func (t TableConfig) AddIndexs(indexs ...Index) TableConfig {
-	t.Indexs.Append(t.Columns, indexs...)
+	t.Indexs.Append(t, indexs...)
 	return t
 }
 
@@ -399,7 +399,11 @@ func (t TableConfig) GetHandlerWithInitTable() (handler Handler) {
 	return handler
 }
 func (t TableConfig) GetDBNameByFieldNameMust(fieldName string) (dbName string) {
-	col := t.Columns.GetByFieldNameMust(fieldName)
+	col, err := t.Columns.GetByFieldNameAsError(fieldName)
+	if err != nil {
+		err := errors.Errorf("table(%s) ColumnConfig not found by fieldName:%s ", t.Name, fieldName) //增加table name 信息,便于排查问题
+		panic(err)
+	}
 	return col.DbName
 }
 func (t TableConfig) GetDBNameByFieldName(fieldName string) (dbName string) {
@@ -427,8 +431,8 @@ var Error_UniqueIndexAlreadyExist = errors.New("unique index already exist")
 func (t TableConfig) CheckUniqueIndex(allFields ...*Field) (err error) {
 	indexs := t.Indexs.GetUnique()
 	for _, index := range indexs {
-		uFs := index.Fields(t.Columns, allFields).AppendWhereValueFn(ValueFnForward) // 变成查询条件
-		columnNames := index.GetColumnNames(t.Columns)
+		uFs := index.Fields(t, allFields).AppendWhereValueFn(ValueFnForward) // 变成查询条件
+		columnNames := index.GetColumnNames(t)
 		if len(uFs) != len(columnNames) { // 如果唯一标识字段数量和筛选条件字段数量不一致，则忽略该唯一索引校验（如 update 时不涉及到指定唯一索引）
 			continue
 		}
@@ -555,7 +559,7 @@ func (t TableConfig) Merge(tables ...TableConfig) TableConfig {
 			t.Columns = t.Columns.Merge(table.Columns...)
 		}
 		if table.Indexs != nil {
-			t.Indexs = t.Indexs.Merge(table.Columns, table.Indexs...)
+			t.Indexs = t.Indexs.Merge(table, table.Indexs...)
 		}
 		if table._handler == nil {
 			t._handler = table._handler

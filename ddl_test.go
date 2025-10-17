@@ -27,8 +27,8 @@ var table = sqlbuilder.NewTableConfig("pay_order_1").WithHandler(sqlbuilder.NewG
 ).AddIndexs(
 	sqlbuilder.Index{
 		IsPrimary: true,
-		ColumnNames: func(tableColumns sqlbuilder.ColumnConfigs) (columnNames []string) {
-			return []string{tableColumns.GetByFieldNameMust(sqlbuilder.GetFieldName(NewOrderId)).DbName}
+		ColumnNames: func(table sqlbuilder.TableConfig) (columnNames []string) {
+			return []string{table.GetDBNameByFieldNameMust(sqlbuilder.GetFieldName(NewOrderId))}
 		},
 	},
 ).WithComment("支付订单表")

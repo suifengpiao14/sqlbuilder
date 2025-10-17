@@ -399,19 +399,19 @@ type Index struct {
 	IsPrimary bool `json:"isPrimary"` // 是否主键索引
 	Unique    bool `json:"unique"`    // 是否唯一索引
 	//Name        string   `json:"name"`   // 索引名称
-	ColumnNames func(tableColumns ColumnConfigs) (columnNames []string) //在实际封装模块时,已知 Field.Name ,DB.Column.Name 未知，需要支持通过 Field.Name 转DB.Column.Name,所以设计成函数格式
-	Weight      int                                                     `json:"weight"` // 索引权重,越大的表明越重要，能优先作为记录的唯一标识（程序自动识别记录唯一标识时会用到）
+	ColumnNames func(table TableConfig) (columnNames []string) //在实际封装模块时,已知 Field.Name ,DB.Column.Name 未知，需要支持通过 Field.Name 转DB.Column.Name,所以设计成函数格式
+	Weight      int                                            `json:"weight"` // 索引权重,越大的表明越重要，能优先作为记录的唯一标识（程序自动识别记录唯一标识时会用到）
 
 }
 
 // GetColumnNames 程序中建议使用这个函数获取索引字段名称，能提前校验出致命错误
-func (i Index) GetColumnNames(tableColumns ColumnConfigs) []string {
+func (i Index) GetColumnNames(table TableConfig) []string {
 	if i.ColumnNames == nil {
 		err := errors.Errorf("Index.ColumnNames is nil")
 		panic(err)
 	}
-	columnNames := i.ColumnNames(tableColumns)
-	allColumnNames := tableColumns.DBNames()
+	columnNames := i.ColumnNames(table)
+	allColumnNames := table.Columns.DBNames()
 	for _, columnName := range columnNames { //校验索引字段是否在表中存在，防止误写,返回了Field.Name
 		if !slices.Contains(allColumnNames, columnName) {
 			err := errors.Errorf("Index columnName(%s) not in table columns %s", columnName, strings.Join(allColumnNames, ","))
@@ -421,19 +421,19 @@ func (i Index) GetColumnNames(tableColumns ColumnConfigs) []string {
 	return columnNames
 }
 
-func (i Index) IndexName(tableColumns ColumnConfigs) string {
+func (i Index) IndexName(table TableConfig) string {
 	prefix := "idx"
 	if i.Unique {
 		prefix = "uniq"
 	}
-	arr := append([]string{prefix}, i.GetColumnNames(tableColumns)...)
+	arr := append([]string{prefix}, i.GetColumnNames(table)...)
 	indexName := strings.Join(arr, "_")
 	return indexName
 
 }
 
-func (i Index) Fields(tableColumns ColumnConfigs, allFields Fields) (fields Fields) {
-	alldbCoumns := i.GetColumnNames(tableColumns)
+func (i Index) Fields(table TableConfig, allFields Fields) (fields Fields) {
+	alldbCoumns := i.GetColumnNames(table)
 	for _, field := range allFields {
 		dbName := field.DBColumnName().BaseName()
 		ok := slices.Contains(alldbCoumns, dbName)
@@ -448,24 +448,24 @@ func (i Index) Fields(tableColumns ColumnConfigs, allFields Fields) (fields Fiel
 
 type Indexs []Index
 
-func (indexs *Indexs) Append(tableColumns ColumnConfigs, subIndexs ...Index) {
+func (indexs *Indexs) Append(table TableConfig, subIndexs ...Index) {
 	if *indexs == nil {
 		*indexs = make(Indexs, 0)
 	}
 	for _, index := range subIndexs {
-		if indexs.HasIndex(index, tableColumns) {
+		if indexs.HasIndex(index, table) {
 			continue
 		}
 		*indexs = append(*indexs, index)
 	}
 }
-func (indexs Indexs) Merge(tableColumns ColumnConfigs, otherIndexs ...Index) Indexs {
+func (indexs Indexs) Merge(table TableConfig, otherIndexs ...Index) Indexs {
 	newIndexs := make(Indexs, len(indexs))
 	copy(newIndexs, indexs)
-	newIndexs.Append(tableColumns, otherIndexs...)
+	newIndexs.Append(table, otherIndexs...)
 	return newIndexs
 }
-func (indexs Indexs) HasIndex(index Index, tableColumns ColumnConfigs) bool {
+func (indexs Indexs) HasIndex(index Index, tableColumns TableConfig) bool {
 	for _, i := range indexs {
 		if index.IndexName(tableColumns) == i.IndexName(tableColumns) && index.Unique == i.Unique {
 			return true
@@ -501,15 +501,15 @@ func (indexs Indexs) First() (index *Index, exists bool) {
 }
 
 // SortByColCount  根据列数量排序，优先使用唯一索引，其次使用主键索引（有唯一索引情况下，主键id往往是没有业务含义的列），最后使用复合索引,这个主要用于寻找对象唯一标识
-func (indexs Indexs) SortByColCount(tableColumns ColumnConfigs) Indexs {
+func (indexs Indexs) SortByColCount(table TableConfig) Indexs {
 	slices.SortStableFunc(indexs, func(i, j Index) int {
 		diff := i.Weight - j.Weight
 		if diff != 0 {
 			diff = diff * -1 // 权重大的排在前面
 			return diff
 		}
-		iColumCount := len(i.GetColumnNames(tableColumns))
-		jColumCount := len(j.GetColumnNames(tableColumns))
+		iColumCount := len(i.GetColumnNames(table))
+		jColumCount := len(j.GetColumnNames(table))
 		iOrdinary := i.Unique && !j.Unique
 		jOrdinary := !j.Unique && !j.IsPrimary
 
