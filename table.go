@@ -122,6 +122,7 @@ type TableConfig struct {
 	comsumerMakers []func(table TableConfig) Consumer // 当前表级别的消费者(主要用于在表级别同步数据)
 	//views          TableConfigs view概念没有用 table在这里不是一等公民,Field才是一等公民,view功能通过FieldsI 接口实现,并且更合适
 	//topic string // 事件发布订阅主题，默认使用表名作为topic, 也可以自定义(直接内部固定，没必要引入太过不必须的概念，没必要引入过多的复杂性)
+	topicTables TableConfigs // 订阅的主题表，key 为固定的TableConfig.programTableName
 
 }
 
@@ -131,6 +132,23 @@ type HookFn func(ctx context.Context, scene Scene) (hookedFields Fields)
 func (t TableConfig) WithFieldHook(hooks HookFn) TableConfig {
 	t.tableLevelFieldsHook = hooks
 	return t
+}
+
+func (t TableConfig) WithTopicTable(topicTables ...TableConfig) TableConfig { // 订阅其它表的变更事件，并同步到当前表中
+	t.topicTables = append(t.topicTables, topicTables...)
+	return t
+}
+
+// GetTopicTable 通过模型表查询实际订阅表(由于表、表对应service 有依赖关系，订阅表往往和程序依赖关系相反，导致循环依赖语法错误，但是订阅代码确实属于表层面，所以增加自动匹配订阅表函数，后续观察和优化)
+func (t TableConfig) GetTopicTable(modelTable TableConfig) (publishTable TableConfig, err error) {
+	for _, topicTable := range t.topicTables {
+		err := topicTable.CheckMissOutFieldName(modelTable)
+		if err == nil {
+			return topicTable, nil
+		}
+	}
+	err = errors.Errorf("模型表(%s)不在表(%s)订阅表集合中", modelTable.Name, t.Name)
+	return publishTable, err
 }
 
 func (t TableConfig) WithConsumerMakers(consumerMakers ...func(table TableConfig) (consumer Consumer)) TableConfig { // 使用tableGetter 能延迟获取table，主要是等待 handler 初始化完毕
@@ -170,7 +188,7 @@ func (t TableConfig) GetColumnsWithViewColumns() (columnConfigs ColumnConfigs) {
 }
 */
 
-func (t TableConfig) IsContainsModel(modelTable TableConfig) (err error) { //校验当前表是否包含给定表所包含的模型
+func (t TableConfig) CheckMissOutFieldName(modelTable TableConfig) (err error) { //校验当前表是否包含给定表所包含的模型
 	return t.Columns.CheckMissOutFieldName(modelTable.Columns.Fields().FilterByModelRequired().Names()...)
 }
 
@@ -371,8 +389,9 @@ func (t TableConfig) AddIndexs(indexs ...Index) TableConfig {
 }
 
 func (t TableConfig) WithHandler(handler Handler) TableConfig {
-	t._handler = handler // 此处需要兼容事务句柄设置，不可影响已有的handler设置,所以不能使用地址引用方式覆盖，而是返回一个新的TableConfig实例
-
+	if handler != nil {
+		t._handler = handler // 此处需要兼容事务句柄设置，不可影响已有的handler设置,所以不能使用地址引用方式覆盖，而是返回一个新的TableConfig实例
+	}
 	return t
 }
 
@@ -609,8 +628,8 @@ type ColumnConfig struct {
 }
 
 const (
-	DDLSort_First = math.MinInt
-	DDLSort_Last  = math.MaxInt
+	DDLSort_First = math.MaxInt
+	DDLSort_Last  = 0
 )
 
 func (c ColumnConfig) WithDDLSort(sort int) ColumnConfig {
@@ -786,7 +805,7 @@ type ColumnConfigs []ColumnConfig
 
 func (cs ColumnConfigs) sort() {
 	slices.SortStableFunc(cs, func(a, b ColumnConfig) int {
-		return a.ddlSort - b.ddlSort
+		return b.ddlSort - a.ddlSort
 	})
 }
 

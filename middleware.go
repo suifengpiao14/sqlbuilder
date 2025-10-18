@@ -94,7 +94,8 @@ var ValueFnFnIncrease ValueFnFn = func(inputValue any, f *Field, fs ...*Field) (
 	if num == 0 {
 		return nil, nil
 	}
-	val := fmt.Sprintf("IFNULL(%s, 0)   %d", f.DBColumnName().FullNameWithQuotes(), num)
+	colName := f.DBColumnName().FullNameWithQuotes()
+	val := fmt.Sprintf("IFNULL(%s, 0) + %d", colName, num)
 	return goqu.L(val), nil
 }
 

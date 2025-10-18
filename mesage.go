@@ -126,22 +126,22 @@ type EventMessage interface {
 	ToMessage() (msg *Message, err error)
 }
 
-type ExchangedEvent struct {
-	Identity          string `json:"identity" validate:"required"`
-	IdentityFieldName string `json:"identityFieldName" validate:"required"`
-}
+// type ExchangedEvent struct {
+// 	Identity          string `json:"identity" validate:"required"`
+// 	IdentityFieldName string `json:"identityFieldName" validate:"required"`
+// }
 
-func (e ExchangedEvent) String() string {
-	b, err := json.Marshal(e)
-	if err != nil {
-		return err.Error()
-	}
-	return string(b)
-}
+// func (e ExchangedEvent) String() string {
+// 	b, err := json.Marshal(e)
+// 	if err != nil {
+// 		return err.Error()
+// 	}
+// 	return string(b)
+// }
 
-func (e ExchangedEvent) ToMessage() (msg *Message, err error) {
-	return MakeMessage(e)
-}
+// func (e ExchangedEvent) ToMessage() (msg *Message, err error) {
+// 	return MakeMessage(e)
+// }
 
 type IdentityEventI interface {
 	GetIdentityValue() string
@@ -149,9 +149,17 @@ type IdentityEventI interface {
 	String() string
 }
 type IdentityEvent struct {
+	Operation         string `json:"operation"`
 	IdentityValue     string `json:"identityValue"`
 	IdentityFieldName string `json:"identityFieldName"`
 }
+
+const (
+	IdentityEventOperationCreate = "create"
+	IdentityEventOperationUpdate = "update"
+	IdentityEventOperationDelete = "delete"
+	IdentityEventOperationSet    = "set"
+)
 
 func (e IdentityEvent) GetIdentityValue() string {
 	return e.IdentityValue
@@ -167,6 +175,10 @@ func (e IdentityEvent) String() string {
 		return err.Error()
 	}
 	return string(b)
+}
+
+func (e IdentityEvent) ToMessage() (msg *Message, err error) {
+	return MakeMessage(e)
 }
 
 func MakeIdentityEventSubscriber[Model any](publishTable TableConfig, workFn func(ruleModel Model) (err error)) (subscriber Consumer) {
