@@ -23,10 +23,9 @@ import (
 )
 
 // DriverName 默认为Driver_sqlite3 驱动，可用于快速试用测试
-// Deprecated: use GormDBForSqlite3 or GormDBForMysql
+// Deprecated: use GetDB
 var DriverName = Driver_sqlite3
 
-// Deprecated: use GormDBForSqlite3
 var GetDB func() *sql.DB = sync.OnceValue(func() (db *sql.DB) {
 	db, err := sql.Open(Driver_sqlite3.String(), "sqlbuilder_example.db")
 	if err != nil {

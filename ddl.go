@@ -77,8 +77,9 @@ func MakeColumnsAndIndexs(driver Driver, table TableConfig) (lines []string, err
 		}
 		cols := make(ColumnConfigs, 0)
 		for _, col := range table.Columns {
-			if len(primaryCols) == 1 && slices.Contains(primaryCols, col.DbName) && col.Type.IsInt() {
-				col.AutoIncrement = true //整型主键自动增长
+			if len(primaryCols) == 1 && slices.Contains(primaryCols, col.DbName) { // && col.Type.IsInt()
+				col.Type = Schema_Type_int // 内置建表语句，当主键只有一个时，固定为int类型，并且自动增长，这样可以简化很多后续系列复杂度，也非常实用
+				col.AutoIncrement = true   //整型主键自动增长
 				col = col.WithDDLSort(DDLSort_First)
 			}
 			cols = append(cols, col)

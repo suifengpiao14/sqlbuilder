@@ -121,6 +121,7 @@ type TableConfig struct {
 	//publisher            message.Publisher table 只和gochannel publisher 交互，不直接和外部交互，如果需要发布到外部(如mq,kafka等)时，监听内部gochannel 转发即可，这样设计的目的是将领域内事件和领域外事件分离，方便内聚和聚合
 	comsumerMakers []func(table TableConfig) Consumer // 当前表级别的消费者(主要用于在表级别同步数据)
 	//views          TableConfigs view概念没有用 table在这里不是一等公民,Field才是一等公民,view功能通过FieldsI 接口实现,并且更合适
+	//topic string // 事件发布订阅主题，默认使用表名作为topic, 也可以自定义(直接内部固定，没必要引入太过不必须的概念，没必要引入过多的复杂性)
 
 }
 
@@ -239,11 +240,18 @@ func (t TableConfig) GetTopic() string {
 	return topic
 }
 
-// // GetConsumer 获取订阅者，方便后续扩展，比如增加订阅者持久化等操作
-// func (t TableConfig) GetConsumer() message.Subscriber {
-// 	return t.getPubSub()
+// func (t TableConfig) WithTopic(topic string) TableConfig { // 有时候topic需要固定为封装模块内置的表，所以此处支持自定义topic，一般是用内置表topic赋值给当前表
+// 	t.topic = topic
+// 	return t
 // }
 
+// // GetConsumer 获取订阅者，方便后续扩展，比如增加订阅者持久化等操作
+//
+//	func (t TableConfig) GetConsumer() message.Subscriber {
+//		return t.getPubSub()
+//	}
+//
+// Publish
 func (t TableConfig) Publish(event EventMessage) (err error) {
 	var pubSub = t.GetPublisher()
 	msg, err := event.ToMessage()

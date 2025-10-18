@@ -94,10 +94,8 @@ var ValueFnFnIncrease ValueFnFn = func(inputValue any, f *Field, fs ...*Field) (
 	if num == 0 {
 		return nil, nil
 	}
-	//val:=fmt.Sprintf("IFNULL(%s, 0)  %s %d", f.DBColumnName().FullNameWithQuotes(), symbol, num)
-	//return goqu.L(val), nil
-	val := goqu.L("IFNULL(%s, 0) + %d", f.DBColumnName().FullNameWithQuotes(), num)
-	return val, nil
+	val := fmt.Sprintf("IFNULL(%s, 0)   %d", f.DBColumnName().FullNameWithQuotes(), num)
+	return goqu.L(val), nil
 }
 
 var ApplyFnUseDBValue ApplyFn = func(f *Field, fs ...*Field) {

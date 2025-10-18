@@ -169,12 +169,12 @@ func (e IdentityEvent) String() string {
 	return string(b)
 }
 
-func MakeIdentityEventSubscriber[Model any](table TableConfig, workFn func(ruleModel Model) (err error)) (subscriber Consumer) {
-	return makeIdentityEventISubscriber[IdentityEvent](table, workFn)
+func MakeIdentityEventSubscriber[Model any](publishTable TableConfig, workFn func(ruleModel Model) (err error)) (subscriber Consumer) {
+	return makeIdentityEventISubscriber[IdentityEvent](publishTable, workFn)
 }
 
-func makeIdentityEventISubscriber[IdentityEvent IdentityEventI, Model any](table TableConfig, workFn func(ruleModel Model) (err error)) (subscriber Consumer) {
-	topic := table.GetTopic()
+func makeIdentityEventISubscriber[IdentityEvent IdentityEventI, Model any](publishTable TableConfig, workFn func(ruleModel Model) (err error)) (subscriber Consumer) {
+	topic := publishTable.GetTopic()
 	return Consumer{
 		Description: "数据变更订阅者",
 		Topic:       topic,
@@ -190,14 +190,14 @@ func makeIdentityEventISubscriber[IdentityEvent IdentityEventI, Model any](table
 				err = errors.Errorf("事件(%s)中没有包含唯一标识", event.String())
 				return err
 			}
-			col, err := table.Columns.GetByFieldNameAsError(fieldName)
+			col, err := publishTable.Columns.GetByFieldNameAsError(fieldName)
 			if err != nil {
 				return err
 			}
 			field := col.GetField().SetModelRequered(true).SetValue(event.GetIdentityValue())
 			fs := Fields{field}
 			ruleModel := new(Model)
-			err = table.Repository().FirstMustExists(ruleModel, fs)
+			err = publishTable.Repository().FirstMustExists(ruleModel, fs)
 			if err != nil {
 				return err
 			}
