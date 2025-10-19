@@ -72,24 +72,28 @@ func MakeColumnsAndIndexs(driver Driver, table TableConfig) (lines []string, err
 	uniquedColumns := memorytable.NewTable(table.Columns...).Uniqueue(func(row ColumnConfig) (key string) {
 		return row.DbName
 	})
+	primary, _ := table.Indexs.GetPrimary()
+	var primaryCols []string
+	if primary != nil && primary.ColumnNames != nil {
+		primaryCols = primary.GetColumnNames(table)
+	}
+	cols := make(ColumnConfigs, 0)
+	var isAutoIncrement bool
+
+	for _, col := range uniquedColumns {
+		if len(primaryCols) == 1 && slices.Contains(primaryCols, col.DbName) { // && col.Type.IsInt()
+			col.Type = Schema_Type_int // 内置建表语句，当主键只有一个时，固定为int类型，并且自动增长，这样可以简化很多后续系列复杂度，也非常实用
+			col.AutoIncrement = true   //整型主键自动增长
+			col = col.WithDDLSort(DDLSort_First)
+			isAutoIncrement = true // 记录主键递增属性
+		}
+		cols = append(cols, col)
+	}
+	cols.sort() // 按DDL排序位置排序
+
 	switch driver {
 	case Driver_mysql:
-		primary, _ := table.Indexs.GetPrimary()
-		var primaryCols []string
-		if primary != nil && primary.ColumnNames != nil {
-			primaryCols = primary.GetColumnNames(table)
-		}
-		cols := make(ColumnConfigs, 0)
 
-		for _, col := range uniquedColumns {
-			if len(primaryCols) == 1 && slices.Contains(primaryCols, col.DbName) { // && col.Type.IsInt()
-				col.Type = Schema_Type_int // 内置建表语句，当主键只有一个时，固定为int类型，并且自动增长，这样可以简化很多后续系列复杂度，也非常实用
-				col.AutoIncrement = true   //整型主键自动增长
-				col = col.WithDDLSort(DDLSort_First)
-			}
-			cols = append(cols, col)
-		}
-		cols.sort() // 按DDL排序位置排序
 		for _, col := range cols {
 			col = col.CopyFieldSchemaIfEmpty()
 			ddl := Column2DDLMysql(col)
@@ -105,7 +109,7 @@ func MakeColumnsAndIndexs(driver Driver, table TableConfig) (lines []string, err
 		}
 
 	case Driver_sqlite3, _Driver_sqlite:
-		for _, col := range uniquedColumns {
+		for _, col := range cols {
 			col = col.CopyFieldSchemaIfEmpty()
 			ddl := Column2DDLSQLite(col)
 			if strings.TrimSpace(ddl) != "" {
@@ -113,6 +117,9 @@ func MakeColumnsAndIndexs(driver Driver, table TableConfig) (lines []string, err
 			}
 		}
 		for _, index := range table.Indexs {
+			if index.IsPrimary && isAutoIncrement {
+				continue // sqlite 递增主键定义在列上,不能单独定义索引，否则会报错
+			}
 			ddl := Index2DDLSQLitePrimaryAndUniqueIndex(index, table)
 			if strings.TrimSpace(ddl) != "" {
 				arr = append(arr, ddl)
@@ -128,7 +135,12 @@ func MakeColumnsAndIndexs(driver Driver, table TableConfig) (lines []string, err
 }
 
 func Column2DDLSQLite(col ColumnConfig) (ddl string) {
-	colDef := fmt.Sprintf("  `%s` %s", col.DbName, mapGoTypeToSQLite(col.Type, col.Length))
+	typ := mapGoTypeToSQLite(col.Type, col.Length)
+	if col.AutoIncrement {
+		typ = "INTEGER PRIMARY KEY AUTOINCREMENT"
+	}
+
+	colDef := fmt.Sprintf("  `%s` %s", col.DbName, typ)
 	if col.NotNull {
 		colDef += " NOT NULL"
 	}
