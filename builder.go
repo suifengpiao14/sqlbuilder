@@ -1250,7 +1250,7 @@ func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	listSql, err = NewListBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).ToSQL()
+	listSql, err = NewListBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).WithResultDest(p.resultDst).ToSQL()
 	if err != nil {
 		return "", "", err
 	}
@@ -1572,6 +1572,10 @@ func (p *SQLParam[T]) WithHandler(handler Handler) *T {
 		return p.self
 	}
 	p._Table = p._Table.WithHandler(handler)
+	return p.self
+}
+func (p *SQLParam[T]) WithResultDest(dst any) *T {
+	p.resultDst = dst
 	return p.self
 }
 
