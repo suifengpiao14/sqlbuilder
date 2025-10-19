@@ -78,6 +78,8 @@ func DB2Gorm(sqlDBFn func() *sql.DB, gormConfig *gorm.Config) func() *gorm.DB {
 			dialector = mysql.New(mysql.Config{Conn: sqlDB})
 		case Driver_sqlite3.String():
 			dialector = sqlite.New(sqlite.Config{Conn: sqlDB})
+		default:
+			panic("unsupported driver")
 		}
 
 		gormDB, err := gorm.Open(dialector, gormConfig)
