@@ -1935,6 +1935,11 @@ func (fs Fields) Builder(ctx context.Context, scene Scene, tableConfig TableConf
 			return ok
 		})
 	}
+	if len(fs) == 0 && slices.Contains(SCENE_Commands, scene) { // 对于写操作,如果字段为空，则抛出异常,因为写操作必须有字段
+		err := errors.Errorf("table(%s) scene(%s) Fields.Builder fs is empty", tableConfig.Name, scene)
+		panic(err)
+
+	}
 
 	return fields
 }
