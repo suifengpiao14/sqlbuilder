@@ -15,6 +15,7 @@ import (
 	"github.com/doug-martin/goqu/v9/exp"
 	"github.com/pkg/errors"
 	"github.com/suifengpiao14/funcs"
+	"github.com/suifengpiao14/memorytable"
 )
 
 type DBName struct {
@@ -419,6 +420,7 @@ func (t TableConfig) GetHandlerWithInitTable() (handler Handler) {
 			}
 			err = handler.Exec(ddl)
 			if err != nil {
+				err = errors.WithMessagef(err, "create table:%s failed", t.Name)
 				panic(err)
 			}
 		}
@@ -837,6 +839,7 @@ func (cs ColumnConfigs) DBNames() (dbNames []string) {
 	for _, c := range cs {
 		dbNames = append(dbNames, c.DbName)
 	}
+	dbNames = memorytable.NewTable(dbNames...).Uniqueue(func(row string) (key string) { return row })
 	return dbNames
 
 }

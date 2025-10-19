@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 	"github.com/suifengpiao14/funcs"
+	"github.com/suifengpiao14/memorytable"
 )
 
 var (
@@ -68,6 +69,9 @@ func GenerateDDL(driver Driver, tableConfig TableConfig) (ddl string, err error)
 
 func MakeColumnsAndIndexs(driver Driver, table TableConfig) (lines []string, err error) {
 	arr := make([]string, 0)
+	uniquedColumns := memorytable.NewTable(table.Columns...).Uniqueue(func(row ColumnConfig) (key string) {
+		return row.DbName
+	})
 	switch driver {
 	case Driver_mysql:
 		primary, _ := table.Indexs.GetPrimary()
@@ -76,7 +80,8 @@ func MakeColumnsAndIndexs(driver Driver, table TableConfig) (lines []string, err
 			primaryCols = primary.GetColumnNames(table)
 		}
 		cols := make(ColumnConfigs, 0)
-		for _, col := range table.Columns {
+
+		for _, col := range uniquedColumns {
 			if len(primaryCols) == 1 && slices.Contains(primaryCols, col.DbName) { // && col.Type.IsInt()
 				col.Type = Schema_Type_int // 内置建表语句，当主键只有一个时，固定为int类型，并且自动增长，这样可以简化很多后续系列复杂度，也非常实用
 				col.AutoIncrement = true   //整型主键自动增长
@@ -100,7 +105,7 @@ func MakeColumnsAndIndexs(driver Driver, table TableConfig) (lines []string, err
 		}
 
 	case Driver_sqlite3, _Driver_sqlite:
-		for _, col := range table.Columns {
+		for _, col := range uniquedColumns {
 			col = col.CopyFieldSchemaIfEmpty()
 			ddl := Column2DDLSQLite(col)
 			if strings.TrimSpace(ddl) != "" {
