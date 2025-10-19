@@ -384,7 +384,6 @@ func (p InsertParam) ToSQL() (sql string, err error) {
 		err = errors.New("InsertParam.Data() return nil data")
 		return "", err
 	}
-
 	ds := p.GetGoquDialect().Insert(tableConfig.Name).Rows(rowData)
 	sql, _, err = ds.ToSQL()
 	if err != nil {
@@ -1283,6 +1282,7 @@ func (p PaginationParam) paginationHandler(totalSql string, listSql string, resu
 }
 
 func (p PaginationParam) Pagination(result any) (count int64, err error) {
+	p.resultDst = result
 	isShardedTable := p.GetTable().isShardedTable()
 	if isShardedTable {
 		shardedTablePaginationBuilder := NewShardedTablePaginationBuilder(p)

@@ -2038,12 +2038,14 @@ func (fs Fields) Intersection(assistant Fields) (intersection Fields) {
 	intersection, _ = out.ToSliceWithEmpty()
 	return intersection
 }
-func (fs Fields) IntersectionUnionRequired(assistant Fields) (IntersectionUnionRequired Fields) {
-	requiredFields, nonRequiredFields := fs.SplitRequired()
-	intersection := nonRequiredFields.Intersection(assistant)
-	IntersectionUnionRequired = requiredFields.Add(intersection...)
-	return IntersectionUnionRequired
-}
+
+// Deprecated: 请使用模型表检测字段是否缺失，此处不再维护。
+// func (fs Fields) IntersectionUnionRequired(assistant Fields) (IntersectionUnionRequired Fields) {
+// 	requiredFields, nonRequiredFields := fs.SplitRequired()
+// 	intersection := nonRequiredFields.Intersection(assistant)
+// 	IntersectionUnionRequired = requiredFields.Add(intersection...)
+// 	return IntersectionUnionRequired
+// }
 
 // SplitRequired 区分必填和非必填字段，模型封装时分离出非必要字段和表字段求交集,必填字段不能缺失
 func (fs Fields) SplitRequired() (requiredFields, nonRequiredFields Fields) {
