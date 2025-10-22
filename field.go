@@ -33,7 +33,7 @@ func (l Layer) IsEmpty() bool {
 }
 
 const (
-	Value_Layer_SetValue    Layer = "SetValue"    //赋值层
+	//Value_Layer_SetValue    Layer = "SetValue"    //赋值层 这一层直接放到 Field.value 字段中，这样可以收集地址，直接转换为模型结构字段
 	Value_Layer_SetFormat   Layer = "setFormat"   //赋值后格式化层，用于重置或者解码等场景
 	Value_Layer_ApiValidate Layer = "ApiValidate" //验证层
 	Value_Layer_ApiFormat   Layer = "ApiFormat"   //解码前格式化层
@@ -48,7 +48,7 @@ type Phase = Layer
 // todo 后去重构
 const (
 	//单字段步骤定义
-	PhaseField_ApiSetValue = Value_Layer_SetValue    // api赋值层
+	//PhaseField_ApiSetValue = Value_Layer_SetValue    // api赋值层
 	PhaseField_ApiValidate = Value_Layer_ApiValidate // api验证层
 	PhaseField_ApiFormat   = Value_Layer_ApiFormat   // api格式化层
 	PhaseFields_ApiFormat  = "api_fields_format"
@@ -63,11 +63,11 @@ const (
 var (
 	//todo layer 改成 Scope 作用域
 	//layer_order 确保层序,越靠前越先执行
-	layer_order               = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate, Value_Layer_DBFormat, Value_Layer_OnlyForData} // 层序,越靠前越先执行
+	layer_order               = []Layer{Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate, Value_Layer_DBFormat, Value_Layer_OnlyForData} // 层序,越靠前越先执行
 	Layer_all                 = layer_order
-	Layer_where               = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate, Value_Layer_DBFormat} // where  场景下执行的函数
-	Layer_get_value_before_db = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat}                                               // 获取转换成db数据格式之前的原始数据
-	Layer_Validate            = []Layer{Value_Layer_SetValue, Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate}                       // 验证数据时执行的函数
+	Layer_where               = []Layer{Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate, Value_Layer_DBFormat} // where  场景下执行的函数
+	Layer_get_value_before_db = []Layer{Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat}                                               // 获取转换成db数据格式之前的原始数据
+	Layer_Validate            = []Layer{Value_Layer_SetFormat, Value_Layer_ApiValidate, Value_Layer_ApiFormat, Value_Layer_DBValidate}                       // 验证数据时执行的函数
 
 )
 
@@ -88,9 +88,11 @@ func (fn ValueFn) IsEqual(v ValueFn) bool {
 func (fn ValueFn) IsNil() bool {
 	return fn.Fn == nil
 }
-func (fn ValueFn) IsSetValueFn() bool {
-	return fn.Layer.EqualFold(Value_Layer_SetValue)
-}
+
+// setValueFn 改成 Field.value 了
+// func (fn ValueFn) IsSetValueFn() bool {
+// 	return fn.Layer.EqualFold(Value_Layer_SetValue)
+// }
 
 func (vs *ValueFns) Append(value ...ValueFn) *ValueFns {
 	if *vs == nil {
@@ -113,14 +115,16 @@ func (values ValueFns) GetByLayer(layers ...Layer) (subValues ValueFns) {
 	return subValues
 }
 
-func (values ValueFns) HasSetValueLayer() bool {
-	return len(values.GetByLayer(Value_Layer_SetValue)) > 0
-}
+//Value_Layer_SetValue 改成 Field.value 字段了，此处废弃
+
+// func (values ValueFns) HasSetValueLayer() bool {
+// 	return len(values.GetByLayer(Value_Layer_SetValue)) > 0
+// }
 
 func (values ValueFns) Value(val any, f *Field, fs ...*Field) (value any, err error) {
-	if !values.HasSetValueLayer() {
-		return nil, nil
-	}
+	// if !values.HasSetValueLayer() {
+	// 	return nil, nil
+	// }
 	value = val
 	for _, layer := range layer_order {
 		subValues := values.GetByLayer(layer)
@@ -168,25 +172,27 @@ func (fns *ValueFns) Remove(v ValueFn) {
 	*fns = tmp
 }
 
-// ResetSetValueFn 重置设置值类型函数
-func (fns *ValueFns) ResetSetValueFn(setValueFnFns ...ValueFnFn) {
-	tmp := make(ValueFns, 0)
-	for _, setValueFnFn := range setValueFnFns {
-		setValueFn := ValueFn{
-			Fn:    setValueFnFn,
-			Layer: Value_Layer_SetValue,
-		}
-		tmp = append(tmp, setValueFn)
-	}
-	for _, v := range *fns {
-		if v.IsSetValueFn() {
-			continue
-		}
-		tmp = append(tmp, v)
-	}
+//Value_Layer_SetValue 废弃，改成 Field.value 了
 
-	*fns = tmp
-}
+// ResetSetValueFn 重置设置值类型函数
+// func (fns *ValueFns) ResetSetValueFn(setValueFnFns ...ValueFnFn) {
+// 	tmp := make(ValueFns, 0)
+// 	for _, setValueFnFn := range setValueFnFns {
+// 		setValueFn := ValueFn{
+// 			Fn:    setValueFnFn,
+// 			Layer: Value_Layer_SetValue,
+// 		}
+// 		tmp = append(tmp, setValueFn)
+// 	}
+// 	for _, v := range *fns {
+// 		if v.IsSetValueFn() {
+// 			continue
+// 		}
+// 		tmp = append(tmp, v)
+// 	}
+
+// 	*fns = tmp
+// }
 
 func (vs ValueFns) Filter(fn func(fn ValueFn) bool) (subFns ValueFns) {
 	for _, v := range vs {
@@ -320,7 +326,7 @@ func Join(ds *goqu.SelectDataset, jionConfigs ...OnUnit) *goqu.SelectDataset {
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
 	Name  string `json:"name"`
-	value any    //增加原始值记录，和ValueFns 脱钩，后续ValueFns/WhereFns 合并使用pipeLine模式,对原始value 加工
+	value any    //增加原始值记录，对于query 存储 结构体属性地址，就能巧妙的将数组转成结构体 ,和ValueFns 脱钩，后续ValueFns/WhereFns 合并使用pipeLine模式,对原始value 加工
 	//valueMiddlewares ValueFns // 后续使用中间件思想处理值 后续优化方向
 
 	//todo 后续迁移到tags(tag 分组名称为 value)
@@ -1040,30 +1046,33 @@ func (f *Field) AppendValueFn(valueFns ...ValueFn) *Field {
 // Subscribe 专注解决当前字段值依赖其他字段值转换生成场景
 func (f *Field) Subscribe(subFn func(srcValues ...any) (value any, err error), dependentFs ...*Field) *Field {
 	f.SceneSave(func(f *Field, fs ...*Field) {
-		f.ValueFns.ResetSetValueFn(func(inputValue any, f *Field, fs ...*Field) (any, error) {
-			if subFn == nil {
-				return nil, nil
-			}
-			fieldCout := len(dependentFs)
-			if fieldCout == 0 {
-				return nil, errors.New("dependentFs required")
-			}
-			srcValues := make([]any, fieldCout)
-			for i, emptySrcField := range dependentFs {
-				srcField, ok := Fields(fs).GetByName(emptySrcField.Name)
-				if ok {
-					srcValue, err := srcField.GetValue(Layer_all, fs...)
-					if err != nil {
-						return nil, err
-					}
-					srcValues[i] = srcValue
+		f.ValueFns.Append(ValueFn{
+			Layer: Value_Layer_SetFormat,
+			Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
+				if subFn == nil {
+					return nil, nil
 				}
-			}
-			value, err := subFn(srcValues...)
-			if err != nil {
-				return nil, err
-			}
-			return value, nil
+				fieldCout := len(dependentFs)
+				if fieldCout == 0 {
+					return nil, errors.New("dependentFs required")
+				}
+				srcValues := make([]any, fieldCout)
+				for i, emptySrcField := range dependentFs {
+					srcField, ok := Fields(fs).GetByName(emptySrcField.Name)
+					if ok {
+						srcValue, err := srcField.GetValue(Layer_all, fs...)
+						if err != nil {
+							return nil, err
+						}
+						srcValues[i] = srcValue
+					}
+				}
+				value, err := subFn(srcValues...)
+				if err != nil {
+					return nil, err
+				}
+				return value, nil
+			},
 		})
 	})
 	return f
@@ -1303,10 +1312,18 @@ func (f *Field) SceneExists(middlewareFn ApplyFn) *Field {
 
 // SetValue  设置第一个valueFn
 func (f *Field) SetValue(value any) *Field {
-	f.ValueFns.ResetSetValueFn(func(_ any, f *Field, fs ...*Field) (any, error) {
-		return value, nil
-	})
+	f.value = value
+	// f.ValueFns.ResetSetValueFn(func(_ any, f *Field, fs ...*Field) (any, error) {
+	// 	return value, nil
+	// })
 	return f
+}
+func (f *Field) SetValueRef(value any) any { //用于从数据库扫描数据时，需要用到指针类型，此处简化操作
+	if reflect.TypeOf(value).Kind() != reflect.Ptr {
+		err := errors.New("value 必须是指针类型")
+		panic(err)
+	}
+	return f.value
 }
 
 type FieldFn[T FieldTypeI] func(value T) *Field
@@ -1363,40 +1380,42 @@ type FieldTypeBoolI interface {
 type FieldTypeI interface {
 	FieldTypeIntI |
 		FieldTypeStringI |
-		FieldTypeBoolI |
-		ValueFn | ValueFnFn | func(inputValue any, f *Field, fs ...*Field) (any, error)
+		FieldTypeBoolI //|
+	//ValueFn | ValueFnFn | func(inputValue any, f *Field, fs ...*Field) (any, error)
 }
 
 // NewField 生成列，使用最简单版本,只需要提供获取值的函数，其它都使用默认配置，同时支持修改（字段名、标题等这些会在不同的层级设置）
 func NewField[T FieldTypeI](value T, middlewareFns ...ApplyFn) (field *Field) {
-	field = &Field{}
-	var valueFn ValueFn
-	switch v := any(value).(type) {
-	case func(inputValue any, f *Field, fs ...*Field) (any, error):
-		valueFn = ValueFn{
-			Fn:    v,
-			Layer: Value_Layer_SetValue,
-		}
-	case ValueFnFn:
-		valueFn = ValueFn{
-			Fn:    v,
-			Layer: Value_Layer_SetValue,
-		}
-	case ValueFn:
-		valueFn = v
-		if valueFn.Layer.IsEmpty() { // 默认设置
-			valueFn.Layer = Value_Layer_SetValue
-		}
-	default:
-		valueFn = ValueFn{
-			Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
-				return v, nil
-			},
-			Layer: Value_Layer_SetValue,
-		}
+	field = &Field{
+		value: value,
 	}
+	//var valueFn ValueFn
+	// switch v := any(value).(type) {
+	// case func(inputValue any, f *Field, fs ...*Field) (any, error):
+	// 	valueFn = ValueFn{
+	// 		Fn:    v,
+	// 		Layer: Value_Layer_SetValue,
+	// 	}
+	// case ValueFnFn:
+	// 	valueFn = ValueFn{
+	// 		Fn:    v,
+	// 		Layer: Value_Layer_SetValue,
+	// 	}
+	// case ValueFn:
+	// 	valueFn = v
+	// 	if valueFn.Layer.IsEmpty() { // 默认设置
+	// 		valueFn.Layer = Value_Layer_SetValue
+	// 	}
+	// default:
+	// 	valueFn = ValueFn{
+	// 		Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
+	// 			return v, nil
+	// 		},
+	// 		Layer: Value_Layer_SetValue,
+	// 	}
+	// }
 
-	field.ValueFns.Append(valueFn)
+	//field.ValueFns.Append(valueFn)
 	ApplyFns(middlewareFns).Apply(field)
 	return field
 }
@@ -1512,10 +1531,10 @@ func (f Field) GetValue(layers []Layer, fs ...*Field) (value any, err error) {
 
 func (f Field) getValue(layers []Layer, fs ...*Field) (value any, err error) {
 	if f.ValueFns == nil { // 防止空指针
-		return nil, nil
+		return f.value, nil
 	}
 	valueFns := f.ValueFns.GetByLayer(layers...)
-	value, err = valueFns.Value(nil, &f, fs...)
+	value, err = valueFns.Value(f.value, &f, fs...)
 	if err != nil {
 		return value, err
 	}
@@ -1710,13 +1729,15 @@ func (f Field) Order(fs ...*Field) (orderedExpressions []exp.OrderedExpression) 
 	return orderedExpressions
 }
 
-func ValueFnSetValue(valueFnFn ValueFnFn) ValueFn {
-	return ValueFn{
-		Fn:          valueFnFn,
-		Layer:       Value_Layer_SetValue,
-		Description: "api 设置数据时机执行", // 描述
-	}
-}
+// 直接使用 Field.SetValue(valu any) 赋值
+//
+//	func ValueFnSetValue(valueFnFn ValueFnFn) ValueFn {
+//		return ValueFn{
+//			Fn:          valueFnFn,
+//			Layer:       Value_Layer_SetValue,
+//			Description: "api 设置数据时机执行", // 描述
+//		}
+//	}
 func ValueFnSetFormat(valueFnFn ValueFnFn) ValueFn {
 	return ValueFn{
 		Fn:          valueFnFn,
@@ -1741,7 +1762,8 @@ func ValueFnApiValidateAtLeastOne(TagAtLeastOne string) ValueFn {
 		Name: Tag_validate_At_least_one,
 		Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
 			subFields := Fields(fs).GetByTags(TagAtLeastOne)
-			data, err := subFields.Data(Value_Layer_SetValue, Value_Layer_SetFormat)
+			//data, err := subFields.Data(Value_Layer_SetValue, Value_Layer_SetFormat)
+			data, err := subFields.Data(Value_Layer_SetFormat)
 			if err != nil {
 				return nil, err
 			}
@@ -2507,9 +2529,9 @@ func (fs Fields) GetChangingData() (updatingData DBDataMap, dbRecord DBDataMap, 
 */
 
 func (fs Fields) Data(layers ...Layer) (data any, err error) {
-	if len(layers) == 0 {
-		layers = append(layers, Value_Layer_SetValue)
-	}
+	// if len(layers) == 0 {
+	// 	layers = append(layers, Value_Layer_SetValue)
+	// }
 	dataMap := make(map[string]any, 0)
 	for _, f := range fs {
 		data, err := f.Data(layers, fs...)
@@ -2868,15 +2890,16 @@ func MakeFieldsFromStruct(m any, source StructFieldSource, columnConfigs ...Colu
 			}
 
 			f := &Field{
-				Name: fieldName,
-				ValueFns: ValueFns{
-					ValueFn{
-						Layer: Value_Layer_SetValue,
-						Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
-							return fieldValue, nil
-						},
-					},
-				},
+				Name:  fieldName,
+				value: fieldValue,
+				// ValueFns: ValueFns{// 直接使用value 初始化
+				// 	ValueFn{
+				// 		Layer: Value_Layer_SetValue,
+				// 		Fn: func(inputValue any, f *Field, fs ...*Field) (any, error) {
+				// 			return fieldValue, nil
+				// 		},
+				// 	},
+				// },
 			}
 			fs.Append(f)
 		}

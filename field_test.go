@@ -81,18 +81,13 @@ func NewMessage(message string) *sqlbuilder.Field {
 	return sqlbuilder.NewStringField(message, "message", "错误信息", 1024)
 }
 func NewData(data any) *sqlbuilder.Field {
-	return sqlbuilder.NewField(func(_ any, f *sqlbuilder.Field, fs ...*sqlbuilder.Field) (any, error) {
-		if data == nil {
-			return nil, nil
-		}
-		b, err := json.Marshal(data)
-		if err != nil {
-			return nil, err
-		}
-
-		inputValue := string(b)
-		return inputValue, nil
-	}).SetName("data").SetTitle("返回数据").SetType(sqlbuilder.Schema_doc_Type_null)
+	inputValue := ""
+	b, err := json.Marshal(data)
+	if err != nil {
+		inputValue = err.Error()
+	}
+	inputValue = string(b)
+	return sqlbuilder.NewField(inputValue).SetName("data").SetTitle("返回数据").SetType(sqlbuilder.Schema_doc_Type_null)
 }
 
 func NewPageIndex(pageIndex int) *sqlbuilder.Field {

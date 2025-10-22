@@ -795,11 +795,11 @@ func (c ColumnConfig) CamelName() string {
 
 func (c ColumnConfig) MakeField(value any) *Field {
 
-	valueFnFn := func(_ any, f *Field, fs ...*Field) (any, error) {
-		return value, nil
-	}
-	f := c.GetField()
-	f.ValueFns.ResetSetValueFn(valueFnFn)
+	// valueFnFn := func(_ any, f *Field, fs ...*Field) (any, error) {
+	// 	return value, nil
+	// }
+	f := c.GetField().SetValue(value)
+	//f.ValueFns.ResetSetValueFn(valueFnFn)
 	return f
 }
 
@@ -1137,7 +1137,7 @@ type HookField struct {
 func MakeFieldHook(hookFields ...HookField) (hookFn HookFn) {
 	return func(ctx context.Context, scena Scene) (hookedFields Fields) {
 		for _, hookField := range hookFields {
-			f := hookField.DestField.ResetValueFn(ValueFnSetValue(ValueFnPreventDeadLoop(func(inputValue any, f *Field, fs ...*Field) (any, error) {
+			f := hookField.DestField.ResetValueFn(ValueFnSetFormat(ValueFnPreventDeadLoop(func(inputValue any, f *Field, fs ...*Field) (any, error) {
 				fs1 := Fields(fs)
 				if len(fs1) == 0 {
 					return nil, nil
