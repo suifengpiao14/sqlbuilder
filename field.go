@@ -320,7 +320,8 @@ func Join(ds *goqu.SelectDataset, jionConfigs ...OnUnit) *goqu.SelectDataset {
 // Field 供中间件插入数据时,定制化值类型 如 插件为了运算方便,值声明为float64 类型,而数据库需要string类型此时需要通过匿名函数修改值
 type Field struct {
 	Name  string `json:"name"`
-	Value any    //增加原始值记录，和ValueFns 脱钩，后续ValueFns/WhereFns 合并使用pipeLine模式,对原始value 加工
+	value any    //增加原始值记录，和ValueFns 脱钩，后续ValueFns/WhereFns 合并使用pipeLine模式,对原始value 加工
+	//valueMiddlewares ValueFns // 后续使用中间件思想处理值 后续优化方向
 
 	//todo 后续迁移到tags(tag 分组名称为 value)
 	ValueFns ValueFns `json:"-"` // 增加error，方便封装字段验证规则
@@ -351,6 +352,11 @@ type Field struct {
 
 	//indexs        Indexs // 索引(索引跟表走，不在领域语言上)
 	//applyFns      ApplyFns // apply 必须当场执行，因为存在apply函数嵌套apply函数,
+}
+
+func (f *Field) WithValue(value any) *Field {
+	f.value = value
+	return f
 }
 
 func (f *Field) Copy() (copyF *Field) {
