@@ -31,10 +31,33 @@ type shardedTableSingleTablePagination struct {
 	p ShardedTablePaginationParam
 }
 
-func (shardedT shardedTableSingleTablePagination) Count() (count int64, err error) {
+func (shardedT shardedTableSingleTablePagination) Count() (total int64, err error) {
+	shardedT.p.modelMiddlewarePool = shardedT.p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+		total, err = shardedT.count(*fsRef)
+		if err != nil {
+			return err
+		}
+		*fsRef = fsRef.Append(
+			NewTotal(total),
+		)
+		err = shardedT.p.modelMiddlewarePool.Next(fsRef)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	err = shardedT.p.modelMiddlewarePool.run(shardedT.table, shardedT.p._Fields)
+	if err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+func (shardedT shardedTableSingleTablePagination) count(fs Fields) (count int64, err error) {
 	// 执行计数查询
 	handler := shardedT.p.getHandler()
-	totalSql, err := shardedT.TotalSQL()
+	totalSql, err := shardedT.TotalSQL(fs)
 	if err != nil {
 		return 0, err
 	}
@@ -47,9 +70,27 @@ func (shardedT shardedTableSingleTablePagination) Count() (count int64, err erro
 }
 
 func (shardedT shardedTableSingleTablePagination) List(result any, offset, limit int) (err error) {
+	shardedT.p.modelMiddlewarePool = shardedT.p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+		err = shardedT.list(result, *fsRef, offset, limit)
+		if err != nil {
+			return err
+		}
+		err = shardedT.p.modelMiddlewarePool.Next(fsRef)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	err = shardedT.p.modelMiddlewarePool.run(shardedT.table, shardedT.p._Fields)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (shardedT shardedTableSingleTablePagination) list(result any, fs Fields, offset, limit int) (err error) {
 	// 查询记录
 	handler := shardedT.p.getHandler()
-	listSql, err := shardedT.ListSQL(offset, limit)
+	listSql, err := shardedT.ListSQL(fs, offset, limit)
 	if err != nil {
 		return err
 	}
@@ -60,25 +101,25 @@ func (shardedT shardedTableSingleTablePagination) List(result any, offset, limit
 	return nil
 }
 
-func (shardedT shardedTableSingleTablePagination) TotalSQL() (totalSql string, err error) {
+func (shardedT shardedTableSingleTablePagination) TotalSQL(fs Fields) (totalSql string, err error) {
 	table := shardedT.table
 	p := shardedT.p
-	totalSql, err = NewTotalBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).ToSQL()
+	totalSql, err = NewTotalBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(fs...).WithBuilderFns(p.builderFns...).ToSQL(fs)
 	if err != nil {
 		return "", err
 	}
 	return totalSql, nil
 }
 
-func (shardedT shardedTableSingleTablePagination) ListSQL(offset, limit int) (listSQL string, err error) {
+func (shardedT shardedTableSingleTablePagination) ListSQL(fs Fields, offset, limit int) (listSQL string, err error) {
 	offset, limit = max(offset, 0), max(limit, 0)
-	listBuilder := NewListBuilder(shardedT.table).WithCustomFieldsFn(shardedT.p.customFieldsFns...).AppendFields(shardedT.p._Fields...).WithBuilderFns(shardedT.p.builderFns...)
+	listBuilder := NewListBuilder(shardedT.table).WithCustomFieldsFn(shardedT.p.customFieldsFns...).AppendFields(fs...).WithBuilderFns(shardedT.p.builderFns...)
 	listBuilder = listBuilder.WithBuilderFns(func(ds *goqu.SelectDataset) *goqu.SelectDataset {
 		ds = ds.Offset(uint(offset)).Limit(uint(limit)) //根据实际情况 重置limit和offset
 
 		return ds
 	})
-	listSql, err := listBuilder.ToSQL()
+	listSql, err := listBuilder.ToSQL(fs)
 	if err != nil {
 		return "", err
 	}
@@ -159,13 +200,13 @@ func (p ShardedTablePaginationParam) Pagination(result any) (totalCount int64, e
 	rv.Set(rvArr)
 	return totalCount, nil
 }
-func (p ShardedTablePaginationParam) ListSQL(tableConfig TableConfig, offset uint, limit uint) (listSQL string, err error) {
+func (p ShardedTablePaginationParam) ListSQL(fs Fields, tableConfig TableConfig, offset uint, limit uint) (listSQL string, err error) {
 	listBuilder := NewListBuilder(tableConfig).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...)
 	listBuilder = listBuilder.WithBuilderFns(func(ds *goqu.SelectDataset) *goqu.SelectDataset {
 		ds = ds.Limit(limit).Offset(offset)
 		return ds
 	})
-	listSql, err := listBuilder.ToSQL()
+	listSql, err := listBuilder.ToSQL(fs)
 	if err != nil {
 		return "", err
 	}

@@ -367,9 +367,9 @@ func (p *InsertParam) ApplyCustomFn(customFns ...CustomFnInsertParam) *InsertPar
 	return p
 }
 
-func (p InsertParam) ToSQL() (sql string, err error) {
+func (p InsertParam) ToSQL(fs Fields) (sql string, err error) {
 	tableConfig := p.GetTable()
-	fs := p._Fields.Builder(p.context, SCENE_SQL_INSERT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs = fs.Builder(p.context, SCENE_SQL_INSERT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 
 	// err = tableConfig.CheckUniqueIndex(fs...) // 不能内置，直接检测，应为 setParam 需要生成insert 语句，这段代码直接执行，会导致生成insert语句时报错
 	// if err != nil {
@@ -415,7 +415,22 @@ func (p InsertParam) Validate() (err error) {
 }
 
 func (p InsertParam) Exec() (err error) {
-	sql, err := p.ToSQL()
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+		err = p.exec(*fsRef)
+		if err != nil {
+			return err
+		}
+		err = p.modelMiddlewarePool.Next(fsRef)
+		return err
+	})
+	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (p InsertParam) exec(fs Fields) (err error) {
+	sql, err := p.ToSQL(fs)
 	if err != nil {
 		return err
 	}
@@ -435,7 +450,24 @@ func (p InsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64
 }
 
 func (p InsertParam) Insert() (lastInsertId uint64, rowsAffected int64, err error) {
-	sql, err := p.ToSQL()
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+		lastInsertId, rowsAffected, err = p.insert(*fsRef)
+		if err != nil {
+			return err
+		}
+		*fsRef = fsRef.Append(
+			NewLastInsertId(lastInsertId),
+			NewRowsAffected(rowsAffected),
+		)
+		err = p.modelMiddlewarePool.Next(fsRef)
+		return err
+	})
+	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
+	return lastInsertId, rowsAffected, err
+}
+
+func (p InsertParam) insert(fs Fields) (lastInsertId uint64, rowsAffected int64, err error) {
+	sql, err := p.ToSQL(fs)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -585,9 +617,9 @@ func (p *DeleteParam) ApplyCustomFn(customFns ...CustomFnDeleteParam) *DeletePar
 	return p
 }
 
-func (p DeleteParam) ToSQL() (sql string, err error) {
+func (p DeleteParam) ToSQL(fs Fields) (sql string, err error) {
 	tableConfig := p.GetTable()
-	fs := p._Fields.Builder(p.context, SCENE_SQL_DELETE, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs = fs.Builder(p.context, SCENE_SQL_DELETE, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	f, err := fs.DeletedAt()
 	if err != nil {
 		return "", err
@@ -613,7 +645,25 @@ func (p DeleteParam) ToSQL() (sql string, err error) {
 	return sql, nil
 }
 func (p DeleteParam) Exec() (err error) {
-	sql, err := p.ToSQL()
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+		err = p.exec(*fsRef)
+		if err != nil {
+			return err
+		}
+		err = p.modelMiddlewarePool.Next(fsRef)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (p DeleteParam) exec(fs Fields) (err error) {
+	sql, err := p.ToSQL(fs)
 	if err != nil {
 		return err
 	}
@@ -626,8 +676,30 @@ func (p DeleteParam) Exec() (err error) {
 	_, err = withEventHandler.ExecWithRowsAffected(sql)
 	return err
 }
+
 func (p DeleteParam) Delete() (rowsAffected int64, err error) {
-	sql, err := p.ToSQL()
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+		rowsAffected, err = p.delete(*fsRef)
+		if err != nil {
+			return err
+		}
+		*fsRef = fsRef.Append(
+			NewRowsAffected(rowsAffected),
+		)
+		err = p.modelMiddlewarePool.Next(fsRef)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
+	if err != nil {
+		return 0, err
+	}
+	return rowsAffected, nil
+}
+func (p DeleteParam) delete(fs Fields) (rowsAffected int64, err error) {
+	sql, err := p.ToSQL(fs)
 	if err != nil {
 		return rowsAffected, err
 	}
@@ -683,9 +755,9 @@ func (p *UpdateParam) ApplyCustomFn(customFns ...CustomFnUpdateParam) *UpdatePar
 	return p
 }
 
-func (p UpdateParam) ToSQL() (sql string, err error) {
+func (p UpdateParam) ToSQL(fs Fields) (sql string, err error) {
 	tableConfig := p.GetTable()
-	fs := p._Fields.Builder(p.context, SCENE_SQL_UPDATE, tableConfig, p.customFieldsFns) // 使用复制变量,后续针对场景的特殊化处理不会影响原始变量
+	fs = fs.Builder(p.context, SCENE_SQL_UPDATE, tableConfig, p.customFieldsFns) // 使用复制变量,后续针对场景的特殊化处理不会影响原始变量
 	data, err := fs.Data(layer_order...)
 	if err != nil {
 		return "", err
@@ -734,7 +806,29 @@ func (p UpdateParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
 }
 
 func (p UpdateParam) Update() (rowsAffected int64, err error) {
-	sql, err := p.ToSQL()
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+		rowsAffected, err = p.update(*fsRef)
+		if err != nil {
+			return err
+		}
+		*fsRef = fsRef.Append(
+			NewRowsAffected(rowsAffected),
+		)
+		err = p.modelMiddlewarePool.Next(fsRef)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
+	if err != nil {
+		return 0, err
+	}
+	return rowsAffected, nil
+}
+
+func (p UpdateParam) update(fs Fields) (rowsAffected int64, err error) {
+	sql, err := p.ToSQL(fs)
 	if err != nil {
 		return 0, err
 	}
@@ -749,7 +843,7 @@ func (p UpdateParam) Update() (rowsAffected int64, err error) {
 			wherePression, _ := existsParam._Fields.Where()
 			existsSql := fmt.Sprintf("sql where :%s", Expression2StringWithDriver(Driver(p.GetTable().GetHandler().GetDialector()), wherePression...))
 			if ErrWithSQL {
-				existsSql, _ = existsParam.ToSQL()
+				existsSql, _ = existsParam.ToSQL(fs)
 				existsSql = fmt.Sprintf("sql:%s", existsSql)
 			}
 			err = errors.WithMessagef(ErrNotFound, " UpdateParam.mustExists==true %s", existsSql)
@@ -829,9 +923,9 @@ func (p *FirstParam) ApplyCustomFn(customFns ...CustomFnFirstParam) *FirstParam 
 	return p
 }
 
-func (p FirstParam) ToSQL() (sql string, err error) {
+func (p FirstParam) ToSQL(fs Fields) (sql string, err error) {
 	tableConfig := p.GetTable()
-	fs := p._Fields.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs = fs.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	errWithMsg := fmt.Sprintf("FirstParam.ToSQL(),table:%s", tableConfig.Name)
 	where, err := fs.Where()
 	if err != nil {
@@ -854,8 +948,31 @@ func (p FirstParam) ToSQL() (sql string, err error) {
 }
 
 func (p FirstParam) First(result any) (exists bool, err error) {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+		exists, err = p.first(p._Fields, result)
+		if err != nil {
+			return err
+		}
+		*fsRef = fsRef.Append(
+			NewExists(exists),
+		)
+		err = p.modelMiddlewarePool.Next(fsRef)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+
+}
+
+func (p FirstParam) first(fs Fields, result any) (exists bool, err error) {
 	p.resultDst = result
-	sql, err := p.ToSQL()
+	sql, err := p.ToSQL(fs)
 	if err != nil {
 		return false, err
 	}
@@ -921,9 +1038,9 @@ func NewListBuilder(tableConfig TableConfig) *ListParam {
 	return p
 }
 
-func (p ListParam) makeSelectDataset() (ds *goqu.SelectDataset, err error) {
+func (p ListParam) makeSelectDataset(fs Fields) (ds *goqu.SelectDataset, err error) {
 	tableConfig := p.GetTable()
-	fs := p._Fields.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs = fs.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	errWithMsg := fmt.Sprintf("ListParam.ToSQL(),table:%s", tableConfig.Name)
 	where, err := fs.Where()
 	if err != nil {
@@ -958,8 +1075,8 @@ func (p ListParam) makeSelectDataset() (ds *goqu.SelectDataset, err error) {
 	ds = p.builderFns.Apply(ds)
 	return ds, nil
 }
-func (p ListParam) ToSQL() (sql string, err error) {
-	ds, err := p.makeSelectDataset()
+func (p ListParam) ToSQL(fs Fields) (sql string, err error) {
+	ds, err := p.makeSelectDataset(fs)
 	if err != nil {
 		return "", err
 	}
@@ -979,8 +1096,27 @@ func (p ListParam) Query(result any) (err error) {
 	return p.List(result)
 }
 func (p ListParam) List(result any) (err error) {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+		err = p.list(*fsRef, result)
+		if err != nil {
+			return err
+		}
+		err = p.modelMiddlewarePool.Next(fsRef) // 执行下一个中间件
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p ListParam) list(fs Fields, result any) (err error) {
 	p.resultDst = result
-	sql, err := p.ToSQL()
+	sql, err := p.ToSQL(fs)
 	if err != nil {
 		return err
 	}
@@ -1048,9 +1184,9 @@ func (p *ExistsParam) ApplyCustomFn(customFns ...CustomFnExistsParam) *ExistsPar
 	return p
 }
 
-func (p ExistsParam) ToSQL() (sql string, err error) {
+func (p ExistsParam) ToSQL(fs Fields) (sql string, err error) {
 	tableConfig := p.GetTable()
-	fs := p._Fields.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs = fs.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	errWithMsg := fmt.Sprintf("ExistsParam.ToSQL(),table:%s", tableConfig.Name)
 	//fs.SetSceneIfEmpty(SCENE_SQL_EXISTS) // 存在场景，和SCENE_SQL_SELECT场景不一样，在set中，这个exists 必须实时查询数据，另外部分查询条件也和查询数据场景不一致，所以独立分开处理
 	/*
@@ -1093,7 +1229,27 @@ func (p ExistsParam) ToSQL() (sql string, err error) {
 }
 
 func (p ExistsParam) Exists() (exists bool, err error) {
-	sql, err := p.ToSQL()
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+		exists, err = p.exists(*fsRef)
+		if err != nil {
+			return nil
+		}
+		*fsRef = fsRef.Append(NewExists(exists))
+		err = p.modelMiddlewarePool.Next(fsRef)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+func (p ExistsParam) exists(fs Fields) (exists bool, err error) {
+	sql, err := p.ToSQL(fs)
 	if err != nil {
 		return false, err
 	}
@@ -1153,9 +1309,9 @@ func (p *TotalParam) WithBuilderFns(builderFns ...SelectBuilderFn) *TotalParam {
 	return p
 }
 
-func (p TotalParam) ToSQL() (sql string, err error) {
+func (p TotalParam) ToSQL(fs Fields) (sql string, err error) {
 	tableConfig := p.GetTable()
-	fs := p._Fields.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
+	fs = fs.Builder(p.context, SCENE_SQL_SELECT, tableConfig, p.customFieldsFns) // 使用复制变量,后续正对场景的舒适化处理不会影响原始变量
 	errWithMsg := fmt.Sprintf("TotalParam.ToSQL(),table:%s", tableConfig.Name)
 	where, err := fs.Where()
 	if err != nil {
@@ -1183,7 +1339,7 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 					) AS sub;
 			*/
 			fs := p._Fields.RemovePagination() // 复制并移除分页信息
-			subQuery, err := NewListBuilder(tableConfig).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(fs...).WithBuilderFns(p.builderFns...).makeSelectDataset()
+			subQuery, err := NewListBuilder(tableConfig).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(fs...).WithBuilderFns(p.builderFns...).makeSelectDataset(fs)
 			if err != nil {
 				return "", err
 			}
@@ -1202,7 +1358,30 @@ func (p TotalParam) ToSQL() (sql string, err error) {
 }
 
 func (p TotalParam) Count() (total int64, err error) {
-	sql, err := p.ToSQL()
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+		total, err = p.count(*fsRef)
+		if err != nil {
+			return err
+		}
+		*fsRef = fsRef.Append(
+			NewTotal(total),
+		)
+		err = p.modelMiddlewarePool.Next(fsRef)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
+	if err != nil {
+		return -1, err
+	}
+	return total, nil
+}
+
+func (p TotalParam) count(fs Fields) (total int64, err error) {
+	sql, err := p.ToSQL(fs)
 	if err != nil {
 		return -1, err
 	}
@@ -1244,13 +1423,13 @@ func (p *PaginationParam) ApplyCustomFn(customFns ...CustomFnPaginationParam) *P
 	return p
 }
 
-func (p PaginationParam) ToSQL() (totalSql string, listSql string, err error) {
+func (p PaginationParam) ToSQL(fs Fields) (totalSql string, listSql string, err error) {
 	table := p.GetTable()
-	totalSql, err = NewTotalBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).ToSQL()
+	totalSql, err = NewTotalBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).ToSQL(fs)
 	if err != nil {
 		return "", "", err
 	}
-	listSql, err = NewListBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).WithResultDest(p.resultDst).ToSQL()
+	listSql, err = NewListBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).WithBuilderFns(p.builderFns...).WithResultDest(p.resultDst).ToSQL(fs)
 	if err != nil {
 		return "", "", err
 	}
@@ -1265,23 +1444,44 @@ func (p PaginationParam) getHandler() (handler Handler) {
 	return handler
 }
 
-func (p PaginationParam) paginationHandler(totalSql string, listSql string, result any) (count int64, err error) {
+func (p PaginationParam) paginationHandler(totalSql string, listSql string, result any) (total int64, err error) {
 	handler := p.getHandler()
-	count, err = handler.Count(totalSql)
+	total, err = handler.Count(totalSql)
 	if err != nil {
 		return 0, err
 	}
-	if count == 0 {
+	if total == 0 {
 		return 0, nil
 	}
 	err = handler.Query(p.context, listSql, result)
 	if err != nil {
 		return 0, err
 	}
-	return count, nil
+	return total, nil
 }
 
-func (p PaginationParam) Pagination(result any) (count int64, err error) {
+func (p PaginationParam) Pagination(result any) (total int64, err error) {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+		total, err = p.pagination(*fsRef, result)
+		if err != nil {
+			return err
+		}
+		*fsRef = fsRef.Append(NewTotal(total))
+		err = p.modelMiddlewarePool.Next(fsRef)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
+	if err != nil {
+		return 0, err
+	}
+	return total, nil
+
+}
+
+func (p PaginationParam) pagination(fs Fields, result any) (count int64, err error) {
 	p.resultDst = result
 	isShardedTable := p.GetTable().isShardedTable()
 	if isShardedTable {
@@ -1292,7 +1492,7 @@ func (p PaginationParam) Pagination(result any) (count int64, err error) {
 		}
 		return count, nil
 	}
-	totalSql, listSql, err := p.ToSQL()
+	totalSql, listSql, err := p.ToSQL(fs)
 	if err != nil {
 		return 0, err
 	}
@@ -1373,18 +1573,18 @@ func (p *SetParam) ApplyCustomFn(customFns ...CustomFnSetParam) *SetParam {
 
 // 2026-06-26 14:57 这个修改不兼容，最开始 当下的ToSQLV0 是历史的 ToSQL, 为了和其它保持一致,让渡了ToSQL函数签名,ToSQLV0 保持原有函数签名
 func (p SetParam) ToSQLV0() (existsSql string, insertSql string, updateSql string, err error) {
-	existsSql, insertSql, updateSql, _, err = p.ToSQL()
+	existsSql, insertSql, updateSql, _, err = p.ToSQL(p._Fields)
 	if err != nil {
 		return "", "", "", err
 	}
 	return existsSql, insertSql, updateSql, nil
 }
 
-func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string, deleteSql string, err error) {
+func (p SetParam) ToSQL(fsRef Fields) (existsSql string, insertSql string, updateSql string, deleteSql string, err error) {
 	table := p.GetTable()
 	if !slices.Contains(setPolicy_no_exits_sql, p.setPolicy) { // 如果指定只新增则不需要查询是否存在
-		existsSql, err = NewExistsBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL() // 有些根据场景设置 如枚举值 ""，所有需要复制
-		if errors.Is(err, ErrEmptyWhere) {                                                                                   //查询是否存在，没有where条件，说明需要直接insert 比如 id=0 时，此时不存在，直接新增即可
+		existsSql, err = NewExistsBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL(fsRef) // 有些根据场景设置 如枚举值 ""，所有需要复制
+		if errors.Is(err, ErrEmptyWhere) {                                                                                        //查询是否存在，没有where条件，说明需要直接insert 比如 id=0 时，此时不存在，直接新增即可
 			p.WithPolicy(SetPolicy_only_Insert) // 设置为只新增，避免其他报错
 			err = nil                           // 注意，这种情况会输出insertsql，existsSql 为空，所以只需existsSql是，需要判空
 		}
@@ -1394,20 +1594,20 @@ func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string,
 		return "", "", "", "", err
 	}
 	if slices.Contains(setPolicy_need_insert_sql, p.setPolicy) {
-		insertSql, err = NewInsertBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL()
+		insertSql, err = NewInsertBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL(fsRef)
 		if err != nil {
 			return "", "", "", "", err
 		}
 	}
 
 	if slices.Contains(setPolicy_need_update_sql, p.setPolicy) { // 不加条件判断 当 setPolicy 为 SetPolicy_only_Insert 可能报错，比如：只有唯一键一列，更新时屏蔽唯一键更新，此时更新字段就为空，会报错，所以增加if 判断
-		updateSql, err = NewUpdateBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL()
+		updateSql, err = NewUpdateBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL(fsRef)
 		if err != nil {
 			return "", "", "", "", err
 		}
 	}
 	if slices.Contains(setPolicy_need_delete_sql, p.setPolicy) {
-		deleteSql, err = NewDeleteBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL()
+		deleteSql, err = NewDeleteBuilder(table).WithCustomFieldsFn(p.customFieldsFns...).AppendFields(p._Fields...).ToSQL(fsRef)
 		if err != nil {
 			return "", "", "", "", err
 		}
@@ -1416,6 +1616,33 @@ func (p SetParam) ToSQL() (existsSql string, insertSql string, updateSql string,
 }
 
 func (p SetParam) Set() (isNotExits bool, lastInsertId uint64, rowsAffected int64, err error) {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+		isNotExits, lastInsertId, rowsAffected, err = p.set(*fsRef)
+		if err != nil {
+			return err
+		}
+		*fsRef = fsRef.Append(
+			NewExists(!isNotExits),
+			NewNotExists(isNotExits),
+			NewLastInsertId(lastInsertId),
+			NewRowsAffected(rowsAffected),
+		)
+
+		err = p.modelMiddlewarePool.Next(fsRef)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
+	if err != nil {
+		return false, 0, 0, err
+	}
+
+	return isNotExits, lastInsertId, rowsAffected, nil
+}
+
+func (p SetParam) set(fs Fields) (isNotExits bool, lastInsertId uint64, rowsAffected int64, err error) {
 	// 因为自带 exists 查询，所以不需要校验唯一索引了，否则 存在 table.CheckUniqueIndex 就会报错，达不到update 效果
 	// table := p.GetTable()
 	// err = table.CheckUniqueIndex(p._Fields...)
@@ -1423,7 +1650,7 @@ func (p SetParam) Set() (isNotExits bool, lastInsertId uint64, rowsAffected int6
 	// 	return false, 0, 0, err
 	// }
 	// 2025-08-21 如果whereData 为空则只能执行新增（比如主键id为0,使得数据必然不存在，可以略过查询是否存在）
-	existsSql, insertSql, updateSql, deleteSql, err := p.ToSQL()
+	existsSql, insertSql, updateSql, deleteSql, err := p.ToSQL(fs)
 	if err != nil {
 		return false, 0, 0, err
 	}
@@ -1539,13 +1766,15 @@ func dataAny2Map(data any) (newData map[string]any, err error) {
 }
 
 type SQLParam[T any] struct {
-	self            *T
-	_Table          TableConfig
-	_Fields         Fields
-	_log            LogI
-	context         context.Context
-	resultDst       any
-	customFieldsFns CustomFieldsFns // 定制化字段处理函数，可用于局部封装字段处理逻辑，比如通用模型中，用于设置查询字段的别名
+	self                *T
+	_Table              TableConfig
+	_Fields             Fields
+	_log                LogI
+	context             context.Context
+	resultDst           any
+	customFieldsFns     CustomFieldsFns     //Deprecated 弃用,使用modelMiddlewarePool 定制化字段处理函数，可用于局部封装字段处理逻辑，比如通用模型中，用于设置查询字段的别名
+	modelMiddlewarePool modelMiddlewarePool // 中间件，用于封装额外的逻辑处理(主要用于通用模型)
+
 }
 
 func NewSQLParam[T any](self *T, table TableConfig) SQLParam[T] {
@@ -1593,6 +1822,10 @@ func (p *SQLParam[T]) GetGoquDialect() goqu.DialectWrapper {
 
 func (p *SQLParam[T]) WithHandlerMiddleware(middlewares ...HandlerMiddleware) *T {
 	p._Table = p._Table.WithHandler(ChainHandler(p.GetHandlerWithInitTable(), middlewares...))
+	return p.self
+}
+func (p *SQLParam[T]) WithModelMiddleware(middlewares ...ModelMiddleware) *T {
+	p.modelMiddlewarePool.middlewares = p.modelMiddlewarePool.middlewares.append(middlewares...)
 	return p.self
 }
 

@@ -353,6 +353,39 @@ type Field struct {
 	//applyFns      ApplyFns // apply 必须当场执行，因为存在apply函数嵌套apply函数,
 }
 
+func (f *Field) Copy() (copyF *Field) {
+	fcp := *f
+	if f.Schema != nil { // schema 为地址引用，需要单独复制
+		fcp.Schema = f.Schema.Copy()
+	}
+	//深度拷贝所有值,防止后续修改影响拷贝对象
+	fcp.ValueFns = make(ValueFns, len(f.ValueFns))
+	copy(fcp.ValueFns, f.ValueFns)
+
+	fcp.WhereFns = make(ValueFns, len(f.WhereFns))
+	copy(fcp.WhereFns, f.WhereFns)
+
+	fcp.sceneFns = make(SceneFns, len(f.sceneFns))
+	copy(fcp.sceneFns, f.sceneFns)
+
+	fcp.tags = make(Tags, len(f.tags))
+	copy(fcp.tags, f.tags)
+
+	fcp.selectColumns = make([]any, len(f.selectColumns))
+	copy(fcp.selectColumns, f.selectColumns)
+
+	fcp.countColumns = make([]any, len(f.countColumns))
+	copy(fcp.countColumns, f.countColumns)
+
+	fcp.alias = make(Fields, len(f.alias))
+	copy(fcp.alias, f.alias)
+
+	fcp.delayApplies = make(ApplyFns, len(f.delayApplies))
+	copy(fcp.delayApplies, f.delayApplies)
+
+	return &fcp
+}
+
 const (
 	/*
 			使用select 列表语句作为计数列
@@ -590,39 +623,6 @@ const (
 
 	Field_tag_CanWriteWhenDeleted = "CanWriteWhenDeleted" // 标记为删除场景下，可以更新数据库字段（如操作人 ，Field_name_deletedAt 自带该标签功能）
 )
-
-func (f *Field) Copy() (copyF *Field) {
-	fcp := *f
-	if f.Schema != nil { // schema 为地址引用，需要单独复制
-		fcp.Schema = f.Schema.Copy()
-	}
-	//深度拷贝所有值,防止后续修改影响拷贝对象
-	fcp.ValueFns = make(ValueFns, len(f.ValueFns))
-	copy(fcp.ValueFns, f.ValueFns)
-
-	fcp.WhereFns = make(ValueFns, len(f.WhereFns))
-	copy(fcp.WhereFns, f.WhereFns)
-
-	fcp.sceneFns = make(SceneFns, len(f.sceneFns))
-	copy(fcp.sceneFns, f.sceneFns)
-
-	fcp.tags = make(Tags, len(f.tags))
-	copy(fcp.tags, f.tags)
-
-	fcp.selectColumns = make([]any, len(f.selectColumns))
-	copy(fcp.selectColumns, f.selectColumns)
-
-	fcp.countColumns = make([]any, len(f.countColumns))
-	copy(fcp.countColumns, f.countColumns)
-
-	fcp.alias = make(Fields, len(f.alias))
-	copy(fcp.alias, f.alias)
-
-	fcp.delayApplies = make(ApplyFns, len(f.delayApplies))
-	copy(fcp.delayApplies, f.delayApplies)
-
-	return &fcp
-}
 
 // func (f *Field) SetDDLsequence(DDLsequence int) *Field {
 // 	f.ddlSequence = DDLsequence
@@ -1851,6 +1851,29 @@ func (fs Fields) FirstMust() *Field {
 	return fs[0]
 }
 
+func (fs Fields) NamesString() string {
+	s := strings.Join(fs.Names(), ",")
+	return s
+}
+func (fs Fields) GetScene() (scene Scene, err error) {
+	mp := make(map[Scene]struct{})
+	for _, f := range fs {
+		scene := f.GetScene()
+		if scene != "" {
+			mp[scene] = struct{}{}
+		}
+	}
+	if len(mp) > 1 {
+		err := errors.Errorf("Fields(%s) has more than one scene", fs.NamesString())
+		return "", err
+
+	}
+	for scene := range mp {
+		return scene, nil
+	}
+	return scene, nil
+}
+
 // func (fs Fields) WithTableView(tableView TableConfig) Fields {
 // 	if len(fs) > 0 {
 // 		fs[0].tableView = &tableView
@@ -2907,4 +2930,28 @@ func MakeColumnConfigFromStruct(m any, dbNameSource StructFieldSource) (columnCo
 	}
 
 	return columnConfigs
+}
+
+const (
+	FieldName_lastInsertId = "db_lastInsertId"
+	FieldName_rowsAffected = "db_rowsAffected"
+	FieldName_exists       = "db_exists"
+	FieldName_not_exists   = "db_not_exists"
+	FieldName_total        = "db_total"
+)
+
+func NewLastInsertId(lastInsertId uint64) *Field {
+	return NewIntField(lastInsertId, FieldName_lastInsertId, "新增id", 0)
+}
+func NewRowsAffected(rowsAffected int64) *Field {
+	return NewIntField(rowsAffected, FieldName_rowsAffected, "影响行数", 0)
+}
+func NewExists(exists bool) *Field {
+	return NewField(exists).SetName(FieldName_exists).SetTitle("是否存在")
+}
+func NewNotExists(notExists bool) *Field {
+	return NewField(notExists).SetName(FieldName_not_exists).SetTitle("是否不存在")
+}
+func NewTotal(total int64) *Field {
+	return NewIntField(total, FieldName_total, "是否存在", 0)
 }

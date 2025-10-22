@@ -199,7 +199,6 @@ func (s RepositoryQuery) Count(fields Fields, customFns ...CustomFnTotalParam) (
 type Repository struct {
 	tableConfig TableConfig
 	RepositoryCommand
-	//RepositoryQuery[T]
 	RepositoryQuery
 }
 
@@ -215,26 +214,6 @@ func (r Repository) GetTable() TableConfig {
 	return r.tableConfig
 }
 
-// //WithTable 设置新的表配置，用于临时切换表(也可以切换dbHandler等场景)
-
-// func (r Repository) WithTable(tableConfig TableConfig) Repository {
-// 	return Repository{
-// 		tableConfig:       tableConfig,
-// 		RepositoryCommand: NewRepositoryCommand(tableConfig),
-// 		RepositoryQuery:   NewRepositoryQuery[T](tableConfig),
-// 	}
-// }
-
-// // WithHandler 设置新的handler，用于临时切换dbHandler等场景。
-//
-//	func (r Repository) WithHandler(handler Handler) Repository {
-//		tableConfig := r.tableConfig.WithHandler(handler)
-//		return Repository{
-//			tableConfig:       tableConfig,
-//			RepositoryCommand: NewRepositoryCommand(tableConfig),
-//			RepositoryQuery:   NewRepositoryQuery[T](tableConfig),
-//		}
-//	}
 func (r Repository) Transaction(fc func(txRepository Repository) (err error)) (err error) {
 
 	err = r.TransactionForMutiTable(func(tx Handler) error {
