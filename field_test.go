@@ -85,8 +85,9 @@ func NewData(data any) *sqlbuilder.Field {
 	b, err := json.Marshal(data)
 	if err != nil {
 		inputValue = err.Error()
+	} else {
+		inputValue = string(b)
 	}
-	inputValue = string(b)
 	return sqlbuilder.NewField(inputValue).SetName("data").SetTitle("返回数据").SetType(sqlbuilder.Schema_doc_Type_null)
 }
 
