@@ -1318,12 +1318,8 @@ func (f *Field) SetValue(value any) *Field {
 	// })
 	return f
 }
-func (f *Field) SetValueRef(value any) any { //用于从数据库扫描数据时，需要用到指针类型，此处简化操作
-	if reflect.TypeOf(value).Kind() != reflect.Ptr {
-		err := errors.New("value 必须是指针类型")
-		panic(err)
-	}
-	return f.value
+func (f *Field) GetValueRef() any { //用于从数据库扫描数据时，需要用到指针类型，此处简化操作
+	return &f.value
 }
 
 type FieldFn[T FieldTypeI] func(value T) *Field
@@ -1900,6 +1896,14 @@ func (fs Fields) GetScene() (scene Scene, err error) {
 		return scene, nil
 	}
 	return scene, nil
+}
+
+func (fs Fields) GetValueRefs() []any {
+	addrs := make([]any, len(fs))
+	for i, f := range fs {
+		addrs[i] = f.GetValueRef()
+	}
+	return addrs
 }
 
 // func (fs Fields) WithTableView(tableView TableConfig) Fields {

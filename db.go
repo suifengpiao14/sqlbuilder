@@ -102,6 +102,18 @@ func DetectDriver(db *sql.DB) string {
 	}
 	return "unknown"
 }
+func detectDriverTx(tx *sql.Tx) string {
+	var version string
+	// 尝试执行 SQLite 语句
+	if err := tx.QueryRow("SELECT sqlite_version()").Scan(&version); err == nil {
+		return Driver_sqlite3.String()
+	}
+	// 尝试 MySQL
+	if err := tx.QueryRow("SELECT VERSION()").Scan(&version); err == nil {
+		return Driver_mysql.String()
+	}
+	return "unknown"
+}
 
 type DBConfig struct {
 	UserName     string
