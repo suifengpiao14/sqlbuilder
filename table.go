@@ -407,7 +407,7 @@ func (t TableConfig) GetHandler() (handler Handler) {
 
 func (t TableConfig) GetHandlerWithInitTable() (handler Handler) {
 	handler = t.GetHandler()
-	if shouldCrateTable(Driver(handler.GetDialector())) {
+	if shouldCrateTable(t.Name, Driver(handler.GetDialector())) {
 		sql := fmt.Sprintf(`select 1 from %s;`, t.DBName.BaseNameWithQuotes())
 		ctx := context.Background()
 
@@ -423,6 +423,7 @@ func (t TableConfig) GetHandlerWithInitTable() (handler Handler) {
 				err = errors.WithMessagef(err, "create table:%s failed", t.Name)
 				panic(err)
 			}
+			fmt.Println(ddl)
 		}
 	}
 	return handler

@@ -1318,8 +1318,37 @@ func (f *Field) SetValue(value any) *Field {
 	// })
 	return f
 }
-func (f *Field) GetValueRef() any { //用于从数据库扫描数据时，需要用到指针类型，此处简化操作
-	return &f.value
+
+// BindValue 绑定值地址，实现联动复制，常用户模型Fields 函数内
+func (f *Field) BindValue(value any) *Field {
+	rt := reflect.TypeOf(value)
+	if rt.Kind() != reflect.Ptr {
+		err := errors.Errorf("Field(%s) value must be pointer", f.Name)
+		panic(err)
+	}
+	f.value = value
+	// f.ValueFns.ResetSetValueFn(func(_ any, f *Field, fs ...*Field) (any, error) {
+	// 	return value, nil
+	// })
+	return f
+}
+func (f *Field) GetValueRef() (val any, err error) { //用于从数据库扫描数据时，需要用到指针类型，此处简化操作
+	rt := reflect.TypeOf(f.value)
+	if rt.Kind() != reflect.Ptr {
+		err := errors.Errorf("Field(%s) value must be pointer", f.Name)
+		return nil, err
+	}
+	return f.value, nil
+}
+
+// fillValueRef 填充值引用，用于fs 赋值到中间件model 列
+func (f *Field) fillValueRef(val any) (err error) {
+	dstValue, err := f.GetValueRef()
+	if err != nil {
+		return err
+	}
+	reflect.ValueOf(dstValue).Elem().Set(reflect.ValueOf(val))
+	return nil
 }
 
 type FieldFn[T FieldTypeI] func(value T) *Field
@@ -1524,13 +1553,17 @@ func (f Field) GetValue(layers []Layer, fs ...*Field) (value any, err error) {
 	f = f.InjectValueFn(fs...)
 	return f.getValue(layers, fs...)
 }
+func (f Field) GetOriginalValue() any {
+	return f.value
+}
 
 func (f Field) getValue(layers []Layer, fs ...*Field) (value any, err error) {
-	if f.ValueFns == nil { // 防止空指针
-		return f.value, nil
+	val := reflect.Indirect(reflect.ValueOf(f.value)).Interface() // f.value 基本上是指针，此处转为值类型，方便后续操作，也是兼容历史
+	if f.ValueFns == nil {                                        // 防止空指针
+		return val, nil
 	}
 	valueFns := f.ValueFns.GetByLayer(layers...)
-	value, err = valueFns.Value(f.value, &f, fs...)
+	value, err = valueFns.Value(val, &f, fs...)
 	if err != nil {
 		return value, err
 	}
@@ -1898,12 +1931,28 @@ func (fs Fields) GetScene() (scene Scene, err error) {
 	return scene, nil
 }
 
-func (fs Fields) GetValueRefs() []any {
-	addrs := make([]any, len(fs))
-	for i, f := range fs {
-		addrs[i] = f.GetValueRef()
+func (fs Fields) UmarshalModel(dst FieldsI) (err error) {
+	_, _, err = PointerImplementFieldsI(reflect.ValueOf(dst))
+	if err != nil {
+		return err
 	}
-	return addrs
+	dFs := dst.Fields()
+	for i, dF := range dFs {
+		f, exists := fs.GetByName(dF.Name)
+		if !exists {
+			if dF.IsRequired() {
+				err = errors.Errorf("dst required field %s not found  in  Fields(%s)", dF.Name, fs.NamesString())
+				return err
+			}
+			continue
+		}
+		err := dFs[i].fillValueRef(f.value)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+
 }
 
 // func (fs Fields) WithTableView(tableView TableConfig) Fields {
@@ -1923,7 +1972,7 @@ func (fs Fields) GetBySampleField(field *Field) (f *Field) {
 	return f
 }
 
-// Deprecated: 请使用Fielter(历史上这个单词写错了)
+// Deprecated: 请使用Filter(历史上这个单词写错了)
 func (fs Fields) Fielter(fn FieldFilterFn) (fields Fields) {
 	return fs.Filter(fn)
 
@@ -2398,14 +2447,24 @@ func (fs Fields) GetByName(name string) (*Field, bool) {
 	return nil, false
 }
 
-func (fs Fields) GetByNameMust(name string) *Field {
-	for i := range fs {
-		if strings.EqualFold(name, fs[i].Name) {
-			return fs[i]
-		}
+func (fs Fields) GetByNameAsError(name string) (*Field, error) {
+	f, ok := fs.GetByName(name)
+	if !ok {
+		return nil, errors.WithMessagef(ErrNotFoundFieldName, " name:%s", name)
 	}
-	err := errors.Errorf("not found Field by name:%s", name)
-	panic(err)
+	return f, nil
+}
+
+var (
+	ErrNotFoundFieldName = errors.New("not found Field by name")
+)
+
+func (fs Fields) GetByNameMust(name string) *Field {
+	f, err := fs.GetByNameAsError(name)
+	if err != nil {
+		panic(err)
+	}
+	return f
 }
 
 func (fs Fields) DBNames() (dbNames []string, err error) {

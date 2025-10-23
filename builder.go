@@ -415,12 +415,12 @@ func (p InsertParam) Validate() (err error) {
 }
 
 func (p InsertParam) Exec() (err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
-		err = p.exec(*fsRef)
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
+		err = p.exec(fsRef)
 		if err != nil {
 			return err
 		}
-		err = p.modelMiddlewarePool.Next(fsRef)
+		err = ctx.Next(fsRef)
 		return err
 	})
 	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
@@ -429,8 +429,8 @@ func (p InsertParam) Exec() (err error) {
 	}
 	return nil
 }
-func (p InsertParam) exec(fs Fields) (err error) {
-	sql, err := p.ToSQL(fs)
+func (p InsertParam) exec(fsRef *Fields) (err error) {
+	sql, err := p.ToSQL(*fsRef)
 	if err != nil {
 		return err
 	}
@@ -440,7 +440,15 @@ func (p InsertParam) exec(fs Fields) (err error) {
 			p.Log(sql, err)
 		}
 	})
-	_, _, err = withEventHandler.InsertWithLastId(sql)
+	lastInsertId, rowsAffected, err := withEventHandler.InsertWithLastId(sql)
+	if err != nil {
+		return err
+	}
+	// 输入exec 函数无需返回，但是不能保证组合的中间件不会用到这2个字段，所以这里先追加
+	*fsRef = fsRef.Append(
+		NewLastInsertId(lastInsertId),
+		NewRowsAffected(rowsAffected),
+	)
 	return err
 }
 
@@ -450,7 +458,7 @@ func (p InsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64
 }
 
 func (p InsertParam) Insert() (lastInsertId uint64, rowsAffected int64, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
 		lastInsertId, rowsAffected, err = p.insert(*fsRef)
 		if err != nil {
 			return err
@@ -459,7 +467,7 @@ func (p InsertParam) Insert() (lastInsertId uint64, rowsAffected int64, err erro
 			NewLastInsertId(lastInsertId),
 			NewRowsAffected(rowsAffected),
 		)
-		err = p.modelMiddlewarePool.Next(fsRef)
+		err = ctx.Next(fsRef)
 		return err
 	})
 	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
@@ -645,12 +653,12 @@ func (p DeleteParam) ToSQL(fs Fields) (sql string, err error) {
 	return sql, nil
 }
 func (p DeleteParam) Exec() (err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
 		err = p.exec(*fsRef)
 		if err != nil {
 			return err
 		}
-		err = p.modelMiddlewarePool.Next(fsRef)
+		err = ctx.Next(fsRef)
 		if err != nil {
 			return err
 		}
@@ -678,7 +686,7 @@ func (p DeleteParam) exec(fs Fields) (err error) {
 }
 
 func (p DeleteParam) Delete() (rowsAffected int64, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
 		rowsAffected, err = p.delete(*fsRef)
 		if err != nil {
 			return err
@@ -686,7 +694,7 @@ func (p DeleteParam) Delete() (rowsAffected int64, err error) {
 		*fsRef = fsRef.Append(
 			NewRowsAffected(rowsAffected),
 		)
-		err = p.modelMiddlewarePool.Next(fsRef)
+		err = ctx.Next(fsRef)
 		if err != nil {
 			return err
 		}
@@ -806,7 +814,7 @@ func (p UpdateParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
 }
 
 func (p UpdateParam) Update() (rowsAffected int64, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
 		rowsAffected, err = p.update(*fsRef)
 		if err != nil {
 			return err
@@ -814,7 +822,7 @@ func (p UpdateParam) Update() (rowsAffected int64, err error) {
 		*fsRef = fsRef.Append(
 			NewRowsAffected(rowsAffected),
 		)
-		err = p.modelMiddlewarePool.Next(fsRef)
+		err = ctx.Next(fsRef)
 		if err != nil {
 			return err
 		}
@@ -948,7 +956,7 @@ func (p FirstParam) ToSQL(fs Fields) (sql string, err error) {
 }
 
 func (p FirstParam) First(result any) (exists bool, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
 		exists, err = p.first(p._Fields, result)
 		if err != nil {
 			return err
@@ -956,7 +964,7 @@ func (p FirstParam) First(result any) (exists bool, err error) {
 		*fsRef = fsRef.Append(
 			NewExists(exists),
 		)
-		err = p.modelMiddlewarePool.Next(fsRef)
+		err = ctx.Next(fsRef)
 		if err != nil {
 			return err
 		}
@@ -1096,12 +1104,12 @@ func (p ListParam) Query(result any) (err error) {
 	return p.List(result)
 }
 func (p ListParam) List(result any) (err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
 		err = p.list(*fsRef, result)
 		if err != nil {
 			return err
 		}
-		err = p.modelMiddlewarePool.Next(fsRef) // 执行下一个中间件
+		err = ctx.Next(fsRef) // 执行下一个中间件
 		if err != nil {
 			return err
 		}
@@ -1229,13 +1237,13 @@ func (p ExistsParam) ToSQL(fs Fields) (sql string, err error) {
 }
 
 func (p ExistsParam) Exists() (exists bool, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
 		exists, err = p.exists(*fsRef)
 		if err != nil {
 			return nil
 		}
 		*fsRef = fsRef.Append(NewExists(exists))
-		err = p.modelMiddlewarePool.Next(fsRef)
+		err = ctx.Next(fsRef)
 		if err != nil {
 			return err
 		}
@@ -1358,7 +1366,7 @@ func (p TotalParam) ToSQL(fs Fields) (sql string, err error) {
 }
 
 func (p TotalParam) Count() (total int64, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
 		total, err = p.count(*fsRef)
 		if err != nil {
 			return err
@@ -1366,7 +1374,7 @@ func (p TotalParam) Count() (total int64, err error) {
 		*fsRef = fsRef.Append(
 			NewTotal(total),
 		)
-		err = p.modelMiddlewarePool.Next(fsRef)
+		err = ctx.Next(fsRef)
 		if err != nil {
 			return err
 		}
@@ -1461,13 +1469,13 @@ func (p PaginationParam) paginationHandler(totalSql string, listSql string, resu
 }
 
 func (p PaginationParam) Pagination(result any) (total int64, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
 		total, err = p.pagination(*fsRef, result)
 		if err != nil {
 			return err
 		}
 		*fsRef = fsRef.Append(NewTotal(total))
-		err = p.modelMiddlewarePool.Next(fsRef)
+		err = ctx.Next(fsRef)
 		if err != nil {
 			return err
 		}
@@ -1616,7 +1624,7 @@ func (p SetParam) ToSQL(fsRef Fields) (existsSql string, insertSql string, updat
 }
 
 func (p SetParam) Set() (isNotExits bool, lastInsertId uint64, rowsAffected int64, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
 		isNotExits, lastInsertId, rowsAffected, err = p.set(*fsRef)
 		if err != nil {
 			return err
@@ -1628,7 +1636,7 @@ func (p SetParam) Set() (isNotExits bool, lastInsertId uint64, rowsAffected int6
 			NewRowsAffected(rowsAffected),
 		)
 
-		err = p.modelMiddlewarePool.Next(fsRef)
+		err = ctx.Next(fsRef)
 		if err != nil {
 			return err
 		}
@@ -1772,8 +1780,8 @@ type SQLParam[T any] struct {
 	_log                LogI
 	context             context.Context
 	resultDst           any
-	customFieldsFns     CustomFieldsFns     //Deprecated 弃用,使用modelMiddlewarePool 定制化字段处理函数，可用于局部封装字段处理逻辑，比如通用模型中，用于设置查询字段的别名
-	modelMiddlewarePool modelMiddlewarePool // 中间件，用于封装额外的逻辑处理(主要用于通用模型)
+	customFieldsFns     CustomFieldsFns        //Deprecated 弃用,使用modelMiddlewarePool 定制化字段处理函数，可用于局部封装字段处理逻辑，比如通用模型中，用于设置查询字段的别名
+	modelMiddlewarePool ModelMiddlewareContext // 中间件，用于封装额外的逻辑处理(主要用于通用模型)
 
 }
 

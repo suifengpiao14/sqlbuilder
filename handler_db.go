@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -104,11 +107,15 @@ func (h FieldIDBHandler) InsertWithLastId(sql string) (lastInsertId uint64, rows
 	return lastInsertId, rowsAffected, nil
 }
 func (h FieldIDBHandler) First(_ context.Context, sqlstr string, result any) (exists bool, err error) {
-	row := h().QueryRow(sqlstr)
-	exists, err = ScanRow(row, result)
+	rows, err := h().Query(sqlstr)
 	if err != nil {
 		return false, err
 	}
+	rowsAffected, err := Scan(rows, result)
+	if err != nil {
+		return false, err
+	}
+	exists = rowsAffected > 0
 	return exists, nil
 }
 
@@ -117,7 +124,7 @@ func (h FieldIDBHandler) Query(_ context.Context, sqlstr string, result any) (er
 	if err != nil {
 		return err
 	}
-	err = ScanRows(rows, result)
+	_, err = Scan(rows, result)
 	if err != nil {
 		return err
 	}
@@ -216,11 +223,15 @@ func (h _TxHandler) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffec
 	return lastInsertId, rowsAffected, nil
 }
 func (h _TxHandler) First(_ context.Context, sqlstr string, result any) (exists bool, err error) {
-	row := h.tx.QueryRow(sqlstr)
-	exists, err = ScanRow(row, result)
+	rows, err := h.tx.Query(sqlstr)
 	if err != nil {
 		return false, err
 	}
+	rowsAffected, err := Scan(rows, result)
+	if err != nil {
+		return false, err
+	}
+	exists = rowsAffected > 0
 	return exists, nil
 }
 
@@ -229,7 +240,7 @@ func (h _TxHandler) Query(_ context.Context, sqlstr string, result any) (err err
 	if err != nil {
 		return err
 	}
-	err = ScanRows(rows, result)
+	_, err = Scan(rows, result)
 	if err != nil {
 		return err
 	}
@@ -248,105 +259,275 @@ func (h _TxHandler) GetDB() *sql.Tx {
 	return h.tx
 }
 
-func ScanRows(rows *sql.Rows, dst any) (err error) {
-	defer rows.Close()
+// ScanMode 用于控制扫描行为
+type ScanMode uint8
 
-	dstVal := reflect.ValueOf(dst)
-	if dstVal.Kind() != reflect.Ptr {
-		return errors.New("dst must be a pointer to slice")
-	}
-	sliceVal := dstVal.Elem()
-	if sliceVal.Kind() != reflect.Slice {
-		return errors.New("dst must be a pointer to slice")
-	}
+const (
+	ScanInitialized         ScanMode = 1 << 0
+	ScanUpdate              ScanMode = 1 << 1
+	ScanOnConflictDoNothing ScanMode = 1 << 2
+)
 
-	elemType := sliceVal.Type().Elem()
-	// 检查是否实现 FieldsI
-	fieldsIType := reflect.TypeOf((*FieldsI)(nil)).Elem()
-	if !elemType.Implements(fieldsIType) && !(reflect.PointerTo(elemType).Implements(fieldsIType)) {
-		return fmt.Errorf("slice element type %s does not implement FieldsI", elemType)
-	}
-
-	for rows.Next() {
-		// 创建新实例
-		var newElem reflect.Value
-		if elemType.Kind() == reflect.Ptr {
-			newElem = reflect.New(elemType.Elem())
-		} else {
-			newElem = reflect.New(elemType)
-		}
-		// 调用 Fields() 方法
-		method := newElem.MethodByName("Fields")
-		if !method.IsValid() {
-			// 如果是非指针类型可能要尝试指针方法
-			method = newElem.Elem().MethodByName("Fields")
-		}
-		if !method.IsValid() {
-			return fmt.Errorf("type %s does not have Fields() method", elemType)
-		}
-
-		results := method.Call(nil)
-		if len(results) != 1 {
-			return fmt.Errorf("Fields() should return []FieldI")
-		}
-		fields := results[0].Interface().(Fields)
-
-		// 收集字段地址
-		addrs := fields.GetValueRefs()
-		if err = rows.Scan(addrs...); err != nil {
-			return err
-		}
-		// append 到 slice
-		if elemType.Kind() != reflect.Ptr {
-			sliceVal.Set(reflect.Append(sliceVal, newElem.Elem()))
-		} else {
-			sliceVal.Set(reflect.Append(sliceVal, newElem))
-		}
-	}
-	err = rows.Err()
-	return err
+type Rows interface {
+	Columns() ([]string, error)
+	ColumnTypes() ([]*sql.ColumnType, error)
+	Next() bool
+	Scan(dest ...interface{}) error
+	Err() error
+	Close() error
 }
 
-func ScanRow(row *sql.Row, dst any) (exists bool, err error) {
-	if row == nil {
-		return false, nil
+// Scan 支持 map / slice / struct / 单值 类型
+func Scan(rows Rows, dst any) (rowsAffected int64, err error) {
+	defer rows.Close()
+
+	if rows == nil {
+		return 0, errors.New("rows is nil")
 	}
 
-	// 获取类型信息
-	rv := reflect.ValueOf(dst)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
-		return false, errors.New("dst 必须是非 nil 指针")
-	}
-
-	// 判断是否实现了 FieldsI 接口
-	fieldsIType := reflect.TypeOf((*FieldsI)(nil)).Elem()
-	if !rv.Type().Implements(fieldsIType) && !rv.Elem().Type().Implements(fieldsIType) {
-		return false, errors.New("dst 未实现 FieldsI 接口")
-	}
-
-	// 取出实际的 FieldsI 实例
-	var fi FieldsI
-	if rv.Type().Implements(fieldsIType) {
-		fi = rv.Interface().(FieldsI)
-	} else {
-		fi = rv.Elem().Interface().(FieldsI)
-	}
-
-	fs := fi.Fields()
-	if len(fs) == 0 {
-		return false, errors.New("Fields() 为空")
-	}
-
-	// 收集字段引用
-	addrs := fs.GetValueRefs()
-	// 执行 row.Scan
-	err = row.Scan(addrs...)
+	columns, err := rows.Columns()
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) { // 没有数据，不存在
-			return false, nil
-		}
-		return false, err
+		return 0, err
 	}
 
-	return true, nil
+	values := make([]any, len(columns))
+	columnTypes, _ := rows.ColumnTypes()
+
+	switch out := dst.(type) {
+
+	// ---- 单条 map ----
+	case *map[string]any:
+		if rows.Next() {
+			prepareValues(values, columnTypes)
+			if err = rows.Scan(values...); err != nil {
+				return 0, err
+			}
+			*out = scanIntoMap(columns, values)
+			rowsAffected = 1
+		}
+
+	// ---- 多条 map ----
+	case *[]map[string]any:
+		for rows.Next() {
+			prepareValues(values, columnTypes)
+			if err = rows.Scan(values...); err != nil {
+				return rowsAffected, err
+			}
+			*out = append(*out, scanIntoMap(columns, values))
+			rowsAffected++
+		}
+
+	// ---- 基础类型 ----
+	case *int, *int8, *int16, *int32, *int64,
+		*uint, *uint8, *uint16, *uint32, *uint64, *uintptr,
+		*float32, *float64,
+		*bool, *string, *time.Time,
+		*sql.NullInt32, *sql.NullInt64, *sql.NullFloat64,
+		*sql.NullBool, *sql.NullString, *sql.NullTime:
+
+		for rows.Next() {
+
+			if err = rows.Scan(out); err != nil {
+				return rowsAffected, err
+			}
+			rowsAffected++
+		}
+	// ---- struct 或 struct 切片 ----
+	default:
+		rv := reflect.ValueOf(dst)
+		if rv.Kind() != reflect.Ptr {
+			return 0, errors.New("dst must be a pointer")
+		}
+
+		elem := rv.Elem()
+		switch elem.Kind() {
+		case reflect.Struct:
+			if rows.Next() {
+				err = scanIntoStruct(rows, elem, columns)
+				if err != nil {
+					return rowsAffected, err
+				}
+				rowsAffected = 1
+			}
+
+		case reflect.Slice:
+			sliceElemType := elem.Type().Elem()
+			for rows.Next() {
+				newElem := reflect.New(sliceElemType).Elem()
+				if err = scanIntoStruct(rows, newElem, columns); err != nil {
+					return rowsAffected, err
+				}
+				elem.Set(reflect.Append(elem, newElem))
+				rowsAffected++
+			}
+
+		default:
+			return 0, errors.New("unsupported dst type")
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		return rowsAffected, err
+	}
+	return rowsAffected, nil
+}
+
+// --- 工具函数 ---
+
+func prepareValues(values []any, columnTypes []*sql.ColumnType) {
+	for i, ct := range columnTypes {
+		switch strings.ToUpper(ct.DatabaseTypeName()) {
+		case "TEXT", "VARCHAR", "CHAR":
+			var s sql.NullString
+			values[i] = &s
+		case "INT", "INTEGER", "BIGINT", "SMALLINT":
+			var n sql.NullInt64
+			values[i] = &n
+		case "FLOAT", "DOUBLE", "REAL":
+			var f sql.NullFloat64
+			values[i] = &f
+		case "BOOL", "BOOLEAN":
+			var b sql.NullBool
+			values[i] = &b
+		case "DATETIME", "TIMESTAMP", "DATE":
+			var t sql.NullTime
+			values[i] = &t
+		default:
+			var raw any
+			values[i] = &raw
+		}
+	}
+}
+
+func scanIntoMap(columns []string, values []any) map[string]any {
+	m := make(map[string]any, len(columns))
+	for i, c := range columns {
+		v := reflect.ValueOf(values[i]).Elem().Interface()
+		m[c] = v
+	}
+	return m
+}
+
+func PointerImplementFieldsI(dest reflect.Value) (fi FieldsI, ok bool, err error) {
+	dest = reflect.Indirect(dest)
+	destInterface := dest.Addr().Interface()
+	fi, ok = destInterface.(FieldsI)
+	if !ok {
+		return nil, false, nil
+	}
+	implementsStruct := dest.Type().Implements(reflect.TypeOf((*FieldsI)(nil)).Elem())
+	if implementsStruct {
+		//实现FieldsI 必须是  func (m *KnowledgeNodeModel) Fields()  格式，而不是 func (m KnowledgeNodeModel) Fields()  格式(结构体实现接口，Fields赋值后无法传递给外部结构体变量)
+		err := errors.Errorf("dest(%v) must pointer implement FieldsI,got struct  implement FieldsI", dest.String())
+		return nil, false, err
+	}
+	return fi, true, nil
+}
+
+func scanIntoStruct(rows Rows, dest reflect.Value, columns []string) error {
+
+	fi, ok, err := PointerImplementFieldsI(dest)
+	if err != nil {
+		return err
+	}
+	if ok {
+		implementsStruct := dest.Type().Implements(reflect.TypeOf((*FieldsI)(nil)).Elem())
+		if implementsStruct {
+			//实现FieldsI 必须是  func (m *KnowledgeNodeModel) Fields()  格式，而不是 func (m KnowledgeNodeModel) Fields()  格式(结构体实现接口，Fields赋值后无法传递给外部结构体变量)
+			err := errors.Errorf("dest(%v) must pointer implement FieldsI,got struct  implement FieldsI", dest.String())
+			return err
+		}
+		fields := fi.Fields()
+		addrs := make([]any, len(columns))
+		canUseFields := false
+		for i, col := range columns {
+			if f, ok := fields.GetByName(col); ok {
+				canUseFields = true
+				addrs[i], err = f.GetValueRef()
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+		if !canUseFields {
+			err := errors.Errorf(`sql select name(%s) not match FieldsI.Fields() name(%s),please check sql select name or FieldsI.Fields() name`, strings.Join(columns, ","), strings.Join(fields.Names(), ","))
+			return err
+		}
+		err := rows.Scan(addrs...)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	values := make([]any, len(columns))
+	for i := range columns {
+		var v any
+		values[i] = &v
+	}
+
+	if err := rows.Scan(values...); err != nil {
+		return err
+	}
+
+	for i, col := range columns {
+		field := dest.FieldByNameFunc(func(name string) bool {
+			return strings.EqualFold(name, col)
+		})
+		if !field.IsValid() || !field.CanSet() {
+			continue
+		}
+
+		raw := *(values[i].(*any))
+		if raw == nil {
+			continue
+		}
+
+		val := reflect.ValueOf(raw)
+		ft := field.Type()
+
+		// ✅ 类型完全一致
+		if val.Type().AssignableTo(ft) {
+			field.Set(val)
+			continue
+		}
+
+		// ✅ 可安全转换的情况
+		if val.CanConvert(ft) {
+			field.Set(val.Convert(ft))
+			continue
+		}
+
+		// ✅ 特殊情况：[]byte → string
+		if val.Kind() == reflect.Slice && val.Type().Elem().Kind() == reflect.Uint8 && ft.Kind() == reflect.String {
+			field.SetString(string(val.Interface().([]byte)))
+			continue
+		}
+
+		// ✅ 尝试通过字符串进行宽松转换
+		str := fmt.Sprint(raw)
+		switch ft.Kind() {
+		case reflect.String:
+			field.SetString(str)
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			if iv, err := strconv.ParseInt(str, 10, 64); err == nil {
+				field.SetInt(iv)
+			}
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			if uv, err := strconv.ParseUint(str, 10, 64); err == nil {
+				field.SetUint(uv)
+			}
+		case reflect.Float32, reflect.Float64:
+			if fv, err := strconv.ParseFloat(str, 64); err == nil {
+				field.SetFloat(fv)
+			}
+		case reflect.Bool:
+			if str == "1" || strings.ToLower(str) == "true" {
+				field.SetBool(true)
+			}
+		}
+	}
+
+	return nil
 }

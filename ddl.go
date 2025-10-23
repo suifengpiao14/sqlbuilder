@@ -5,6 +5,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
@@ -16,13 +17,20 @@ var (
 	CreateTableIfNotExists = false // 是否在创建表时检查该表是否存在，如果不存在则创建,开发环境建议设置为true，生产环境建议设置为false
 )
 
-func shouldCrateTable(driver Driver) bool {
+var initTableLock sync.Map
+
+func shouldCrateTable(tableName string, driver Driver) bool {
 	if CreateTableIfNotExists {
-		return true
+		_, loaded := initTableLock.LoadOrStore(tableName, struct{}{}) // 已经初始化一次后不再初始化
+		notExists := !loaded
+		return notExists
 	}
+
 	switch driver {
 	case Driver_sqlite3, _Driver_sqlite:
-		return true
+		_, loaded := initTableLock.LoadOrStore(tableName, struct{}{}) // 已经初始化一次后不再初始化
+		notExists := !loaded
+		return notExists
 	}
 	return false
 }

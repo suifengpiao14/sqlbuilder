@@ -32,7 +32,7 @@ type shardedTableSingleTablePagination struct {
 }
 
 func (shardedT shardedTableSingleTablePagination) Count() (total int64, err error) {
-	shardedT.p.modelMiddlewarePool = shardedT.p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+	shardedT.p.modelMiddlewarePool = shardedT.p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
 		total, err = shardedT.count(*fsRef)
 		if err != nil {
 			return err
@@ -40,7 +40,7 @@ func (shardedT shardedTableSingleTablePagination) Count() (total int64, err erro
 		*fsRef = fsRef.Append(
 			NewTotal(total),
 		)
-		err = shardedT.p.modelMiddlewarePool.Next(fsRef)
+		err = ctx.Next(fsRef)
 		if err != nil {
 			return err
 		}
@@ -70,12 +70,12 @@ func (shardedT shardedTableSingleTablePagination) count(fs Fields) (count int64,
 }
 
 func (shardedT shardedTableSingleTablePagination) List(result any, offset, limit int) (err error) {
-	shardedT.p.modelMiddlewarePool = shardedT.p.modelMiddlewarePool.append(func(fsRef *Fields) (err error) {
+	shardedT.p.modelMiddlewarePool = shardedT.p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
 		err = shardedT.list(result, *fsRef, offset, limit)
 		if err != nil {
 			return err
 		}
-		err = shardedT.p.modelMiddlewarePool.Next(fsRef)
+		err = ctx.Next(fsRef)
 		if err != nil {
 			return err
 		}
