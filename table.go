@@ -464,6 +464,15 @@ func (t TableConfig) Fields() (fs Fields) {
 	return t.Columns.Fields()
 }
 
+func (t TableConfig) GetFieldNameByAlaisFeild(alaisField *Field) (fieldName string, err error) {
+	fieldName, err = t.Columns.Fields().getNameByAliasName(alaisField.Name)
+	if err != nil {
+		err = errors.WithMessagef(err, "table:%s", t.Name)
+		return "", err
+	}
+	return fieldName, nil
+}
+
 var Error_UniqueIndexAlreadyExist = errors.New("unique index already exist")
 
 func (t TableConfig) CheckUniqueIndex(allFields ...*Field) (err error) {

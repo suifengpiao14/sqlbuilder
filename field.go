@@ -1343,6 +1343,9 @@ func (f *Field) GetValueRef() (val any, err error) { //用于从数据库扫描�
 
 // fillValueRef 填充值引用，用于fs 赋值到中间件model 列
 func (f *Field) fillValueRef(val any) (err error) {
+	if val == nil {
+		return nil
+	}
 	dstValue, err := f.GetValueRef()
 	if err != nil {
 		return err
@@ -1695,6 +1698,22 @@ func (c Field) formatSingleType(val any) any {
 	return value
 }
 
+func (f Field) DataAsAny(fs ...*Field) (val any) {
+	data, err := f.Data(Layer_all, fs...)
+	if err != nil {
+		return err
+	}
+
+	if data != nil {
+		if m, ok := data.(map[string]any); ok {
+			for _, v := range m {
+				return v
+			}
+		}
+	}
+	return nil
+}
+
 func (f1 Field) Data(layers []Layer, fs ...*Field) (data any, err error) {
 	f := *f1.Copy() // 复制一份,不影响其它场景
 	f.InitBeforeCalValue(fs...)
@@ -1931,14 +1950,18 @@ func (fs Fields) GetScene() (scene Scene, err error) {
 	return scene, nil
 }
 
-func (fs Fields) UmarshalModel(dst FieldsI) (err error) {
+func (fs Fields) UmarshalModel(dst FieldsI, table TableConfig) (err error) {
 	_, _, err = PointerImplementFieldsI(reflect.ValueOf(dst))
 	if err != nil {
 		return err
 	}
 	dFs := dst.Fields()
 	for i, dF := range dFs {
-		f, exists := fs.GetByName(dF.Name)
+		fName, err := table.GetFieldNameByAlaisFeild(dF)
+		if err != nil {
+			return err
+		}
+		f, exists := fs.GetByName(fName)
 		if !exists {
 			if dF.IsRequired() {
 				err = errors.Errorf("dst required field %s not found  in  Fields(%s)", dF.Name, fs.NamesString())
@@ -1946,7 +1969,8 @@ func (fs Fields) UmarshalModel(dst FieldsI) (err error) {
 			}
 			continue
 		}
-		err := dFs[i].fillValueRef(f.value)
+		value := f.DataAsAny()
+		err = dFs[i].fillValueRef(value)
 		if err != nil {
 			return err
 		}
@@ -2457,6 +2481,23 @@ func (fs Fields) GetByName(name string) (*Field, bool) {
 	return nil, false
 }
 
+// getNameByAliasName 通过别名找到Field.Name 别名设置建议在表上设置，所以这个函数通过TableConfig 公开访问
+func (fs Fields) getNameByAliasName(aliasName string) (name string, err error) {
+	for _, f := range fs {
+		_, ok := f.alias.GetByName(aliasName)
+		if ok {
+			return f.Name, nil
+		}
+	}
+
+	f, ok := fs.GetByName(aliasName) // 别名不存在，尝试通过字段名查找，兼容直接使用中间件表作为业务表情况
+	if ok {
+		return f.Name, nil
+	}
+
+	err = errors.WithMessagef(ErrNotFoundFieldName, "alias name:%s", aliasName)
+	return "", err
+}
 func (fs Fields) GetByNameAsError(name string) (*Field, error) {
 	f, ok := fs.GetByName(name)
 	if !ok {
