@@ -122,8 +122,8 @@ type TableConfig struct {
 	//publisher            message.Publisher table 只和gochannel publisher 交互，不直接和外部交互，如果需要发布到外部(如mq,kafka等)时，监听内部gochannel 转发即可，这样设计的目的是将领域内事件和领域外事件分离，方便内聚和聚合
 	comsumerMakers []func(table TableConfig) Consumer // 当前表级别的消费者(主要用于在表级别同步数据)
 	//views          TableConfigs view概念没有用 table在这里不是一等公民,Field才是一等公民,view功能通过FieldsI 接口实现,并且更合适
-	//topic string // 事件发布订阅主题，默认使用表名作为topic, 也可以自定义(直接内部固定，没必要引入太过不必须的概念，没必要引入过多的复杂性)
-	topicTables TableConfigs // 订阅的主题表，key 为固定的TableConfig.programTableName
+	topic       string       // 2025-10-24 启用该字段：事件发布订阅主题，默认使用表名作为topic, 也可以自定义(因为存在多模型组合情况，各模型基本都是基于新增、修改、删除广播事件，表名容易重复，导致订阅混乱、重复消费等，所以增加该字段，做唯一标识)
+	topicTables TableConfigs // 订阅的主题表，key 为固定的TableConfig.programTableName（这个字段可能无效，应为各模型订阅事件，topic是固定的2025-10-24）
 
 }
 
@@ -132,6 +132,11 @@ type HookFn func(ctx context.Context, scene Scene) (hookedFields Fields)
 // WithFieldHook 数据变更时，自动填充冗余字段, 比如品类id集合发生变化时，自动更新品类id集合等操作
 func (t TableConfig) WithFieldHook(hooks HookFn) TableConfig {
 	t.tableLevelFieldsHook = hooks
+	return t
+}
+
+func (t TableConfig) WithTopic(topic string) TableConfig {
+	t.topic = topic
 	return t
 }
 
@@ -255,7 +260,10 @@ func (t *TableConfig) GetPublisher() message.Publisher {
 }
 
 func (t TableConfig) GetTopic() string {
-	topic := fmt.Sprintf("topic_table_%s", t.Name)
+	if t.topic != "" {
+		return t.topic
+	}
+	topic := fmt.Sprintf("topic_table_%s", t.Name) // 这地方目前是兼容历史，后续t.topc 比定不能为空
 	return topic
 }
 

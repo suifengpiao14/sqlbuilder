@@ -1995,6 +1995,16 @@ func (fs Fields) Each(fn func(f *Field) error) error {
 	}
 	return nil
 }
+func (fs Fields) Walk(fn func(f *Field) (newF *Field, err error)) error {
+	for i := range fs {
+		f, err := fn(fs[i])
+		if err != nil {
+			return err
+		}
+		fs[i] = f
+	}
+	return nil
+}
 
 func (fs Fields) ApplyCunstomFn(customFns ...CustomFieldsFn) (newFs Fields) {
 	for _, customFn := range customFns {
