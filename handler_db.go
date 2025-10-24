@@ -12,14 +12,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-// 针对实现了FieldsI 接口的模型，优先使用FieldIDBHandler 处理，能减少硬编码
-type FieldIDBHandler func() *sql.DB
+// 针对实现了FieldsI 接口的模型，优先使用SqlDBHandler 处理，能减少硬编码
+type SqlDBHandler func() *sql.DB
 
 func NewFieldIDBHandler(getDB func() *sql.DB) Handler {
-	return FieldIDBHandler(getDB)
+	return SqlDBHandler(getDB)
 }
 
-func (h FieldIDBHandler) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) (err error) {
+func (h SqlDBHandler) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) (err error) {
 	db := h()
 	ctx := context.Background()
 	var opt *sql.TxOptions
@@ -46,20 +46,20 @@ func (h FieldIDBHandler) Transaction(fc func(tx Handler) error, opts ...*sql.TxO
 	_ = tx.Commit()
 	return err
 }
-func (h FieldIDBHandler) GetDialector() string {
+func (h SqlDBHandler) GetDialector() string {
 	return DetectDriver(h())
 }
-func (h FieldIDBHandler) GetSqlDB() *sql.DB {
-	return h()
-}
-func (h FieldIDBHandler) OriginalHandler() Handler {
+func (h SqlDBHandler) GetSqlDBHandler() SqlDBHandler {
 	return h
 }
-func (h FieldIDBHandler) IsOriginalHandler() bool {
+func (h SqlDBHandler) OriginalHandler() Handler {
+	return h
+}
+func (h SqlDBHandler) IsOriginalHandler() bool {
 	return true
 }
 
-func (h FieldIDBHandler) Exec(sql string) (err error) {
+func (h SqlDBHandler) Exec(sql string) (err error) {
 	_, err = h().Exec(sql)
 	if err != nil {
 		return err
@@ -67,7 +67,7 @@ func (h FieldIDBHandler) Exec(sql string) (err error) {
 
 	return nil
 }
-func (h FieldIDBHandler) ExecWithRowsAffected(sql string) (rowsAffected int64, err error) {
+func (h SqlDBHandler) ExecWithRowsAffected(sql string) (rowsAffected int64, err error) {
 	result, err := h().Exec(sql)
 	if err != nil {
 		return 0, err
@@ -79,7 +79,7 @@ func (h FieldIDBHandler) ExecWithRowsAffected(sql string) (rowsAffected int64, e
 	return rowsAffected, nil
 }
 
-func (h FieldIDBHandler) Exists(sql string) (exists bool, err error) {
+func (h SqlDBHandler) Exists(sql string) (exists bool, err error) {
 	result := make([]any, 0)
 	ctx := context.Background()
 	err = h.Query(ctx, sql, &result)
@@ -89,7 +89,7 @@ func (h FieldIDBHandler) Exists(sql string) (exists bool, err error) {
 	exists = len(result) > 0
 	return exists, nil
 }
-func (h FieldIDBHandler) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
+func (h SqlDBHandler) InsertWithLastId(sql string) (lastInsertId uint64, rowsAffected int64, err error) {
 
 	result, err := h().Exec(sql)
 	if err != nil {
@@ -106,7 +106,7 @@ func (h FieldIDBHandler) InsertWithLastId(sql string) (lastInsertId uint64, rows
 	lastInsertId = uint64(lastInsertIdi)
 	return lastInsertId, rowsAffected, nil
 }
-func (h FieldIDBHandler) First(_ context.Context, sqlstr string, result any) (exists bool, err error) {
+func (h SqlDBHandler) First(_ context.Context, sqlstr string, result any) (exists bool, err error) {
 	rows, err := h().Query(sqlstr)
 	if err != nil {
 		return false, err
@@ -119,7 +119,7 @@ func (h FieldIDBHandler) First(_ context.Context, sqlstr string, result any) (ex
 	return exists, nil
 }
 
-func (h FieldIDBHandler) Query(_ context.Context, sqlstr string, result any) (err error) {
+func (h SqlDBHandler) Query(_ context.Context, sqlstr string, result any) (err error) {
 	rows, err := h().Query(sqlstr)
 	if err != nil {
 		return err
@@ -131,7 +131,7 @@ func (h FieldIDBHandler) Query(_ context.Context, sqlstr string, result any) (er
 	return nil
 }
 
-func (h FieldIDBHandler) Count(sql string) (count int64, err error) {
+func (h SqlDBHandler) Count(sql string) (count int64, err error) {
 	err = h().QueryRow(sql).Scan(&count)
 	if err != nil {
 		return 0, err
@@ -139,7 +139,7 @@ func (h FieldIDBHandler) Count(sql string) (count int64, err error) {
 	return count, nil
 }
 
-func (h FieldIDBHandler) GetDB() *sql.DB {
+func (h SqlDBHandler) GetDB() *sql.DB {
 	return h()
 }
 
@@ -165,8 +165,9 @@ func (h _TxHandler) Transaction(fc func(tx Handler) error, opts ...*sql.TxOption
 func (h _TxHandler) GetDialector() string {
 	return detectDriverTx(h.tx)
 }
-func (h _TxHandler) GetSqlDB() *sql.DB {
-	return h.db
+func (h _TxHandler) GetSqlDBHandler() SqlDBHandler {
+	err := errors.Errorf("事务中不能再重新获取数据库句柄，避免循环调用，导致死锁")
+	panic(err)
 }
 func (h _TxHandler) OriginalHandler() Handler {
 	return h

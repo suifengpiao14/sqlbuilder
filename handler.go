@@ -209,8 +209,8 @@ func ChainHandler(handler Handler, middlewares ...HandlerMiddleware) Handler {
 }
 
 type Handler interface {
-	GetDialector() string // 获取驱动名称，方便后续扩展其它数据库支持
-	GetSqlDB() *sql.DB    // 获取原始db，方便后续扩展其它数据库支持
+	GetDialector() string          // 获取驱动名称，方便后续扩展其它数据库支持
+	GetSqlDBHandler() SqlDBHandler // 获取原始db，方便后续扩展其它数据库支持
 	Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) (err error)
 	Exec(sql string) (err error)
 	ExecWithRowsAffected(sql string) (rowsAffected int64, err error)
@@ -241,12 +241,12 @@ func (h GormHandler) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptio
 func (h GormHandler) GetDialector() string {
 	return h().Dialector.Name()
 }
-func (h GormHandler) GetSqlDB() *sql.DB {
+func (h GormHandler) GetSqlDBHandler() SqlDBHandler {
 	db, err := h().DB()
 	if err != nil {
 		panic(err)
 	}
-	return db
+	return func() *sql.DB { return db }
 }
 func (h GormHandler) OriginalHandler() Handler {
 	return h
@@ -396,8 +396,8 @@ func (hc _HandlerSingleflight) OriginalHandler() Handler {
 	return GetOriginalHandler(hc.handler)
 }
 
-func (hc _HandlerSingleflight) GetSqlDB() *sql.DB {
-	return hc.handler.GetSqlDB()
+func (hc _HandlerSingleflight) GetSqlDBHandler() SqlDBHandler {
+	return hc.handler.GetSqlDBHandler()
 }
 
 func (hc _HandlerSingleflight) GetDialector() string {
@@ -550,8 +550,8 @@ var Cache_sql_duration = 1 * time.Minute
 func (hc _HandlerCache) OriginalHandler() Handler {
 	return GetOriginalHandler(hc.handler)
 }
-func (hc _HandlerCache) GetSqlDB() *sql.DB {
-	return hc.handler.GetSqlDB()
+func (hc _HandlerCache) GetSqlDBHandler() SqlDBHandler {
+	return hc.handler.GetSqlDBHandler()
 }
 
 func (hc _HandlerCache) GetDialector() string {
@@ -681,8 +681,8 @@ func (hc _HandlerSingleflightDoOnce) GetDialector() string {
 	return hc.handler.GetDialector()
 }
 
-func (hc _HandlerSingleflightDoOnce) GetSqlDB() *sql.DB {
-	return hc.handler.GetSqlDB()
+func (hc _HandlerSingleflightDoOnce) GetSqlDBHandler() SqlDBHandler {
+	return hc.handler.GetSqlDBHandler()
 }
 
 func (hc _HandlerSingleflightDoOnce) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) error {
@@ -775,8 +775,8 @@ func (hc _HandlerTriggerAsyncEvent) GetDialector() string {
 	return hc.handler.GetDialector()
 }
 
-func (hc _HandlerTriggerAsyncEvent) GetSqlDB() *sql.DB {
-	return hc.handler.GetSqlDB()
+func (hc _HandlerTriggerAsyncEvent) GetSqlDBHandler() SqlDBHandler {
+	return hc.handler.GetSqlDBHandler()
 }
 func (hc _HandlerTriggerAsyncEvent) Transaction(fc func(tx Handler) error, opts ...*sql.TxOptions) error {
 	err := hc.handler.Transaction(fc, opts...)

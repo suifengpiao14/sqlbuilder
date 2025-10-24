@@ -162,7 +162,7 @@ func (t TableConfig) WithConsumerMakers(consumerMakers ...func(table TableConfig
 	return t
 }
 
-func (t TableConfig) Subscribe(consumerMakers ...func(table TableConfig) (consumer Consumer)) TableConfig {
+func (t TableConfig) SubscribeMaker(consumerMakers ...func(table TableConfig) (consumer Consumer)) TableConfig {
 	t.WithConsumerMakers(consumerMakers...)
 	return t
 }
@@ -219,27 +219,23 @@ func initTableOnce(table TableConfig, initFn func() (err error)) (err error) {
 }
 
 func (t TableConfig) Init() (err error) { //init 会挂载在 t.GetHandler 方法中，会多次调用，所以需要确保只执行一次
-	err = initTableOnce(t, func() (err error) {
-		err = t.consume()
-		return err
-	})
-	return err
-}
-
-// consume 启动表级别 消费订阅者，主要用于在表级别同步数据, 比如品类发生变化时更新品类id集合等操作
-func (t TableConfig) consume() (err error) {
 	if t._handler == nil {
 		err := errors.New("TableConfig.handler 未初始化,请先初始化handler再启用消费者监听")
 		return err
 	}
-	for _, consumerMaker := range t.comsumerMakers {
-		subscriber := consumerMaker(t)
-		err = StartSubscriberOnce(t.GetTopic(), subscriber)
-		if err != nil {
-			return err
+	//每个表(表名称) 只初始化一次，防止不同实例重复启动订阅者(重复启动订阅者会导致重复消费问题)
+	err = initTableOnce(t, func() (err error) {
+		for _, consumerMaker := range t.comsumerMakers {
+			subscriber := consumerMaker(t)
+			err = StartSubscriberOnce(t.GetTopic(), subscriber)
+			if err != nil {
+				return err
+			}
 		}
-	}
-	return nil
+
+		return err
+	})
+	return err
 }
 
 // func (t *TableConfig) SetPubSubLoger(log watermill.LoggerAdapter) {
