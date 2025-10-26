@@ -415,13 +415,17 @@ func (p InsertParam) Validate() (err error) {
 }
 
 func (p InsertParam) Exec() (err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
-		err = p.exec(fsRef)
-		if err != nil {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(p._Table.modelMiddlewares...)
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(ModelMiddleware{
+		Name: "InsertParam.exec",
+		Fn: func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
+			err = p.exec(fsRef)
+			if err != nil {
+				return err
+			}
+			err = ctx.Next(fsRef)
 			return err
-		}
-		err = ctx.Next(fsRef)
-		return err
+		},
 	})
 	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
 	if err != nil {
@@ -458,17 +462,21 @@ func (p InsertParam) InsertWithLastId() (lastInsertId uint64, rowsAffected int64
 }
 
 func (p InsertParam) Insert() (lastInsertId uint64, rowsAffected int64, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
-		lastInsertId, rowsAffected, err = p.insert(*fsRef)
-		if err != nil {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(p._Table.modelMiddlewares...)
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(ModelMiddleware{
+		Name: "InsertParam.Insert",
+		Fn: func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
+			lastInsertId, rowsAffected, err = p.insert(*fsRef)
+			if err != nil {
+				return err
+			}
+			*fsRef = fsRef.Append(
+				NewLastInsertId(lastInsertId),
+				NewRowsAffected(rowsAffected),
+			)
+			err = ctx.Next(fsRef)
 			return err
-		}
-		*fsRef = fsRef.Append(
-			NewLastInsertId(lastInsertId),
-			NewRowsAffected(rowsAffected),
-		)
-		err = ctx.Next(fsRef)
-		return err
+		},
 	})
 	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
 	return lastInsertId, rowsAffected, err
@@ -653,16 +661,20 @@ func (p DeleteParam) ToSQL(fs Fields) (sql string, err error) {
 	return sql, nil
 }
 func (p DeleteParam) Exec() (err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
-		err = p.exec(*fsRef)
-		if err != nil {
-			return err
-		}
-		err = ctx.Next(fsRef)
-		if err != nil {
-			return err
-		}
-		return nil
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(p._Table.modelMiddlewares...)
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(ModelMiddleware{
+		Name: "DeleteParam.Exec",
+		Fn: func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
+			err = p.exec(*fsRef)
+			if err != nil {
+				return err
+			}
+			err = ctx.Next(fsRef)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
 	})
 	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
 	if err != nil {
@@ -686,19 +698,23 @@ func (p DeleteParam) exec(fs Fields) (err error) {
 }
 
 func (p DeleteParam) Delete() (rowsAffected int64, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
-		rowsAffected, err = p.delete(*fsRef)
-		if err != nil {
-			return err
-		}
-		*fsRef = fsRef.Append(
-			NewRowsAffected(rowsAffected),
-		)
-		err = ctx.Next(fsRef)
-		if err != nil {
-			return err
-		}
-		return nil
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(p._Table.modelMiddlewares...)
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(ModelMiddleware{
+		Name: "DeleteParam.delete",
+		Fn: func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
+			rowsAffected, err = p.delete(*fsRef)
+			if err != nil {
+				return err
+			}
+			*fsRef = fsRef.Append(
+				NewRowsAffected(rowsAffected),
+			)
+			err = ctx.Next(fsRef)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
 	})
 	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
 	if err != nil {
@@ -814,19 +830,23 @@ func (p UpdateParam) ExecWithRowsAffected() (rowsAffected int64, err error) {
 }
 
 func (p UpdateParam) Update() (rowsAffected int64, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
-		rowsAffected, err = p.update(*fsRef)
-		if err != nil {
-			return err
-		}
-		*fsRef = fsRef.Append(
-			NewRowsAffected(rowsAffected),
-		)
-		err = ctx.Next(fsRef)
-		if err != nil {
-			return err
-		}
-		return nil
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(p._Table.modelMiddlewares...)
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(ModelMiddleware{
+		Name: "UpdateParam.update",
+		Fn: func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
+			rowsAffected, err = p.update(*fsRef)
+			if err != nil {
+				return err
+			}
+			*fsRef = fsRef.Append(
+				NewRowsAffected(rowsAffected),
+			)
+			err = ctx.Next(fsRef)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
 	})
 	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
 	if err != nil {
@@ -956,19 +976,23 @@ func (p FirstParam) ToSQL(fs Fields) (sql string, err error) {
 }
 
 func (p FirstParam) First(result any) (exists bool, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
-		exists, err = p.first(p._Fields, result)
-		if err != nil {
-			return err
-		}
-		*fsRef = fsRef.Append(
-			NewExists(exists),
-		)
-		err = ctx.Next(fsRef)
-		if err != nil {
-			return err
-		}
-		return nil
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(p._Table.modelMiddlewares...)
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(ModelMiddleware{
+		Name: "FirstParam.First",
+		Fn: func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
+			exists, err = p.first(p._Fields, result)
+			if err != nil {
+				return err
+			}
+			*fsRef = fsRef.Append(
+				NewExists(exists),
+			)
+			err = ctx.Next(fsRef)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
 	})
 	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
 	if err != nil {
@@ -1104,16 +1128,20 @@ func (p ListParam) Query(result any) (err error) {
 	return p.List(result)
 }
 func (p ListParam) List(result any) (err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
-		err = p.list(*fsRef, result)
-		if err != nil {
-			return err
-		}
-		err = ctx.Next(fsRef) // 执行下一个中间件
-		if err != nil {
-			return err
-		}
-		return nil
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(p._Table.modelMiddlewares...)
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(ModelMiddleware{
+		Name: "ListParam.list",
+		Fn: func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
+			err = p.list(*fsRef, result)
+			if err != nil {
+				return err
+			}
+			err = ctx.Next(fsRef) // 执行下一个中间件
+			if err != nil {
+				return err
+			}
+			return nil
+		},
 	})
 	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
 	if err != nil {
@@ -1237,17 +1265,21 @@ func (p ExistsParam) ToSQL(fs Fields) (sql string, err error) {
 }
 
 func (p ExistsParam) Exists() (exists bool, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
-		exists, err = p.exists(*fsRef)
-		if err != nil {
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(p._Table.modelMiddlewares...)
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(ModelMiddleware{
+		Name: "ExistsParam.Exists",
+		Fn: func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
+			exists, err = p.exists(*fsRef)
+			if err != nil {
+				return nil
+			}
+			*fsRef = fsRef.Append(NewExists(exists))
+			err = ctx.Next(fsRef)
+			if err != nil {
+				return err
+			}
 			return nil
-		}
-		*fsRef = fsRef.Append(NewExists(exists))
-		err = ctx.Next(fsRef)
-		if err != nil {
-			return err
-		}
-		return nil
+		},
 	})
 	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
 	if err != nil {
@@ -1366,19 +1398,23 @@ func (p TotalParam) ToSQL(fs Fields) (sql string, err error) {
 }
 
 func (p TotalParam) Count() (total int64, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
-		total, err = p.count(*fsRef)
-		if err != nil {
-			return err
-		}
-		*fsRef = fsRef.Append(
-			NewTotal(total),
-		)
-		err = ctx.Next(fsRef)
-		if err != nil {
-			return err
-		}
-		return nil
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(p._Table.modelMiddlewares...)
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(ModelMiddleware{
+		Name: "TotalParam.Count",
+		Fn: func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
+			total, err = p.count(*fsRef)
+			if err != nil {
+				return err
+			}
+			*fsRef = fsRef.Append(
+				NewTotal(total),
+			)
+			err = ctx.Next(fsRef)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
 	})
 
 	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
@@ -1469,17 +1505,21 @@ func (p PaginationParam) paginationHandler(totalSql string, listSql string, resu
 }
 
 func (p PaginationParam) Pagination(result any) (total int64, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
-		total, err = p.pagination(*fsRef, result)
-		if err != nil {
-			return err
-		}
-		*fsRef = fsRef.Append(NewTotal(total))
-		err = ctx.Next(fsRef)
-		if err != nil {
-			return err
-		}
-		return nil
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(p._Table.modelMiddlewares...)
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(ModelMiddleware{
+		Name: "PaginationParam.pagination",
+		Fn: func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
+			total, err = p.pagination(*fsRef, result)
+			if err != nil {
+				return err
+			}
+			*fsRef = fsRef.Append(NewTotal(total))
+			err = ctx.Next(fsRef)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
 	})
 	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
 	if err != nil {
@@ -1624,23 +1664,27 @@ func (p SetParam) ToSQL(fsRef Fields) (existsSql string, insertSql string, updat
 }
 
 func (p SetParam) Set() (isNotExits bool, lastInsertId uint64, rowsAffected int64, err error) {
-	p.modelMiddlewarePool = p.modelMiddlewarePool.append(func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
-		isNotExits, lastInsertId, rowsAffected, err = p.set(*fsRef)
-		if err != nil {
-			return err
-		}
-		*fsRef = fsRef.Append(
-			NewExists(!isNotExits),
-			NewNotExists(isNotExits),
-			NewLastInsertId(lastInsertId),
-			NewRowsAffected(rowsAffected),
-		)
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(p._Table.modelMiddlewares...)
+	p.modelMiddlewarePool = p.modelMiddlewarePool.append(ModelMiddleware{
+		Name: "SetParam.Set",
+		Fn: func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error) {
+			isNotExits, lastInsertId, rowsAffected, err = p.set(*fsRef)
+			if err != nil {
+				return err
+			}
+			*fsRef = fsRef.Append(
+				NewExists(!isNotExits),
+				NewNotExists(isNotExits),
+				NewLastInsertId(lastInsertId),
+				NewRowsAffected(rowsAffected),
+			)
 
-		err = ctx.Next(fsRef)
-		if err != nil {
-			return err
-		}
-		return nil
+			err = ctx.Next(fsRef)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
 	})
 	err = p.modelMiddlewarePool.run(p.GetTable(), p._Fields)
 	if err != nil {

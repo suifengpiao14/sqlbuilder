@@ -13,7 +13,11 @@ func (ctx ModelMiddlewareContext) append(fns ...ModelMiddleware) ModelMiddleware
 	return ctx
 }
 
-type ModelMiddleware func(ctx *ModelMiddlewareContext, fsRef *Fields) (err error)
+type ModelMiddleware struct {
+	Name        string
+	Description string
+	Fn          func(ctx *ModelMiddlewareContext, fs *Fields) error
+}
 type ModelMiddlewares []ModelMiddleware
 
 func (rms ModelMiddlewares) append(fns ...ModelMiddleware) ModelMiddlewares {
@@ -27,10 +31,10 @@ func (ctx *ModelMiddlewareContext) Next(fs *Fields) (err error) {
 	ctx.index++
 	if ctx.index < len(ctx.middlewares) {
 		middleware := ctx.middlewares[ctx.index]
-		if middleware == nil {
+		if middleware.Fn == nil {
 			return ctx.Next(fs) //如果当前场景不匹配或者fn为空，则继续执行下一个fn
 		}
-		err = middleware(ctx, fs)
+		err = middleware.Fn(ctx, fs)
 		if err != nil {
 			return err
 		}

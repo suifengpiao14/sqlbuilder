@@ -117,13 +117,15 @@ type TableConfig struct {
 	// 表级别的字段（值产生方式和实际数据无关），比如创建时间、更新时间、删除字段等，这些字段设置好后，相关操作可从此获取字段信息,增加该字段，方便封装delete操作、冗余字段自动填充等操作, 增加ctx 入参 方便使用ctx专递数据，比如 业务扩展多租户，只需表增加相关字段，在ctx中传递租户信息，并设置表级别字段场景即可
 	// 比如规则模型，表中cityId,classId,productId 字段只是方便后台查询设置,api 侧只需要规则表达式(expresson)即可,expresson 往往是其它字段按照按照需求生成的字符串,
 	//此时使用hook确保关注的字段发生变化时，自动更新冗余数据(在构造sql 的Fields 内追加冗余字段Field)
+	//Deprecated: 废弃hook,hook只能修改写入数据库前,无法在操作数据库之后再修改. 包内引用了middleware概念,可以使用middleware统一实现
 	tableLevelFieldsHook HookFn
+	modelMiddlewares     ModelMiddlewares
 	shardedTableNameFn   func(fs ...Field) (shardedTableNames []string) // 分表策略，比如按时间分表，此处传入字段信息，返回多个表名
 	//publisher            message.Publisher table 只和gochannel publisher 交互，不直接和外部交互，如果需要发布到外部(如mq,kafka等)时，监听内部gochannel 转发即可，这样设计的目的是将领域内事件和领域外事件分离，方便内聚和聚合
 	comsumerMakers []func(table TableConfig) Consumer // 当前表级别的消费者(主要用于在表级别同步数据)
 	//views          TableConfigs view概念没有用 table在这里不是一等公民,Field才是一等公民,view功能通过FieldsI 接口实现,并且更合适
-	topic       string       // 2025-10-24 启用该字段：事件发布订阅主题，默认使用表名作为topic, 也可以自定义(因为存在多模型组合情况，各模型基本都是基于新增、修改、删除广播事件，表名容易重复，导致订阅混乱、重复消费等，所以增加该字段，做唯一标识)
-	topicTables TableConfigs // 订阅的主题表，key 为固定的TableConfig.programTableName（这个字段可能无效，应为各模型订阅事件，topic是固定的2025-10-24）
+	topicRouteKey string       // 2025-10-25 事件必须在运行表上发布,原因:接受事件后需要知道运行表是哪个,方便获取数据.所以运行表一定要获取,既然这样,将topic挂在运行表上就很合适. 为解决中间件订阅互不影响,所以增加routeKey类似mq的消息路由
+	topicTables   TableConfigs // 订阅的主题表，key 为固定的TableConfig.programTableName（这个字段可能无效，应为各模型订阅事件，topic是固定的2025-10-24）
 
 }
 
@@ -134,9 +136,13 @@ func (t TableConfig) WithFieldHook(hooks HookFn) TableConfig {
 	t.tableLevelFieldsHook = hooks
 	return t
 }
+func (t TableConfig) WithModelMiddlewares(middlewares ...ModelMiddleware) TableConfig {
+	t.modelMiddlewares = append(t.modelMiddlewares, middlewares...)
+	return t
+}
 
-func (t TableConfig) WithTopic(topic string) TableConfig {
-	t.topic = topic
+func (t TableConfig) WithTopicRouteKey(topicRouteKey string) TableConfig {
+	t.topicRouteKey = topicRouteKey
 	return t
 }
 
@@ -256,10 +262,7 @@ func (t *TableConfig) GetPublisher() message.Publisher {
 }
 
 func (t TableConfig) GetTopic() string {
-	if t.topic != "" {
-		return t.topic
-	}
-	topic := fmt.Sprintf("topic_table_%s", t.Name) // 这地方目前是兼容历史，后续t.topc 比定不能为空
+	topic := fmt.Sprintf("topic_table_%s_routeKey_%s", t.Name, t.topicRouteKey) // 这地方目前是兼容历史，后续t.topc 比定不能为空
 	return topic
 }
 
@@ -445,6 +448,7 @@ func (t TableConfig) GetDBNameByFieldName(fieldName string) (dbName string) {
 	return col.DbName
 }
 
+// Deprecated: use modelMiddleware instead
 func (t TableConfig) MergeTableLevelFields(ctx context.Context, scene Scene, fs ...*Field) Fields {
 	fs1 := Fields(fs) //修改类型
 	if t.tableLevelFieldsHook != nil {
@@ -612,6 +616,10 @@ func (t TableConfig) Merge(tables ...TableConfig) TableConfig {
 		}
 		if table.tableLevelFieldsHook != nil {
 			t.tableLevelFieldsHook = table.tableLevelFieldsHook
+		}
+
+		if len(table.modelMiddlewares) > 0 {
+			t.modelMiddlewares = t.modelMiddlewares.append(table.modelMiddlewares...)
 		}
 		if table.shardedTableNameFn != nil {
 			t.shardedTableNameFn = table.shardedTableNameFn
