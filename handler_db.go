@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 )
 
@@ -286,35 +286,52 @@ func Scan(rows Rows, dst any) (rowsAffected int64, err error) {
 		return 0, errors.New("rows is nil")
 	}
 
-	columns, err := rows.Columns()
-	if err != nil {
-		return 0, err
-	}
+	// columns, err := rows.Columns()
+	// if err != nil {
+	// 	return 0, err
+	// }
 
-	values := make([]any, len(columns))
-	columnTypes, _ := rows.ColumnTypes()
+	//values := make([]any, len(columns))
+	//columnTypes, _ := rows.ColumnTypes()
 
 	switch out := dst.(type) {
 
 	// ---- 单条 map ----
 	case *map[string]any:
 		if rows.Next() {
-			prepareValues(values, columnTypes)
-			if err = rows.Scan(values...); err != nil {
+			err = sqlx.MapScan(rows, *out)
+			if err != nil {
 				return 0, err
 			}
-			*out = scanIntoMap(columns, values)
+			rowsAffected = 1
+		}
+	case map[string]any:
+		if rows.Next() {
+			err = sqlx.MapScan(rows, out)
+			if err != nil {
+				return 0, err
+			}
 			rowsAffected = 1
 		}
 
 	// ---- 多条 map ----
 	case *[]map[string]any:
 		for rows.Next() {
-			prepareValues(values, columnTypes)
-			if err = rows.Scan(values...); err != nil {
-				return rowsAffected, err
+			row := map[string]any{}
+			err = sqlx.MapScan(rows, row)
+			if err != nil {
+				return 0, err
 			}
-			*out = append(*out, scanIntoMap(columns, values))
+			*out = append(*out, row)
+			rowsAffected++
+		}
+	case *[]any:
+		for rows.Next() {
+			row, err := sqlx.SliceScan(rows)
+			if err != nil {
+				return 0, err
+			}
+			*out = append(*out, row)
 			rowsAffected++
 		}
 
@@ -325,9 +342,7 @@ func Scan(rows Rows, dst any) (rowsAffected int64, err error) {
 		*bool, *string, *time.Time,
 		*sql.NullInt32, *sql.NullInt64, *sql.NullFloat64,
 		*sql.NullBool, *sql.NullString, *sql.NullTime:
-
 		for rows.Next() {
-
 			if err = rows.Scan(out); err != nil {
 				return rowsAffected, err
 			}
@@ -344,7 +359,7 @@ func Scan(rows Rows, dst any) (rowsAffected int64, err error) {
 		switch elem.Kind() {
 		case reflect.Struct:
 			if rows.Next() {
-				err = scanIntoStruct(rows, elem, columns)
+				err = scanIntoStruct(rows, elem)
 				if err != nil {
 					return rowsAffected, err
 				}
@@ -355,7 +370,7 @@ func Scan(rows Rows, dst any) (rowsAffected int64, err error) {
 			sliceElemType := elem.Type().Elem()
 			for rows.Next() {
 				newElem := reflect.New(sliceElemType).Elem()
-				if err = scanIntoStruct(rows, newElem, columns); err != nil {
+				if err = scanIntoStruct(rows, newElem); err != nil {
 					return rowsAffected, err
 				}
 				elem.Set(reflect.Append(elem, newElem))
@@ -371,42 +386,6 @@ func Scan(rows Rows, dst any) (rowsAffected int64, err error) {
 		return rowsAffected, err
 	}
 	return rowsAffected, nil
-}
-
-// --- 工具函数 ---
-
-func prepareValues(values []any, columnTypes []*sql.ColumnType) {
-	for i, ct := range columnTypes {
-		switch strings.ToUpper(ct.DatabaseTypeName()) {
-		case "TEXT", "VARCHAR", "CHAR":
-			var s sql.NullString
-			values[i] = &s
-		case "INT", "INTEGER", "BIGINT", "SMALLINT":
-			var n sql.NullInt64
-			values[i] = &n
-		case "FLOAT", "DOUBLE", "REAL":
-			var f sql.NullFloat64
-			values[i] = &f
-		case "BOOL", "BOOLEAN":
-			var b sql.NullBool
-			values[i] = &b
-		case "DATETIME", "TIMESTAMP", "DATE":
-			var t sql.NullTime
-			values[i] = &t
-		default:
-			var raw any
-			values[i] = &raw
-		}
-	}
-}
-
-func scanIntoMap(columns []string, values []any) map[string]any {
-	m := make(map[string]any, len(columns))
-	for i, c := range columns {
-		v := reflect.ValueOf(values[i]).Elem().Interface()
-		m[c] = v
-	}
-	return m
 }
 
 func PointerImplementFieldsI(dest reflect.Value) (fi FieldsI, ok bool, err error) {
@@ -425,110 +404,65 @@ func PointerImplementFieldsI(dest reflect.Value) (fi FieldsI, ok bool, err error
 	return fi, true, nil
 }
 
-func scanIntoStruct(rows Rows, dest reflect.Value, columns []string) error {
+func scanIntoStruct(rows Rows, dest reflect.Value) error {
+	if rows == nil {
+		return nil
+	}
+	columns, err := rows.Columns()
+	if err != nil {
+		return err
+	}
 
 	fi, ok, err := PointerImplementFieldsI(dest)
 	if err != nil {
 		return err
 	}
-	if ok {
-		implementsStruct := dest.Type().Implements(reflect.TypeOf((*FieldsI)(nil)).Elem())
-		if implementsStruct {
-			//实现FieldsI 必须是  func (m *KnowledgeNodeModel) Fields()  格式，而不是 func (m KnowledgeNodeModel) Fields()  格式(结构体实现接口，Fields赋值后无法传递给外部结构体变量)
-			err := errors.Errorf("dest(%v) must pointer implement FieldsI,got struct  implement FieldsI", dest.String())
-			return err
-		}
-		fields := fi.Fields()
-		addrs := make([]any, len(columns))
-		canUseFields := false
-		for i, col := range columns {
-			if f, ok := fields.GetByName(col); ok {
-				canUseFields = true
-				addrs[i], err = f.GetValueRef()
-				if err != nil {
-					return err
-				}
-
+	if !ok { // 普通结构体扫描
+		if err := sqlx.StructScan(rows, dest.Addr().Interface()); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
 			}
-		}
-		if !canUseFields {
-			err := errors.Errorf(`sql select name(%s) not match FieldsI.Fields() name(%s),please check sql select name or FieldsI.Fields() name`, strings.Join(columns, ","), strings.Join(fields.Names(), ","))
-			return err
-		}
-		err := rows.Scan(addrs...)
-		if err != nil {
-			return err
+			return fmt.Errorf("sqlx.StructScan failed: %w", err)
 		}
 		return nil
 	}
 
-	values := make([]any, len(columns))
-	for i := range columns {
-		var v any
-		values[i] = &v
-	}
+	// ---- 实现FieldsI接口扫描----
 
-	if err := rows.Scan(values...); err != nil {
+	fields := fi.Fields()
+	addrs := make([]any, len(columns))
+	canUseFields := false
+	for i, col := range columns {
+		if f, ok := fields.GetByName(col); ok {
+			canUseFields = true
+			addrs[i], err = f.GetValueRef()
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if !canUseFields {
+		err := errors.Errorf(`sql select name(%s) not match FieldsI.Fields() name(%s),please check sql select name or FieldsI.Fields() name`, strings.Join(columns, ","), strings.Join(fields.Names(), ","))
 		return err
 	}
-
-	for i, col := range columns {
-		field := dest.FieldByNameFunc(func(name string) bool {
-			return strings.EqualFold(name, col)
-		})
-		if !field.IsValid() || !field.CanSet() {
-			continue
-		}
-
-		raw := *(values[i].(*any))
-		if raw == nil {
-			continue
-		}
-
-		val := reflect.ValueOf(raw)
-		ft := field.Type()
-
-		// ✅ 类型完全一致
-		if val.Type().AssignableTo(ft) {
-			field.Set(val)
-			continue
-		}
-
-		// ✅ 可安全转换的情况
-		if val.CanConvert(ft) {
-			field.Set(val.Convert(ft))
-			continue
-		}
-
-		// ✅ 特殊情况：[]byte → string
-		if val.Kind() == reflect.Slice && val.Type().Elem().Kind() == reflect.Uint8 && ft.Kind() == reflect.String {
-			field.SetString(string(val.Interface().([]byte)))
-			continue
-		}
-
-		// ✅ 尝试通过字符串进行宽松转换
-		str := fmt.Sprint(raw)
-		switch ft.Kind() {
-		case reflect.String:
-			field.SetString(str)
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			if iv, err := strconv.ParseInt(str, 10, 64); err == nil {
-				field.SetInt(iv)
+	values, err := sqlx.SliceScan(rows)
+	if err != nil {
+		return err
+	}
+	for i := range values {
+		if addrs[i] != nil {
+			dRv := reflect.Indirect(reflect.ValueOf(addrs[i]))
+			if values[i] == nil {
+				continue
 			}
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			if uv, err := strconv.ParseUint(str, 10, 64); err == nil {
-				field.SetUint(uv)
-			}
-		case reflect.Float32, reflect.Float64:
-			if fv, err := strconv.ParseFloat(str, 64); err == nil {
-				field.SetFloat(fv)
-			}
-		case reflect.Bool:
-			if str == "1" || strings.ToLower(str) == "true" {
-				field.SetBool(true)
+			sRv := reflect.Indirect(reflect.ValueOf(values[i]))
+			if sRv.CanConvert(dRv.Type()) {
+				dRv.Set(sRv.Convert(dRv.Type()))
+			} else {
+				err = errors.Errorf("StructScan failed: %v can not convert to %v", sRv.Type(), dRv.Type())
+				panic(err)
 			}
 		}
 	}
-
 	return nil
 }

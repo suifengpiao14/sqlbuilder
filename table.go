@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/doug-martin/goqu/v9"
@@ -142,6 +141,7 @@ func (t TableConfig) WithModelMiddlewares(middlewares ...ModelMiddleware) TableC
 }
 
 func (t TableConfig) WithTopicRouteKey(topicRouteKey string) TableConfig {
+	//这个地方必须返回table 的copy副本,原本应该放到函数入参设置，但是TableConfig.Init 获取数据不方便，所以增加这个属性
 	t.topicRouteKey = topicRouteKey
 	return t
 }
@@ -168,8 +168,10 @@ func (t TableConfig) WithConsumerMakers(consumerMakers ...func(table TableConfig
 	return t
 }
 
-func (t TableConfig) SubscribeMaker(consumerMakers ...func(table TableConfig) (consumer Consumer)) TableConfig {
-	t.WithConsumerMakers(consumerMakers...)
+func (t TableConfig) Apply(applyFns ...func(table TableConfig) TableConfig) TableConfig { // 使用tableGetter 能延迟获取table，主要是等待 handler 初始化完毕
+	for _, applyFn := range applyFns {
+		t = applyFn(t)
+	}
 	return t
 }
 
@@ -209,38 +211,18 @@ func (t TableConfig) GetConsumerMakers() []func(table TableConfig) (consumer Con
 	return t.comsumerMakers
 }
 
-var tableInitMark sync.Map
-
-func initTableOnce(table TableConfig, initFn func() (err error)) (err error) {
-	_, ok := tableInitMark.LoadOrStore(table.Name, true)
-	if ok { //已经初始化过
-		return nil
-	}
-	err = initFn()
-	if err != nil {
-		tableInitMark.Delete(table.Name)
-	}
-	return err
-
-}
-
 func (t TableConfig) Init() (err error) { //init 会挂载在 t.GetHandler 方法中，会多次调用，所以需要确保只执行一次
 	if t._handler == nil {
 		err := errors.New("TableConfig.handler 未初始化,请先初始化handler再启用消费者监听")
 		return err
 	}
-	//每个表(表名称) 只初始化一次，防止不同实例重复启动订阅者(重复启动订阅者会导致重复消费问题)
-	err = initTableOnce(t, func() (err error) {
-		for _, consumerMaker := range t.comsumerMakers {
-			subscriber := consumerMaker(t)
-			err = StartSubscriberOnce(t.GetTopic(), subscriber)
-			if err != nil {
-				return err
-			}
+	for _, consumerMaker := range t.comsumerMakers {
+		subscriber := consumerMaker(t)
+		err = subscriber.Consume()
+		if err != nil {
+			return err
 		}
-
-		return err
-	})
+	}
 	return err
 }
 
@@ -278,13 +260,18 @@ func (t TableConfig) GetTopic() string {
 //	}
 //
 // Publish
-func (t TableConfig) Publish(event EventMessage) (err error) {
-	var pubSub = t.GetPublisher()
+func (t TableConfig) Publish(topicRouteKey string, event EventMessage) (err error) {
+	table := t.WithTopicRouteKey(topicRouteKey)
+	err = table.Init() // 这里初始化表，拉起发布表的订阅者
+	if err != nil {
+		return err
+	}
+	var pubSub = table.GetPublisher()
 	msg, err := event.ToMessage()
 	if err != nil {
 		return err
 	}
-	err = pubSub.Publish(t.GetTopic(), msg)
+	err = pubSub.Publish(table.GetTopic(), msg)
 	if err != nil {
 		return err
 	}

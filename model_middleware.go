@@ -20,9 +20,23 @@ type ModelMiddleware struct {
 }
 type ModelMiddlewares []ModelMiddleware
 
-func (rms ModelMiddlewares) append(fns ...ModelMiddleware) ModelMiddlewares {
-	rms = append(rms, fns...)
-	return rms
+func (rms ModelMiddlewares) append(middlewars ...ModelMiddleware) ModelMiddlewares {
+	middlewarArr := make([]ModelMiddleware, 0)
+	m := make(map[string]struct{})
+	for _, middleware := range rms {
+		if _, ok := m[middleware.Name]; !ok {
+			middlewarArr = append(middlewarArr, middleware)
+			m[middleware.Name] = struct{}{}
+		}
+	}
+	for _, middleware := range middlewars {
+		if _, ok := m[middleware.Name]; !ok {
+			middlewarArr = append(middlewarArr, middleware)
+			m[middleware.Name] = struct{}{}
+		}
+
+	}
+	return middlewarArr
 }
 
 // Next 传递控制权给下一个中间件

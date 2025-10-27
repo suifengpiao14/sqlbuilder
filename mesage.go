@@ -12,7 +12,6 @@ import (
 )
 
 var gochannelPool sync.Map
-var subscriberLookPool sync.Map // 用于存储订阅者，防止重复创建
 var MessageLogger = watermill.NewStdLogger(false, false)
 
 func newGoChannel() (pubsub *gochannel.GoChannel) {
@@ -49,23 +48,10 @@ func GetSubscriber(topic string) (subscriber message.Subscriber) {
 	return subscriber
 }
 
-// StartSubscriberOnce 防止重复创建订阅者，例如：重复调用订阅者，会导致重复消费消息
-func StartSubscriberOnce(topic string, consumer Consumer) (err error) {
-	_, ok := subscriberLookPool.LoadOrStore(topic, true)
-	if ok { //已经存在
-		return nil
-	}
-	err = consumer.Consume()
-	if err != nil {
-		subscriberLookPool.Delete(topic)
-	}
-	return err
-}
-
 type Consumer struct {
 	Description string                             `json:"description"`
 	Topic       string                             `json:"topic"`
-	Subscriber  message.Subscriber                 `json:"-"` // 消费者，支持自定义消费者，例如：gochannel,rabbitmq,kafka等
+	subscriber  message.Subscriber                 `json:"-"` //这里固定使用gochannel 作为订阅者，减少库依赖，确保库稳定，外部订阅者可以监听gochannel转发
 	WorkFn      func(message *Message) (err error) `json:"-"`
 	Logger      watermill.LoggerAdapter            `json:"-"` // 日志适配器，如果不设置则使用默认日志适配器
 }
@@ -75,7 +61,12 @@ func (c Consumer) String() string {
 	return string(b)
 }
 
+var consumerMap sync.Map
+
 func (s Consumer) Consume() (err error) {
+	if _, loaded := consumerMap.LoadOrStore(s.Topic, struct{}{}); loaded { // 已存在，则不重复创建订阅者
+		return nil
+	}
 	logger := s.Logger
 	if logger == nil {
 		logger = watermill.NewStdLogger(false, false)
@@ -88,12 +79,12 @@ func (s Consumer) Consume() (err error) {
 		err = errors.Errorf("Subscriber.Consume WorkFn required, consume:%s", s.String())
 		return err
 	}
-	if s.Subscriber == nil {
+	if s.subscriber == nil {
 		err = errors.Errorf("Subscriber.Consume Subscriber required, consume:%s", s.String())
 		return err
 	}
 	go func() {
-		msgChan, err := s.Subscriber.Subscribe(context.Background(), s.Topic)
+		msgChan, err := s.subscriber.Subscribe(context.Background(), s.Topic)
 		if err != nil {
 			logger.Error("Subscriber.Consumer.Subscribe", err, nil)
 			return
@@ -181,16 +172,17 @@ func (e IdentityEvent) ToMessage() (msg *Message, err error) {
 	return MakeMessage(e)
 }
 
-func MakeIdentityEventSubscriber[Model any](publishTable TableConfig, workFn func(ruleModel Model) (err error)) (subscriber Consumer) {
-	return makeIdentityEventISubscriber[IdentityEvent](publishTable, workFn)
+func MakeIdentityEventSubscriber[Model any](publishTable TableConfig, topicRouteKey string, workFn func(ruleModel Model) (err error)) (subscriber Consumer) {
+	return makeIdentityEventISubscriber[IdentityEvent](publishTable, topicRouteKey, workFn)
 }
 
-func makeIdentityEventISubscriber[IdentityEvent IdentityEventI, Model any](publishTable TableConfig, workFn func(ruleModel Model) (err error)) (subscriber Consumer) {
-	topic := publishTable.GetTopic()
+func makeIdentityEventISubscriber[IdentityEvent IdentityEventI, Model any](publishTable TableConfig, topicRouteKey string, workFn func(ruleModel Model) (err error)) (subscriber Consumer) {
+	table := publishTable.WithTopicRouteKey(topicRouteKey)
+	topic := table.GetTopic()
 	return Consumer{
 		Description: "数据变更订阅者",
 		Topic:       topic,
-		Subscriber:  GetSubscriber(topic),
+		subscriber:  GetSubscriber(topic),
 		WorkFn: MakeWorkFn(func(event IdentityEvent) (err error) {
 			fieldName := event.GetIdentityFieldName()
 			if fieldName == "" {
@@ -202,14 +194,14 @@ func makeIdentityEventISubscriber[IdentityEvent IdentityEventI, Model any](publi
 				err = errors.Errorf("事件(%s)中没有包含唯一标识", event.String())
 				return err
 			}
-			col, err := publishTable.Columns.GetByFieldNameAsError(fieldName)
+			col, err := table.Columns.GetByFieldNameAsError(fieldName)
 			if err != nil {
 				return err
 			}
 			field := col.GetField().SetModelRequered(true).SetValue(event.GetIdentityValue())
 			fs := Fields{field}
 			ruleModel := new(Model)
-			err = publishTable.Repository().FirstMustExists(ruleModel, fs)
+			err = table.Repository().FirstMustExists(ruleModel, fs)
 			if err != nil {
 				return err
 			}
