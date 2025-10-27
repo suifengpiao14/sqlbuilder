@@ -10,6 +10,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
+	"github.com/spf13/cast"
 )
 
 // 针对实现了FieldsI 接口的模型，优先使用SqlDBHandler 处理，能减少硬编码
@@ -458,8 +459,33 @@ func scanIntoStruct(rows Rows, dest reflect.Value) error {
 			sRv := reflect.Indirect(reflect.ValueOf(values[i]))
 			if sRv.CanConvert(dRv.Type()) {
 				dRv.Set(sRv.Convert(dRv.Type()))
-			} else {
-				err = errors.Errorf("StructScan failed: %v can not convert to %v", sRv.Type(), dRv.Type())
+				continue
+			}
+
+			// ---- 手动转换类型 ----
+			switch dRv.Kind() {
+			case reflect.String:
+				dRv.SetString(cast.ToString(values[i]))
+
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				dRv.SetInt(cast.ToInt64(values[i]))
+
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				dRv.SetUint(cast.ToUint64(values[i]))
+
+			case reflect.Float32, reflect.Float64:
+				dRv.SetFloat(cast.ToFloat64(values[i]))
+
+			case reflect.Bool:
+				dRv.SetBool(cast.ToBool(values[i]))
+
+			default:
+				// ---- ⏳ time.Time 特殊处理 ----
+				if dRv.Type().String() == "time.Time" {
+					v := cast.ToTime(values[i])
+					dRv.Set(reflect.ValueOf(v))
+				}
+				err = errors.Errorf("StructScan failed: %v can not convert to %v", sRv.Type(), dRv.Type()) //todo 这部分如何处理
 				panic(err)
 			}
 		}
