@@ -1184,7 +1184,7 @@ func (log EmptyLog) Log(sql string, args ...any) {
 
 }
 
-var DefaultLog = ConsoleLog{}
+var DefaultLog LogI = EmptyLog{}
 
 type ExistsParam struct {
 	//allowEmptyWhereCondition bool // 如果应用中确实容许where 条件为空，请使用 where 1=1 替换
