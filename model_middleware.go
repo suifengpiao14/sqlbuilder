@@ -16,7 +16,7 @@ func (ctx ModelMiddlewareContext) append(fns ...ModelMiddleware) ModelMiddleware
 type ModelMiddleware struct {
 	Name        string
 	Description string
-	Fn          func(ctx *ModelMiddlewareContext, fs *Fields) error
+	Fn          func(ctx *ModelMiddlewareContext, fs *Fields) (err error)
 }
 type ModelMiddlewares []ModelMiddleware
 
