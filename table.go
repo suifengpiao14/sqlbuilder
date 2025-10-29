@@ -229,7 +229,7 @@ func (t TableConfig) consume() (err error) {
 	}
 	for _, consumerMaker := range t.comsumerMakers {
 		subscriber := consumerMaker(t)
-		err = StartSubscriberOnce(t.GetTopic(), subscriber)
+		err = StartSubscriberOnce(subscriber)
 		if err != nil {
 			return err
 		}

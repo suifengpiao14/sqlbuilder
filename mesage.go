@@ -50,7 +50,12 @@ func GetSubscriber(topic string) (subscriber message.Subscriber) {
 }
 
 // StartSubscriberOnce 防止重复创建订阅者，例如：重复调用订阅者，会导致重复消费消息
-func StartSubscriberOnce(topic string, consumer Consumer) (err error) {
+func StartSubscriberOnce(consumer Consumer) (err error) {
+	topic := consumer.Topic
+	if topic == "" {
+		err = errors.Errorf("StartSubscriberOnce Topic required, consumer:%s", consumer.String())
+		return err
+	}
 	_, ok := subscriberLookPool.LoadOrStore(topic, true)
 	if ok { //已经存在
 		return nil
