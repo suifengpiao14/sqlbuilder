@@ -1923,18 +1923,19 @@ func (fs Fields) Builder(ctx context.Context, scene Scene, tableConfig TableConf
 	fields = fields.SetTable(tableConfig)  // 最后确保所有字段有table信息
 	fields = fields.SetSceneIfEmpty(scene) // 确保所有字段有场景信息
 
-	tableFieldNams := tableConfig.Fields().Names()
-	m := make(map[string]struct{})
-	for _, name := range tableFieldNams {
-		m[name] = struct{}{}
-	}
+	// tableFieldNams := tableConfig.Fields().Names()
+	// m := make(map[string]struct{})
+	// for _, name := range tableFieldNams {
+	// 	m[name] = struct{}{}
+	// }
+	// 有PageIndex、PageSize 这些字段，但是不在表中的情况,这里不能过滤，模块封装已改成中间件模式，可以完全控制字段必须存在（如果后续一定要过滤，在构建sql部分过滤即可，不可提前过滤字段）
 	//fs 字段不在TableConfig.Columns 中的情况,主要是模块封装中有些非模块必须字段,所以这个执行过滤逻辑
-	if len(tableFieldNams) > 0 { // 如果表包含字段，则过滤掉不存在的字段(alais 也已经作为field 添加到Tableconfig.Columns 内了),这个if 是兼容历史版本表没有增加Field 的情况
-		fields = fields.Filter(func(f Field) bool {
-			_, ok := m[f.Name]
-			return ok
-		})
-	}
+	// if len(tableFieldNams) > 0 { // 如果表包含字段，则过滤掉不存在的字段(alais 也已经作为field 添加到Tableconfig.Columns 内了),这个if 是兼容历史版本表没有增加Field 的情况
+	// 	fields = fields.Filter(func(f Field) bool {
+	// 		_, ok := m[f.Name]
+	// 		return ok
+	// 	})
+	// }
 
 	return fields
 }
