@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/pkg/errors"
@@ -841,11 +842,21 @@ func ValueFnBetween(left any, right any) ValueFn {
 		Layer: Value_Layer_DBFormat,
 	}
 }
+
+var TimeFormat = time.DateTime
+
 func ValueFnBetweenWitEmptyNil(left any, right any) ValueFn {
 	return ValueFn{
 		Fn: func(in any, f *Field, fs ...*Field) (value any, err error) {
 			if IsNil(in) {
 				return nil, nil
+			}
+			//对于 time.Time 类型，由后续框架转换，会有时区问题，所以这里直接转换类型，避免不必要的bug(如果确实需要屏蔽自动转换，可以设置TimeFormat为""空字符串)
+			if lt, ok := left.(time.Time); ok && TimeFormat != "" {
+				left = lt.Format(TimeFormat)
+			}
+			if rt, ok := right.(time.Time); ok && TimeFormat != "" {
+				right = rt.Format(TimeFormat)
 			}
 			return Between{Empty2Nil(left), Empty2Nil(right)}, nil
 		},
