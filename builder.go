@@ -960,7 +960,7 @@ func (p FirstParam) ToSQL(fs Fields) (sql string, err error) {
 		err = errors.Wrap(err, errWithMsg)
 		return "", err
 	}
-	ds := p.GetGoquDialect().Select(p.getSelectColumns(tableConfig, fs)...).
+	ds := p.GetGoquDialect().Select(p.getSelectColumns(fs)...).
 		From(tableConfig.AliasOrTableExpr()).
 		Where(where...).
 		Order(fs.Order()...).
@@ -1082,7 +1082,7 @@ func (p ListParam) makeSelectDataset(fs Fields) (ds *goqu.SelectDataset, err err
 	pageIndex, pageSize := fs.Pagination()
 	ofsset := max(pageIndex*pageSize, 0)
 
-	selec := p.getSelectColumns(tableConfig, fs)
+	selec := p.getSelectColumns(fs)
 	order := fs.Order()
 	if len(order) == 0 { // 没有排序字段,则默认按主键降序排列
 		table := p.GetTable()
@@ -1898,18 +1898,20 @@ func (p *SQLParam[T]) SetLog(log LogI) *T {
 	p._log = log
 	return p.self
 }
-func (p *SQLParam[T]) getSelectColumns(table TableConfig, fs Fields) (selectColumns []any) {
+func (p *SQLParam[T]) getSelectColumns(fs Fields) (selectColumns []any) {
 	selectColumns = fs.Select()
 	if len(selectColumns) > 0 {
 		return selectColumns
 	}
-	if p.resultDst != nil {
-		resultFs, ok := TryGetFields(p.resultDst)
-		if ok {
-			selectColumns = resultFs.MakeDBColumnWithAlias(table.Columns)
-			return selectColumns
-		}
-	}
+	//这种转换过于隐蔽，容易引起bug，建议需要转换时，手动明确设置Field.SetSelectColumn()
+
+	// if p.resultDst != nil {
+	// 	resultFs, ok := TryGetFields(p.resultDst)
+	// 	if ok {
+	// 		selectColumns = resultFs.MakeDBColumnWithAlias(table.Columns)
+	// 		return selectColumns
+	// 	}
+	// }
 
 	return selectColumns
 }
