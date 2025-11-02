@@ -1906,8 +1906,10 @@ func (p *SQLParam[T]) getSelectColumns(table TableConfig, fs Fields) (selectColu
 	handler := table.GetHandler().OriginalHandler()
 	_, isSqlDBHandler := handler.(SqlDBHandler)
 	if isSqlDBHandler && p.resultDst != nil { // 这里只有SqlDBHandler句柄实现了Fields接口处理，所以只对SqlDBHandler隐式转换
-		resultFs, ok := TryGetFields(p.resultDst)
+		rv := reflect.ValueOf(p.resultDst)
+		fi, ok, _ := PointerImplementFieldsI(rv) // 忽略错误
 		if ok {
+			resultFs := fi.Fields()
 			selectColumns = resultFs.MakeDBColumnWithAlias(table.Columns)
 			return selectColumns
 		}
