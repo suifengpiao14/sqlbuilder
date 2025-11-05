@@ -37,26 +37,20 @@ var GetDB func() *sql.DB = sync.OnceValue(func() (db *sql.DB) {
 
 var dbHandlerPool sync.Map
 
-func MakeDBHandler(dbConfig DBConfig) *sql.DB {
+func MakeDBHandler(dbConfig DBConfig) func() *sql.DB {
 	dbDNS := dbConfig.DSN()
 	// 读取或创建
-	handlerFn, _ := dbHandlerPool.LoadOrStore(dbDNS, sync.OnceValue(func() func() *gorm.DB {
-		dbFn := GetMysqlDBWithConfig(dbConfig)
-		return DB2Gorm(dbFn, nil)
-	}))
-
+	handlerFn, _ := dbHandlerPool.LoadOrStore(dbDNS, sync.OnceValue(GetMysqlDBWithConfig(dbConfig)))
 	handler := handlerFn.(func() *sql.DB)
 	db := handler()
-
 	// 校验连接是否有效
 	if err := db.QueryRow("SELECT 1;").Err(); err != nil {
 		// 失效则重新建立并替换
 		dbFn := GetMysqlDBWithConfig(dbConfig)
 		dbHandlerPool.Store(dbDNS, dbFn)
-		db = dbFn()
-		return db
+		return dbFn
 	}
-	return db
+	return handler
 }
 
 func DBHandler2Singleton(sqlDBFn func() *sql.DB) func() *sql.DB {
