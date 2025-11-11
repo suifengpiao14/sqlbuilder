@@ -1882,7 +1882,7 @@ func (p *SQLParam[T]) WithModelMiddleware(middlewares ...ModelMiddleware) *T {
 }
 
 func (p *SQLParam[T]) AppendFields(fs ...*Field) *T {
-	p._Fields.Append(fs...)
+	p._Fields.AddRef(fs...)
 	return p.self
 }
 

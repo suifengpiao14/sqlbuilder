@@ -529,7 +529,7 @@ func (ts TableConfigs) GetByName(name string) (t *TableConfig, exists bool) {
 
 func (ts TableConfigs) Fields() (fs Fields) {
 	for _, t := range ts {
-		fs.Append(t.Columns.Fields()...)
+		fs.AddRef(t.Columns.Fields()...)
 	}
 	return fs
 }
@@ -1171,7 +1171,7 @@ func MakeFieldHook(hookFields ...HookField) (hookFn HookFn) {
 				}
 				return val, nil
 			})))
-			hookedFields = hookedFields.Append(f)
+			hookedFields = hookedFields.AddRef(f)
 		}
 		return hookedFields
 	}
