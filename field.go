@@ -2193,6 +2193,7 @@ func (fs *Fields) Append(moreFields ...*Field) Fields {
 	if *fs == nil {
 		*fs = make(Fields, 0)
 	}
+	// 这个地方有陷阱，如果一个字段用2次，传入2次名称相同，则会改变原有字段的配置，慎重使用,同时第二次由于exists 一直为false，又添加进去了,所以去重也有bug，计划废除这个方法
 	for _, f := range moreFields {
 		exists := false
 		for i := range *fs {
@@ -2223,7 +2224,7 @@ func (fs *Fields) Replace(fields ...*Field) *Fields {
 			}
 		}
 		if !exists {
-			fs.Append(f)
+			fs.AddRef(f)
 		}
 	}
 	return fs
@@ -2845,7 +2846,7 @@ func MakeFieldsFromStruct(m any, source StructFieldSource, columnConfigs ...Colu
 					},
 				},
 			}
-			fs.Append(f)
+			fs.AddRef(f)
 		}
 	default:
 		err := errors.New("MakeFieldsFromAttrName m require struct type")

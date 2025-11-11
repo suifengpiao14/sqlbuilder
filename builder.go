@@ -1597,7 +1597,7 @@ func (p *SQLParam[T]) WithHandlerMiddleware(middlewares ...HandlerMiddleware) *T
 }
 
 func (p *SQLParam[T]) AppendFields(fs ...*Field) *T {
-	p._Fields.Append(fs...)
+	p._Fields.AddRef(fs...)
 	return p.self
 }
 
