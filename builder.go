@@ -1891,6 +1891,10 @@ func (p *SQLParam[T]) Fields() Fields {
 }
 
 func (p *SQLParam[T]) GetTable() TableConfig {
+	if p._Table.Name == "" {
+		err := errors.Errorf("table must initialized with name")
+		panic(err)
+	}
 	return p._Table
 }
 
