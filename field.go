@@ -833,7 +833,19 @@ func ColumnToString(col any) string {
 // 	return s
 // }
 
-func formatSelectColumns(columns []any) (formatedColumns []any) {
+func formatSelectColumns(columns []any) (formatedColumns []any, err error) {
+	if len(columns) > 0 {
+		k := reflect.TypeOf(columns[0]).Kind()
+		if slices.Contains([]reflect.Kind{reflect.Array, reflect.Slice}, k) {
+			strArr := make([]string, 0)
+			for _, v := range columns {
+				str := cast.ToString(v)
+				strArr = append(strArr, str)
+			}
+			err = fmt.Errorf("formatSelectColumns columns type must not array and slice columns(%s)", strings.Join(strArr, ","))
+			return nil, err
+		}
+	}
 	formatedColumns = make([]any, 0)
 	//colMap := make(map[any]struct{}, 0)// 并非所有类型都可以作为map的key(runtime error: hash of unhashable type exp.sqlFunctionExpression)，此处使用string 作为key 更安全
 	colMap := make(map[string]struct{}, 0)
@@ -847,7 +859,7 @@ func formatSelectColumns(columns []any) (formatedColumns []any) {
 			formatedColumns = append(formatedColumns, col)
 		}
 	}
-	return formatedColumns
+	return formatedColumns, nil
 }
 
 // func (f *Field) WithTableView(tableView TableConfig) *Field {
@@ -856,7 +868,10 @@ func formatSelectColumns(columns []any) (formatedColumns []any) {
 // }
 
 func (f *Field) SetSelectColumns(columns ...any) *Field {
-	columns = formatSelectColumns(columns)
+	columns, err := formatSelectColumns(columns)
+	if err != nil {
+		panic(err)
+	}
 	f.selectColumns = append(f.selectColumns, columns...)
 	return f
 }
@@ -867,7 +882,10 @@ func (f *Field) CleanSelectColumns() *Field {
 	return f
 }
 func (f *Field) SetCountColumns(columns ...any) *Field {
-	columns = formatSelectColumns(columns)
+	columns, err := formatSelectColumns(columns)
+	if err != nil {
+		panic(err)
+	}
 	f.countColumns = append(f.countColumns, columns...)
 	return f
 }

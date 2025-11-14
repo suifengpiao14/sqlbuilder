@@ -392,7 +392,7 @@ func (t TableConfig) WithHandler(handler Handler) TableConfig {
 
 func (t TableConfig) GetHandler() (handler Handler) {
 	if t._handler == nil {
-		err := errors.New("database handler is nil, please use TableConfig.WithHandler to set handler")
+		err := errors.Errorf("table(%s) database handler is nil, please use TableConfig.WithHandler to set handler", t.Name)
 		panic(err)
 	}
 	t.Init() //初始化数据表，比如启用事件订阅等
