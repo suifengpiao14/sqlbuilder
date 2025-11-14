@@ -835,6 +835,7 @@ func ColumnToString(col any) string {
 
 func formatSelectColumns(columns []any) (formatedColumns []any, err error) {
 	if len(columns) > 0 {
+		//防御式编程，检测到类型为数组、切片，则提前报错，避免将错误延续到后续流程，导致排查问题困难
 		k := reflect.TypeOf(columns[0]).Kind()
 		if slices.Contains([]reflect.Kind{reflect.Array, reflect.Slice}, k) {
 			strArr := make([]string, 0)
