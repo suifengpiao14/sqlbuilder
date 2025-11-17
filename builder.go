@@ -1882,7 +1882,7 @@ func (p *SQLParam[T]) WithModelMiddleware(middlewares ...ModelMiddleware) *T {
 }
 
 func (p *SQLParam[T]) AppendFields(fs ...*Field) *T {
-	p._Fields.Append(fs...)
+	p._Fields.AddRef(fs...)
 	return p.self
 }
 
@@ -1891,6 +1891,10 @@ func (p *SQLParam[T]) Fields() Fields {
 }
 
 func (p *SQLParam[T]) GetTable() TableConfig {
+	if p._Table.Name == "" {
+		err := errors.Errorf("table must initialized with name")
+		panic(err)
+	}
 	return p._Table
 }
 

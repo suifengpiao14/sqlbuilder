@@ -392,7 +392,7 @@ func (t TableConfig) WithHandler(handler Handler) TableConfig {
 
 func (t TableConfig) GetHandler() (handler Handler) {
 	if t._handler == nil {
-		err := errors.New("database handler is nil, please use TableConfig.WithHandler to set handler")
+		err := errors.Errorf("table(%s) database handler is nil, please use TableConfig.WithHandler to set handler", t.Name)
 		panic(err)
 	}
 	t.Init() //初始化数据表，比如启用事件订阅等
@@ -529,7 +529,7 @@ func (ts TableConfigs) GetByName(name string) (t *TableConfig, exists bool) {
 
 func (ts TableConfigs) Fields() (fs Fields) {
 	for _, t := range ts {
-		fs.Append(t.Columns.Fields()...)
+		fs.AddRef(t.Columns.Fields()...)
 	}
 	return fs
 }
@@ -1171,7 +1171,7 @@ func MakeFieldHook(hookFields ...HookField) (hookFn HookFn) {
 				}
 				return val, nil
 			})))
-			hookedFields = hookedFields.Append(f)
+			hookedFields = hookedFields.AddRef(f)
 		}
 		return hookedFields
 	}

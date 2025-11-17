@@ -833,7 +833,20 @@ func ColumnToString(col any) string {
 // 	return s
 // }
 
-func formatSelectColumns(columns []any) (formatedColumns []any) {
+func formatSelectColumns(columns []any) (formatedColumns []any, err error) {
+	if len(columns) > 0 {
+		//防御式编程，检测到类型为数组、切片，则提前报错，避免将错误延续到后续流程，导致排查问题困难
+		k := reflect.TypeOf(columns[0]).Kind()
+		if slices.Contains([]reflect.Kind{reflect.Array, reflect.Slice}, k) {
+			strArr := make([]string, 0)
+			for _, v := range columns {
+				str := cast.ToString(v)
+				strArr = append(strArr, str)
+			}
+			err = fmt.Errorf("formatSelectColumns columns type must not array and slice columns(%s)", strings.Join(strArr, ","))
+			return nil, err
+		}
+	}
 	formatedColumns = make([]any, 0)
 	//colMap := make(map[any]struct{}, 0)// 并非所有类型都可以作为map的key(runtime error: hash of unhashable type exp.sqlFunctionExpression)，此处使用string 作为key 更安全
 	colMap := make(map[string]struct{}, 0)
@@ -847,7 +860,7 @@ func formatSelectColumns(columns []any) (formatedColumns []any) {
 			formatedColumns = append(formatedColumns, col)
 		}
 	}
-	return formatedColumns
+	return formatedColumns, nil
 }
 
 // func (f *Field) WithTableView(tableView TableConfig) *Field {
@@ -856,7 +869,10 @@ func formatSelectColumns(columns []any) (formatedColumns []any) {
 // }
 
 func (f *Field) SetSelectColumns(columns ...any) *Field {
-	columns = formatSelectColumns(columns)
+	columns, err := formatSelectColumns(columns)
+	if err != nil {
+		panic(err)
+	}
 	f.selectColumns = append(f.selectColumns, columns...)
 	return f
 }
@@ -867,7 +883,10 @@ func (f *Field) CleanSelectColumns() *Field {
 	return f
 }
 func (f *Field) SetCountColumns(columns ...any) *Field {
-	columns = formatSelectColumns(columns)
+	columns, err := formatSelectColumns(columns)
+	if err != nil {
+		panic(err)
+	}
 	f.countColumns = append(f.countColumns, columns...)
 	return f
 }
@@ -2335,6 +2354,7 @@ func (fs *Fields) Append(moreFields ...*Field) Fields {
 	if *fs == nil {
 		*fs = make(Fields, 0)
 	}
+	// 这个地方有陷阱，如果一个字段用2次，传入2次名称相同，则会改变原有字段的配置，慎重使用,同时第二次由于exists 一直为false，又添加进去了,所以去重也有bug，计划废除这个方法
 	for _, f := range moreFields {
 		exists := false
 		for i := range *fs {
@@ -2365,7 +2385,7 @@ func (fs *Fields) Replace(fields ...*Field) *Fields {
 			}
 		}
 		if !exists {
-			fs.Append(f)
+			fs.AddRef(f)
 		}
 	}
 	return fs
@@ -3015,7 +3035,7 @@ func MakeFieldsFromStruct(m any, source StructFieldSource, columnConfigs ...Colu
 				// 	},
 				// },
 			}
-			fs.Append(f)
+			fs.AddRef(f)
 		}
 	default:
 		err := errors.New("MakeFieldsFromAttrName m require struct type")
