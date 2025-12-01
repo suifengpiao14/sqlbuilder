@@ -11,6 +11,7 @@ import (
 
 	// Register MySQL dialect for goqu
 	_ "github.com/doug-martin/goqu/v9/dialect/mysql"
+
 	// Register sqlite3 dialect for goqu
 	_ "github.com/doug-martin/goqu/v9/dialect/sqlite3"
 	// Register MySQL driver for sql.DB
@@ -18,7 +19,7 @@ import (
 	// Register sqlite3 driver for sql.DB
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/suifengpiao14/sshmysql"
-	"gorm.io/driver/mysql"
+	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -37,18 +38,27 @@ var GetDB func() *sql.DB = sync.OnceValue(func() (db *sql.DB) {
 
 var dbHandlerPool sync.Map
 
+/*
+收集错误 1049 Unknown database 'developer_service1'
+*/
+
 func MakeDBHandler(dbConfig DBConfig) func() *sql.DB {
 	dbDNS := dbConfig.DSN()
 	// 读取或创建
-	handlerFn, _ := dbHandlerPool.LoadOrStore(dbDNS, sync.OnceValue(GetMysqlDBWithConfig(dbConfig)))
+	handlerFn, loaded := dbHandlerPool.LoadOrStore(dbDNS, sync.OnceValue(GetMysqlDBWithConfig(dbConfig)))
 	handler := handlerFn.(func() *sql.DB)
 	db := handler()
 	// 校验连接是否有效
 	if err := db.QueryRow("SELECT 1;").Err(); err != nil {
-		// 失效则重新建立并替换
-		dbFn := GetMysqlDBWithConfig(dbConfig)
-		dbHandlerPool.Store(dbDNS, dbFn)
-		return dbFn
+		if loaded {
+			// 失效则重新建立并替换
+			dbFn := GetMysqlDBWithConfig(dbConfig)
+			dbHandlerPool.Store(dbDNS, dbFn)
+			return dbFn
+		} else {
+			panic(err) // 第一次存储后链接就失败，大部分是配置问题，直接panic
+		}
+
 	}
 	return handler
 }
@@ -93,7 +103,7 @@ func DB2Gorm(sqlDBFn func() *sql.DB, gormConfig *gorm.Config) func() *gorm.DB {
 		var dialector gorm.Dialector
 		switch driver {
 		case Driver_mysql.String():
-			dialector = mysql.New(mysql.Config{Conn: sqlDB})
+			dialector = gormmysql.New(gormmysql.Config{Conn: sqlDB})
 		case Driver_sqlite3.String():
 			dialector = sqlite.New(sqlite.Config{Conn: sqlDB})
 		default:
