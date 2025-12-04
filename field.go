@@ -191,8 +191,25 @@ func (fns *ValueFns) Remove(v ValueFn) {
 // 		tmp = append(tmp, v)
 // 	}
 
-// 	*fns = tmp
-// }
+//		*fns = tmp
+//	}
+//
+// Deprecated: 废弃，改成 Field.value 了(这里兼容函数名称，内部已变化)
+func (fns *ValueFns) ResetSetValueFn(setValueFnFns ...ValueFnFn) {
+	tmp := make(ValueFns, 0)
+	for _, setValueFnFn := range setValueFnFns {
+		setValueFn := ValueFn{
+			Fn:    setValueFnFn,
+			Layer: Value_Layer_ApiFormat,
+		}
+		tmp = append(tmp, setValueFn)
+	}
+	for _, v := range *fns {
+		tmp = append(tmp, v)
+	}
+
+	*fns = tmp
+}
 
 func (vs ValueFns) Filter(fn func(fn ValueFn) bool) (subFns ValueFns) {
 	for _, v := range vs {
@@ -1805,6 +1822,11 @@ func (f Field) Order(fs ...*Field) (orderedExpressions []exp.OrderedExpression) 
 //			Description: "api 设置数据时机执行", // 描述
 //		}
 //	}
+//
+// Deprecated: 请使用 ValueFnSetFormat 替代
+func ValueFnSetValue(valueFnFn ValueFnFn) ValueFn {
+	return ValueFnSetFormat(valueFnFn)
+}
 func ValueFnSetFormat(valueFnFn ValueFnFn) ValueFn {
 	return ValueFn{
 		Fn:          valueFnFn,
