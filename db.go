@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	// Register MySQL dialect for goqu
 	_ "github.com/doug-martin/goqu/v9/dialect/mysql"
@@ -70,12 +71,17 @@ func DBHandler2Singleton(sqlDBFn func() *sql.DB) func() *sql.DB {
 	})
 }
 
-func GetMysqlDB(dsn string) func() *sql.DB {
+func GetMysqlDB(dsn string, applyFns ...func(db *sql.DB)) func() *sql.DB {
 	return func() *sql.DB {
 		sqlDB, err := sql.Open(string(Driver_mysql), dsn)
 		if err != nil {
 			panic(err)
 		}
+
+		for _, applyFn := range applyFns {
+			applyFn(sqlDB)
+		}
+
 		listenForExitSignal(sqlDB)
 		return sqlDB
 	}
@@ -89,7 +95,22 @@ func GetMysqlDBWithConfig(dbConfig DBConfig) func() *sql.DB {
 			panic(err)
 		}
 	}
-	return GetMysqlDB(dsn)
+	dbFn := GetMysqlDB(dsn, dbConfig.DBPoolConfig.Apply)
+	return dbFn
+}
+
+type DBPoolConfig struct {
+	MaxOpenConns int
+	MaxIdleConns int
+	MaxIdleTime  time.Duration
+}
+
+func (poolCfg DBPoolConfig) Apply(db *sql.DB) {
+	db.SetMaxOpenConns(poolCfg.MaxOpenConns)
+	if poolCfg.MaxIdleConns > 0 {
+		db.SetMaxIdleConns(poolCfg.MaxIdleConns)
+	}
+	db.SetConnMaxIdleTime(time.Duration(poolCfg.MaxIdleTime) * time.Second)
 }
 
 // DB2Gorm 将sql.DB转为gorm.DB
@@ -151,6 +172,7 @@ type DBConfig struct {
 	DatabaseName string
 	QueryParams  string
 	SSHConfig    *sshmysql.SSHConfig
+	DBPoolConfig DBPoolConfig
 }
 
 func (dbConfig DBConfig) DSN() string {
