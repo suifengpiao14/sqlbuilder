@@ -204,10 +204,7 @@ func (fns *ValueFns) ResetSetValueFn(setValueFnFns ...ValueFnFn) {
 		}
 		tmp = append(tmp, setValueFn)
 	}
-	for _, v := range *fns {
-		tmp = append(tmp, v)
-	}
-
+	tmp = append(tmp, *fns...)
 	*fns = tmp
 }
 
