@@ -5,7 +5,13 @@ type SelectBuilderFnsI interface {
 }
 
 type RepositoryCommand struct {
-	tableConfig TableConfig
+	tableConfig      TableConfig
+	modelMiddlewares ModelMiddlewares
+}
+
+func (s RepositoryCommand) WithModelMiddleware(modelMiddlewares ...ModelMiddleware) RepositoryCommand {
+	s.modelMiddlewares = modelMiddlewares
+	return s
 }
 
 func NewRepositoryCommand(tableConfig TableConfig) RepositoryCommand {
@@ -24,18 +30,18 @@ func (s RepositoryCommand) GetTableConfig() TableConfig {
 }
 
 func (s RepositoryCommand) Insert(fields Fields, customFns ...CustomFnInsertParam) (err error) {
-	builder := NewInsertBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+	builder := NewInsertBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...).WithModelMiddleware(s.modelMiddlewares...)
 	err = builder.Exec()
 	return err
 }
 func (s RepositoryCommand) BatchInsert(fieldsList []Fields, customFns ...CustomFnBatchInsertParam) (err error) {
-	builder := NewBatchInsertBuilder(s.tableConfig).AppendFields(fieldsList...).ApplyCustomFn(customFns...)
+	builder := NewBatchInsertBuilder(s.tableConfig).AppendFields(fieldsList...).ApplyCustomFn(customFns...).WithModelMiddleware(s.modelMiddlewares...)
 	err = builder.Exec()
 	return err
 }
 
 func (s RepositoryCommand) InsertWithLastId(fields Fields, customFns ...CustomFnInsertParam) (lastInsertId uint64, rowsAffected int64, err error) {
-	builder := NewInsertBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+	builder := NewInsertBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...).WithModelMiddleware(s.modelMiddlewares...)
 	lastInsertId, rowsAffected, err = builder.Insert()
 	if err != nil {
 		return 0, 0, err
@@ -44,24 +50,24 @@ func (s RepositoryCommand) InsertWithLastId(fields Fields, customFns ...CustomFn
 }
 
 func (s RepositoryCommand) Update(fields Fields, customFns ...CustomFnUpdateParam) (err error) {
-	builder := NewUpdateBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+	builder := NewUpdateBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...).WithModelMiddleware(s.modelMiddlewares...)
 	err = builder.Exec()
 	return err
 }
 func (s RepositoryCommand) UpdateWithRowsAffected(fields Fields, customFns ...CustomFnUpdateParam) (rowsAffected int64, err error) {
-	builder := NewUpdateBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+	builder := NewUpdateBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...).WithModelMiddleware(s.modelMiddlewares...)
 	rowsAffected, err = builder.Update()
 	return rowsAffected, err
 }
 
 func (s RepositoryCommand) Set(fields Fields, customFns ...CustomFnSetParam) (isInsert bool, lastInsertId uint64, rowsAffected int64, err error) {
-	builder := NewSetBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+	builder := NewSetBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...).WithModelMiddleware(s.modelMiddlewares...)
 	isInsert, lastInsertId, rowsAffected, err = builder.Set()
 	return isInsert, lastInsertId, rowsAffected, err
 }
 
 func (s RepositoryCommand) Delete(fields Fields, customFns ...CustomFnDeleteParam) (err error) {
-	builder := NewDeleteBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+	builder := NewDeleteBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...).WithModelMiddleware(s.modelMiddlewares...)
 	err = builder.Exec()
 	return err
 }
@@ -143,7 +149,8 @@ func (s RepositoryCommand) Delete(fields Fields, customFns ...CustomFnDeletePara
 // }
 
 type RepositoryQuery struct {
-	tableConfig TableConfig
+	tableConfig      TableConfig
+	modelMiddlewares ModelMiddlewares
 }
 
 func NewRepositoryQuery(tableConfig TableConfig) RepositoryQuery {
@@ -160,38 +167,41 @@ func (s RepositoryQuery) GetTableConfig() TableConfig {
 func (s RepositoryQuery) GetHandler() Handler {
 	return s.tableConfig.GetHandlerWithInitTable()
 }
-
+func (s RepositoryQuery) WithModelMiddleware(modelMiddlewares ...ModelMiddleware) RepositoryQuery {
+	s.modelMiddlewares = modelMiddlewares
+	return s
+}
 func (s RepositoryQuery) First(dst any, fields Fields, customFns ...CustomFnFirstParam) (exists bool, err error) {
-	builder := NewFirstBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+	builder := NewFirstBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...).WithModelMiddleware(s.modelMiddlewares...)
 	exists, err = builder.First(dst)
 	return exists, err
 }
 func (s RepositoryQuery) FirstMustExists(dst any, fields Fields, customFns ...CustomFnFirstParam) (err error) {
-	builder := NewFirstBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+	builder := NewFirstBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...).WithModelMiddleware(s.modelMiddlewares...)
 	err = builder.FirstMustExists(dst)
 	return err
 }
 
 func (s RepositoryQuery) Pagination(dst any, fields Fields, customFns ...CustomFnPaginationParam) (total int64, err error) {
-	builder := NewPaginationBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+	builder := NewPaginationBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...).WithModelMiddleware(s.modelMiddlewares...)
 	total, err = builder.Pagination(dst)
 	return total, err
 }
 
 func (s RepositoryQuery) All(dst any, fields Fields, customFns ...CustomFnListParam) (err error) {
-	builder := NewListBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+	builder := NewListBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...).WithModelMiddleware(s.modelMiddlewares...)
 	err = builder.List(dst)
 	return err
 }
 
 func (s RepositoryQuery) Exists(fields Fields, customFns ...CustomFnExistsParam) (exists bool, err error) {
-	builder := NewExistsBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+	builder := NewExistsBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...).WithModelMiddleware(s.modelMiddlewares...)
 	exists, err = builder.Exists()
 	return exists, err
 }
 
 func (s RepositoryQuery) Count(fields Fields, customFns ...CustomFnTotalParam) (total int64, err error) {
-	builder := NewTotalBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...)
+	builder := NewTotalBuilder(s.tableConfig).AppendFields(fields...).ApplyCustomFn(customFns...).WithModelMiddleware(s.modelMiddlewares...)
 	total, err = builder.Count()
 	return total, err
 }
@@ -212,6 +222,12 @@ func NewRepository(tableConfig TableConfig) Repository {
 
 func (r Repository) GetTable() TableConfig {
 	return r.tableConfig
+}
+
+func (s Repository) WithModelMiddleware(modelMiddlewares ...ModelMiddleware) Repository {
+	s.RepositoryCommand = s.RepositoryCommand.WithModelMiddleware(modelMiddlewares...)
+	s.RepositoryQuery = s.RepositoryQuery.WithModelMiddleware(modelMiddlewares...)
+	return s
 }
 
 func (r Repository) Transaction(fc func(txRepository Repository) (err error)) (err error) {
