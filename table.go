@@ -106,6 +106,7 @@ type TableView interface {
 }
 
 type TableConfig struct {
+	identity string // 表唯一标识，主要用于程序中的唯一标识
 	DBName
 	Columns                  ColumnConfigs            // 后续吧table 纳入，通过 Column.Identity 生成 Field 操作
 	FieldName2DBColumnNameFn FieldName2DBColumnNameFn `json:"-"`
@@ -134,6 +135,14 @@ type HookFn func(ctx context.Context, scene Scene) (hookedFields Fields)
 func (t TableConfig) WithFieldHook(hooks HookFn) TableConfig {
 	t.tableLevelFieldsHook = hooks
 	return t
+}
+func (t TableConfig) WithIdentity(identity string) TableConfig {
+	t.identity = identity
+	return t
+}
+
+func (t TableConfig) GetIdentity() string {
+	return t.identity
 }
 func (t TableConfig) WithModelMiddlewares(middlewares ...ModelMiddleware) TableConfig {
 	t.modelMiddlewares = append(t.modelMiddlewares, middlewares...)
@@ -525,6 +534,16 @@ func (ts TableConfigs) GetByName(name string) (t *TableConfig, exists bool) {
 	}
 	t, exists = funcs.GetOne(ts, func(t TableConfig) bool { return t.Name == name })
 	return t, exists
+}
+
+func (ts TableConfigs) GetByIdentity(identity string) (table TableConfig, err error) {
+	for _, t := range ts {
+		if t.identity == identity {
+			return t, nil
+		}
+	}
+	err = errors.WithMessagef(ErrNotFound, "TableConfigs.GetByIdentity(%s)", identity)
+	return table, err
 }
 
 func (ts TableConfigs) Fields() (fs Fields) {

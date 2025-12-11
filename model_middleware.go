@@ -1,16 +1,30 @@
 package sqlbuilder
 
-import "context"
+import (
+	"context"
+
+	"github.com/pkg/errors"
+)
 
 type ModelMiddlewareContext struct {
-	Context     context.Context
-	index       int
-	middlewares ModelMiddlewares
+	Context      context.Context
+	index        int
+	middlewares  ModelMiddlewares
+	tableConfigs TableConfigs
 }
 
 func (ctx ModelMiddlewareContext) append(fns ...ModelMiddleware) ModelMiddlewareContext {
 	ctx.middlewares = ctx.middlewares.append(fns...)
 	return ctx
+}
+func (ctx ModelMiddlewareContext) GetRepository(tableIdentity string) (repository Repository) {
+	table, err := ctx.tableConfigs.GetByIdentity(tableIdentity)
+	if err != nil {
+		err = errors.WithMessagef(ErrNotFound, `ModelMiddlewareContext.GetRepository(%s)`, tableIdentity)
+		panic(err)
+	}
+	repository = table.Repository()
+	return repository
 }
 
 type ModelMiddleware struct {
