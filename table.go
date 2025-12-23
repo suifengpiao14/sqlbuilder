@@ -124,8 +124,8 @@ type TableConfig struct {
 	//publisher            message.Publisher table 只和gochannel publisher 交互，不直接和外部交互，如果需要发布到外部(如mq,kafka等)时，监听内部gochannel 转发即可，这样设计的目的是将领域内事件和领域外事件分离，方便内聚和聚合
 	comsumerMakers []func(table TableConfig) Consumer // 当前表级别的消费者(主要用于在表级别同步数据)
 	//views          TableConfigs view概念没有用 table在这里不是一等公民,Field才是一等公民,view功能通过FieldsI 接口实现,并且更合适
-	topicRouteKey string       // 2025-10-25 事件必须在运行表上发布,原因:接受事件后需要知道运行表是哪个,方便获取数据.所以运行表一定要获取,既然这样,将topic挂在运行表上就很合适. 为解决中间件订阅互不影响,所以增加routeKey类似mq的消息路由
-	topicTables   TableConfigs // 订阅的主题表，key 为固定的TableConfig.programTableName（这个字段可能无效，应为各模型订阅事件，topic是固定的2025-10-24）
+	topicRouteKey string // 2025-10-25 事件必须在运行表上发布,原因:接受事件后需要知道运行表是哪个,方便获取数据.所以运行表一定要获取,既然这样,将topic挂在运行表上就很合适. 为解决中间件订阅互不影响,所以增加routeKey类似mq的消息路由
+	//topicTables   TableConfigs // 订阅的主题表，key 为固定的TableConfig.identity（这个字段可能无效，应为各模型订阅事件，topic是固定的2025-10-24）
 
 }
 
@@ -155,22 +155,22 @@ func (t TableConfig) WithTopicRouteKey(topicRouteKey string) TableConfig {
 	return t
 }
 
-func (t TableConfig) WithTopicTable(topicTables ...TableConfig) TableConfig { // 订阅其它表的变更事件，并同步到当前表中
-	t.topicTables = append(t.topicTables, topicTables...)
-	return t
-}
+// func (t TableConfig) WithTopicTable(topicTables ...TableConfig) TableConfig { // 订阅其它表的变更事件，并同步到当前表中
+// 	t.topicTables = append(t.topicTables, topicTables...)
+// 	return t
+// }
 
 // GetTopicTable 通过模型表查询实际订阅表(由于表、表对应service 有依赖关系，订阅表往往和程序依赖关系相反，导致循环依赖语法错误，但是订阅代码确实属于表层面，所以增加自动匹配订阅表函数，后续观察和优化)
-func (t TableConfig) GetTopicTable(modelTable TableConfig) (publishTable TableConfig, err error) {
-	for _, topicTable := range t.topicTables {
-		err := topicTable.CheckMissOutFieldName(modelTable)
-		if err == nil {
-			return topicTable, nil
-		}
-	}
-	err = errors.Errorf("模型表(%s)不在表(%s)订阅表集合中", modelTable.Name, t.Name)
-	return publishTable, err
-}
+// func (t TableConfig) GetTopicTable(modelTable TableConfig) (publishTable TableConfig, err error) {
+// 	for _, topicTable := range t.topicTables {
+// 		err := topicTable.CheckMissOutFieldName(modelTable)
+// 		if err == nil {
+// 			return topicTable, nil
+// 		}
+// 	}
+// 	err = errors.Errorf("模型表(%s)不在表(%s)订阅表集合中", modelTable.Name, t.Name)
+// 	return publishTable, err
+// }
 
 func (t TableConfig) WithConsumerMakers(consumerMakers ...func(table TableConfig) (consumer Consumer)) TableConfig { // 使用tableGetter 能延迟获取table，主要是等待 handler 初始化完毕
 	t.comsumerMakers = consumerMakers
