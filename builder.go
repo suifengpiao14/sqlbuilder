@@ -1911,7 +1911,7 @@ func (p *SQLParam[T]) getSelectColumns(table TableConfig, fs Fields) (selectColu
 	_, isSqlDBHandler := handler.(SqlDBHandler)
 	if isSqlDBHandler && p.resultDst != nil { // 这里只有SqlDBHandler句柄实现了Fields接口处理，所以只对SqlDBHandler隐式转换
 		rv := reflect.ValueOf(p.resultDst)
-		fi, ok, _ := PointerImplementFieldsI(rv) // 忽略错误
+		fi, ok, _ := IsStructImplementFieldsI(rv)
 		if ok {
 			resultFs := fi.Fields()
 			selectColumns = resultFs.MakeDBColumnWithAlias(table.Columns)

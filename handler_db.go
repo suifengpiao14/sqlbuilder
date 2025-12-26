@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
-	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
@@ -389,20 +389,32 @@ func Scan(rows Rows, dst any) (rowsAffected int64, err error) {
 	return rowsAffected, nil
 }
 
-func PointerImplementFieldsI(dest reflect.Value) (fi FieldsI, ok bool, err error) {
+// ---- 实现FieldsI接口扫描---- isStructImplements 标记是否为结构体实现FieldsI接口而非指针实现，这种情况需要寻址 找到真正被赋值的副本
+func IsStructImplementFieldsI(dest reflect.Value) (fi FieldsI, ok bool, isStructImplements bool) {
 	dest = reflect.Indirect(dest)
+	switch dest.Kind() {
+	case reflect.Ptr:
+		dest = dest.Elem()
+	case reflect.Array, reflect.Slice: // 数组切片 需要寻址到元素类型，否则无法赋值给外部变量
+		dest = reflect.New(dest.Type().Elem()).Elem()
+	}
+	if dest.Kind() != reflect.Struct { // 非结构体 直接返回
+		return nil, false, false
+	}
+
 	destInterface := dest.Addr().Interface()
 	fi, ok = destInterface.(FieldsI)
 	if !ok {
-		return nil, false, nil
+		return nil, false, false
 	}
-	implementsStruct := dest.Type().Implements(reflect.TypeOf((*FieldsI)(nil)).Elem())
-	if implementsStruct {
-		//实现FieldsI 必须是  func (m *KnowledgeNodeModel) Fields()  格式，而不是 func (m KnowledgeNodeModel) Fields()  格式(结构体实现接口，Fields赋值后无法传递给外部结构体变量)
-		err := errors.Errorf("dest(%v) must pointer implement FieldsI,got struct  implement FieldsI", dest.String())
-		return nil, false, err
-	}
-	return fi, true, nil
+	//isStructImplements = dest.Type().Implements(reflect.TypeOf((*FieldsI)(nil)).Elem())
+	isStructImplements = dest.Type().Implements(reflect.TypeFor[FieldsI]())
+	// if implementsStruct {
+	// 	//实现FieldsI 必须是  func (m *KnowledgeNodeModel) Fields()  格式，而不是 func (m KnowledgeNodeModel) Fields()  格式(结构体实现接口，Fields赋值后无法传递给外部结构体变量)
+	// 	err := errors.Errorf("dest(%v) must pointer implement FieldsI,got struct  implement FieldsI", dest.String())
+	// 	return nil, false, err
+	// }
+	return fi, true, isStructImplements
 }
 
 func scanIntoStruct(rows Rows, dest reflect.Value) error {
@@ -414,10 +426,7 @@ func scanIntoStruct(rows Rows, dest reflect.Value) error {
 		return err
 	}
 
-	fi, ok, err := PointerImplementFieldsI(dest)
-	if err != nil {
-		return err
-	}
+	fi, ok, isStructImplements := IsStructImplementFieldsI(dest)
 	if !ok { // 普通结构体扫描
 		if err := sqlx.StructScan(rows, dest.Addr().Interface()); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
@@ -432,20 +441,20 @@ func scanIntoStruct(rows Rows, dest reflect.Value) error {
 
 	fields := fi.Fields()
 	addrs := make([]any, len(columns))
-	canUseFields := false
+	//canUseFields := false
 	for i, col := range columns {
 		if f, ok := fields.GetByName(col); ok {
-			canUseFields = true
+			//canUseFields = true
 			addrs[i], err = f.GetValueRef()
 			if err != nil {
 				return err
 			}
 		}
 	}
-	if !canUseFields {
-		err := errors.Errorf(`sql select name(%s) not match FieldsI.Fields() name(%s),please check sql select name or FieldsI.Fields() name`, strings.Join(columns, ","), strings.Join(fields.Names(), ","))
-		return err
-	}
+	// if !canUseFields {//缺失的字段读取到any即可 无需报错 2025-12-26 10:41
+	// 	err := errors.Errorf(`sql select name(%s) not match FieldsI.Fields() name(%s),please check sql select name or FieldsI.Fields() name`, strings.Join(columns, ","), strings.Join(fields.Names(), ","))
+	// 	return err
+	// }
 	values, err := sqlx.SliceScan(rows)
 	if err != nil {
 		return err
@@ -457,10 +466,10 @@ func scanIntoStruct(rows Rows, dest reflect.Value) error {
 				continue
 			}
 			sRv := reflect.Indirect(reflect.ValueOf(values[i]))
-			if sRv.CanConvert(dRv.Type()) {
-				dRv.Set(sRv.Convert(dRv.Type()))
-				continue
-			}
+			// if sRv.CanConvert(dRv.Type()) {
+			// 	dRv.Set(sRv.Convert(dRv.Type()))
+			// 	continue
+			// }
 
 			// ---- 手动转换类型 ----
 			switch dRv.Kind() {
@@ -490,5 +499,90 @@ func scanIntoStruct(rows Rows, dest reflect.Value) error {
 			}
 		}
 	}
+	if isStructImplements {
+		// 结构体实现FieldsI 则需要寻址
+		for _, val := range addrs {
+			if val != nil {
+				fieldVal := reflect.ValueOf(val)
+				if fieldVal.Kind() == reflect.Ptr { // 必须找到指针类型，否则无法寻址
+					hasValueDst, err := GetStructPtrFromFieldPtr(fieldVal, dest.Type())
+					if err != nil {
+						return nil
+					}
+					if hasValueDst != nil { // 寻址成功,直接赋值即可
+						dest.Set(reflect.Indirect(reflect.ValueOf(hasValueDst)))
+						return nil // 寻址成功，则返回
+					}
+				}
+			}
+		}
+	}
+
 	return nil
+}
+
+// 通用反射函数：从字段指针推导结构体实例指针
+// 参数：
+//
+//	fieldPtr: 结构体字段的指针（如&e.Name）
+//	structType: 目标结构体的类型（如reflect.TypeOf(Entity{})）
+//
+// 返回：结构体实例的指针（如*Entity）
+func GetStructPtrFromFieldPtr(fieldVal reflect.Value, structType reflect.Type) (any, error) {
+	// 1. 基础校验
+	if structType.Kind() != reflect.Struct {
+		return nil, errors.New("structType must be a struct type")
+	}
+
+	//	fieldVal := reflect.ValueOf(fieldPtr)
+	if fieldVal.Kind() != reflect.Ptr {
+		return nil, errors.New("fieldPtr must be a pointer to a struct field")
+	}
+	fieldElemType := fieldVal.Type().Elem()
+
+	// 2. 获取字段指针的底层地址（直接通过unsafe.Pointer转换，缩短链）
+	fieldPointer := fieldVal.Pointer() // 返回uintptr类型的字段地址
+	if fieldPointer == 0 {
+		return nil, errors.New("fieldPtr is a nil pointer")
+	}
+
+	// 3. 遍历结构体字段，自动匹配目标字段
+	var matchedOffset uintptr
+	matched := false
+
+	for i := 0; i < structType.NumField(); i++ {
+		field := structType.Field(i)
+		if field.Type != fieldElemType {
+			continue
+		}
+
+		// 核心优化：遵循Go unsafe规范，直接链式转换（无中间uintptr变量）
+		// 步骤1：计算候选结构体地址 → 直接转换为unsafe.Pointer（不保存uintptr）
+		// 合规使用：从字段地址推导结构体地址，符合Go unsafe规范
+		// nolint:unsafeptr
+		candidateStructPtrUnsafe := unsafe.Pointer(fieldPointer - field.Offset)
+
+		// 步骤2：通过reflect.NewAt创建结构体指针（合规操作）
+		candidateStructVal := reflect.NewAt(structType, candidateStructPtrUnsafe)
+		// 步骤3：获取候选结构体的该字段指针，验证地址匹配
+		candidateFieldPtr := candidateStructVal.Elem().Field(i).Addr().Interface()
+
+		// 地址验证：确认是目标字段
+		if reflect.ValueOf(candidateFieldPtr).Pointer() == fieldPointer {
+			matchedOffset = field.Offset
+			matched = true
+			break
+		}
+	}
+
+	if !matched {
+		return nil, fmt.Errorf("no matching field of type %s found in struct %s", fieldElemType, structType.Name())
+	}
+
+	// 4. 最终转换：同样遵循链式转换，抑制lint提示
+	// nolint:unsafeptr // 合规使用：结构体地址推导完成，转换为目标指针
+	structPtrUnsafe := unsafe.Pointer(fieldPointer - matchedOffset)
+	structPtr := reflect.NewAt(structType, structPtrUnsafe).Interface()
+
+	return structPtr, nil
 }

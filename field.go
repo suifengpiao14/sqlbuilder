@@ -1989,10 +1989,10 @@ func (fs Fields) GetScene() (scene Scene, err error) {
 }
 
 func (fs Fields) UmarshalModel(dst FieldsI, table TableConfig) (err error) {
-	_, _, err = PointerImplementFieldsI(reflect.ValueOf(dst))
-	if err != nil {
-		return err
-	}
+	// _, _, err = PointerImplementFieldsI(reflect.ValueOf(dst))
+	// if err != nil {
+	// 	return err
+	// }
 	dFs := dst.Fields()
 	for i, dF := range dFs {
 		fName, err := table.GetFieldNameByAlaisFeild(dF)
@@ -2608,8 +2608,9 @@ func (fs Fields) DataAsMap(layers ...Layer) (dataMap DBDataMap, err error) {
 
 type DBDataMap map[string]any
 
-func (m DBDataMap) GetByField(f *Field) (val any) {
-	return m[f.DBColumnName().BaseName()]
+func (m DBDataMap) GetByField(table TableConfig, f *Field) (val any) {
+	colName := f.SetTable(table).DBColumnName().BaseName()
+	return m[colName]
 }
 func (m DBDataMap) Merge(dbDataMap DBDataMap) DBDataMap {
 	maps.Copy(m, dbDataMap) // 使用更新数据覆盖数据库数据

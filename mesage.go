@@ -24,26 +24,26 @@ func newGoChannel() (pubsub *gochannel.GoChannel) {
 	return pubsub
 }
 
-func GetPublisher(topic string) (publisher message.Publisher) {
-	value, ok := gochannelPool.Load(topic)
+func GetPublisher(topicWithRouteKey string) (publisher message.Publisher) {
+	value, ok := gochannelPool.Load(topicWithRouteKey)
 	if ok {
 		publisher = value.(message.Publisher)
 		return publisher
 	}
 	pubsub := newGoChannel()
-	gochannelPool.Store(topic, pubsub)
+	gochannelPool.Store(topicWithRouteKey, pubsub)
 	publisher = pubsub
 	return publisher
 }
 
-func GetSubscriber(topic string) (subscriber message.Subscriber) {
-	value, ok := gochannelPool.Load(topic)
+func GetSubscriber(topicWithRouteKey string) (subscriber message.Subscriber) {
+	value, ok := gochannelPool.Load(topicWithRouteKey)
 	if ok {
 		subscriber = value.(message.Subscriber)
 		return subscriber
 	}
 	pubsub := newGoChannel()
-	gochannelPool.Store(topic, pubsub)
+	gochannelPool.Store(topicWithRouteKey, pubsub)
 	subscriber = pubsub
 	return subscriber
 }
@@ -79,10 +79,7 @@ func (s Consumer) Consume() (err error) {
 		err = errors.Errorf("Subscriber.Consume WorkFn required, consume:%s", s.String())
 		return err
 	}
-	if s.subscriber == nil {
-		err = errors.Errorf("Subscriber.Consume Subscriber required, consume:%s", s.String())
-		return err
-	}
+	s.subscriber = GetSubscriber(s.Topic)
 	go func() {
 		msgChan, err := s.subscriber.Subscribe(context.Background(), s.Topic)
 		if err != nil {
@@ -177,12 +174,11 @@ func MakeIdentityEventSubscriber[Model any](publishTable TableConfig, topicRoute
 }
 
 func makeIdentityEventISubscriber[IdentityEvent IdentityEventI, Model any](publishTable TableConfig, topicRouteKey string, workFn func(ruleModel Model) (err error)) (subscriber Consumer) {
-	table := publishTable.WithTopicRouteKey(topicRouteKey)
-	topic := table.GetTopic()
+	//table := publishTable.WithTopicRouteKey(topicRouteKey)
+	topic := publishTable.GetTopic(topicRouteKey)
 	return Consumer{
 		Description: "数据变更订阅者",
 		Topic:       topic,
-		subscriber:  GetSubscriber(topic),
 		WorkFn: MakeWorkFn(func(event IdentityEvent) (err error) {
 			fieldName := event.GetIdentityFieldName()
 			if fieldName == "" {
@@ -194,14 +190,14 @@ func makeIdentityEventISubscriber[IdentityEvent IdentityEventI, Model any](publi
 				err = errors.Errorf("事件(%s)中没有包含唯一标识", event.String())
 				return err
 			}
-			col, err := table.Columns.GetByFieldNameAsError(fieldName)
+			col, err := publishTable.Columns.GetByFieldNameAsError(fieldName)
 			if err != nil {
 				return err
 			}
 			field := col.GetField().SetModelRequered(true).SetValue(event.GetIdentityValue())
 			fs := Fields{field}
 			ruleModel := new(Model)
-			err = table.Repository().FirstMustExists(ruleModel, fs)
+			err = publishTable.Repository().FirstMustExists(ruleModel, fs)
 			if err != nil {
 				return err
 			}

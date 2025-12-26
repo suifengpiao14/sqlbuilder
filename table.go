@@ -12,6 +12,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/doug-martin/goqu/v9"
 	"github.com/doug-martin/goqu/v9/exp"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/suifengpiao14/funcs"
 	"github.com/suifengpiao14/memorytable"
@@ -124,14 +125,15 @@ type TableConfig struct {
 	//publisher            message.Publisher table 只和gochannel publisher 交互，不直接和外部交互，如果需要发布到外部(如mq,kafka等)时，监听内部gochannel 转发即可，这样设计的目的是将领域内事件和领域外事件分离，方便内聚和聚合
 	comsumerMakers []func(table TableConfig) Consumer // 当前表级别的消费者(主要用于在表级别同步数据)
 	//views          TableConfigs view概念没有用 table在这里不是一等公民,Field才是一等公民,view功能通过FieldsI 接口实现,并且更合适
-	topicRouteKey string // 2025-10-25 事件必须在运行表上发布,原因:接受事件后需要知道运行表是哪个,方便获取数据.所以运行表一定要获取,既然这样,将topic挂在运行表上就很合适. 为解决中间件订阅互不影响,所以增加routeKey类似mq的消息路由
+	//topicRouteKey 建议使用参数传递，这样能显性的知道订阅的主题，方便调试和定位问题,另外一个表可能有多个topicRouteKey(2025-12-25 增加的备注)
+	//topicRouteKey string // 2025-10-25 事件必须在运行表上发布,原因:接受事件后需要知道运行表是哪个,方便获取数据.所以运行表一定要获取,既然这样,将topic挂在运行表上就很合适. 为解决中间件订阅互不影响,所以增加routeKey类似mq的消息路由
 	//topicTables   TableConfigs // 订阅的主题表，key 为固定的TableConfig.identity（这个字段可能无效，应为各模型订阅事件，topic是固定的2025-10-24）
 
 }
 
 type HookFn func(ctx context.Context, scene Scene) (hookedFields Fields)
 
-// WithFieldHook 数据变更时，自动填充冗余字段, 比如品类id集合发生变化时，自动更新品类id集合等操作
+// Deprecated use  WithModelMiddlewares 数据变更时，自动填充冗余字段, 比如品类id集合发生变化时，自动更新品类id集合等操作
 func (t TableConfig) WithFieldHook(hooks HookFn) TableConfig {
 	t.tableLevelFieldsHook = hooks
 	return t
@@ -149,11 +151,11 @@ func (t TableConfig) WithModelMiddlewares(middlewares ...ModelMiddleware) TableC
 	return t
 }
 
-func (t TableConfig) WithTopicRouteKey(topicRouteKey string) TableConfig {
-	//这个地方必须返回table 的copy副本,原本应该放到函数入参设置，但是TableConfig.Init 获取数据不方便，所以增加这个属性
-	t.topicRouteKey = topicRouteKey
-	return t
-}
+// func (t TableConfig) WithTopicRouteKey(topicRouteKey string) TableConfig {
+// 	//这个地方必须返回table 的copy副本,原本应该放到函数入参设置，但是TableConfig.Init 获取数据不方便，所以增加这个属性
+// 	t.topicRouteKey = topicRouteKey
+// 	return t
+// }
 
 // func (t TableConfig) WithTopicTable(topicTables ...TableConfig) TableConfig { // 订阅其它表的变更事件，并同步到当前表中
 // 	t.topicTables = append(t.topicTables, topicTables...)
@@ -248,12 +250,12 @@ func (t TableConfig) Init() (err error) { //init 会挂载在 t.GetHandler 方�
 
 // }
 
-func (t *TableConfig) GetPublisher() message.Publisher {
-	return GetPublisher(t.GetTopic())
+func (t *TableConfig) GetPublisher(routeKey string) message.Publisher {
+	return GetPublisher(t.GetTopic(routeKey))
 }
 
-func (t TableConfig) GetTopic() string {
-	topic := fmt.Sprintf("topic_table_%s_routeKey_%s", t.Name, t.topicRouteKey) // 这地方目前是兼容历史，后续t.topc 比定不能为空
+func (t TableConfig) GetTopic(routeKey string) string {
+	topic := fmt.Sprintf("topic_table_%s_routeKey_%s", t.Name, routeKey) // 这地方目前是兼容历史，后续t.topc 比定不能为空
 	return topic
 }
 
@@ -269,18 +271,22 @@ func (t TableConfig) GetTopic() string {
 //	}
 //
 // Publish
+const (
+	TopicRouteKey_self = "self"
+)
+
 func (t TableConfig) Publish(topicRouteKey string, event EventMessage) (err error) {
-	table := t.WithTopicRouteKey(topicRouteKey)
-	err = table.Init() // 这里初始化表，拉起发布表的订阅者
+	//table := t.WithTopicRouteKey(topicRouteKey)
+	err = t.Init() // 这里初始化表，拉起发布表的订阅者
 	if err != nil {
 		return err
 	}
-	var pubSub = table.GetPublisher()
+	var pubSub = t.GetPublisher(topicRouteKey)
 	msg, err := event.ToMessage()
 	if err != nil {
 		return err
 	}
-	err = pubSub.Publish(table.GetTopic(), msg)
+	err = pubSub.Publish(t.GetTopic(topicRouteKey), msg)
 	if err != nil {
 		return err
 	}
@@ -1161,6 +1167,55 @@ type HookField struct {
 	DestField     *Field
 	GetValueFn    func(scene Scene, updatingData DBDataMap, dbData DBDataMap, fs ...*Field) (val any, err error)
 }
+
+type RedundancyField struct {
+	ObserveFields Fields
+	DestField     *Field
+	GetValueFn    func(scene Scene, updatingData DBDataMap, dbData DBDataMap, fs ...*Field) (val any, err error)
+}
+
+func MakeRedundancyFieldMiddleware(redundancyFields ...RedundancyField) (modelMiddleware ModelMiddleware) {
+	modelMiddleware = ModelMiddleware{
+		Name:        uuid.New().String(),
+		Description: "冗余字段中间件",
+		Fn: func(ctx *ModelMiddlewareContext, fs *Fields) (err error) {
+			for _, redundancyField := range redundancyFields {
+				f := redundancyField.DestField.ResetValueFn(ValueFnSetFormat(ValueFnPreventDeadLoop(func(inputValue any, f *Field, fs ...*Field) (any, error) {
+					fs1 := Fields(fs)
+					if len(fs1) == 0 {
+						return nil, nil
+					}
+					if !Fields(fs1).Contains(redundancyField.ObserveFields...) { // 本次操作不涉及关注的字段，则不操作冗余字段
+						return nil, nil
+					}
+					scene := fs1.FirstMust().scene
+					if !slices.Contains(SCENE_Commands, scene) { // 非命令场景，无需变更冗余数据, 这里的命令场景包含 删除、新增、修改场景，调用方可视情况屏蔽删除场景
+						return nil, nil
+					}
+					updatingData, dbData, err := fs1.GetChangingData() //全量更新数据
+					if err != nil {
+						return nil, err
+					}
+					val, err := redundancyField.GetValueFn(scene, updatingData, dbData, fs1...)
+					if err != nil {
+						return nil, err
+					}
+					return val, nil
+				})))
+				fs.AddRef(f)
+			}
+			err = ctx.Next(fs)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+
+	return modelMiddleware
+}
+
+//Deprecated: 请使用MakeFieldHook代替，MakeFieldHook 更加灵活，可以指定多个冗余字段，并且可以指定冗余字段的取值逻辑
 
 func MakeFieldHook(hookFields ...HookField) (hookFn HookFn) {
 	return func(ctx context.Context, scena Scene) (hookedFields Fields) {
