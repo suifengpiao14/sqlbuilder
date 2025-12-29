@@ -1352,6 +1352,19 @@ func (f *Field) SetValue(value any) *Field {
 	return f
 }
 
+func (f *Field) SetRefValue(value any) *Field {
+	rt := reflect.TypeOf(value)
+	if rt.Kind() != reflect.Ptr {
+		err := errors.Errorf("Field(%s) value must be pointer", f.Name)
+		panic(err)
+	}
+	f.value = value
+	// f.ValueFns.ResetSetValueFn(func(_ any, f *Field, fs ...*Field) (any, error) {
+	// 	return value, nil
+	// })
+	return f
+}
+
 // BindValue 绑定值地址，实现联动复制，常用户模型Fields 函数内
 func (f *Field) BindValue(value any) *Field {
 	rt := reflect.TypeOf(value)
