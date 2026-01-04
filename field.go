@@ -1365,7 +1365,7 @@ func (f *Field) SetRefValue(value any) *Field {
 	return f
 }
 
-// BindValue 绑定值地址，实现联动复制，常用户模型Fields 函数内
+// Deprecated use SetRefValue BindValue 绑定值地址，实现联动复制，常用户模型Fields 函数内
 func (f *Field) BindValue(value any) *Field {
 	rt := reflect.TypeOf(value)
 	if rt.Kind() != reflect.Ptr {
