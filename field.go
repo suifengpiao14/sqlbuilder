@@ -1607,6 +1607,9 @@ func (f Field) GetOriginalValue() any {
 }
 
 func (f Field) getValue(layers []Layer, fs ...*Field) (value any, err error) {
+	if f.value == nil { // 空值不处理，直接返回
+		return nil, ErrValueNil
+	}
 	val := reflect.Indirect(reflect.ValueOf(f.value)).Interface() // f.value 基本上是指针，此处转为值类型，方便后续操作，也是兼容历史
 	if f.ValueFns == nil {                                        // 防止空指针
 		return val, nil

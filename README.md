@@ -14,5 +14,7 @@ todo
 
 
 
+备注：
+Field.ValueFns.Reset() 函数，历史上会将字段值设置为nil，但是自从增加Field.value 后，失去这个作用，所以历史书写Field.ValueFns.Reset() 是为了忽略字段值，则需要改成 Field.SetValue(nil) 替代。
 
 
