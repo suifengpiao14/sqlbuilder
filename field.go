@@ -1037,7 +1037,21 @@ func (f *Field) HastTag(tag string) bool {
 func (f *Field) GetTags() Tags {
 	return f.tags
 }
+
+// Deprecated use AppendEnums 代替 一个一个的定义不方便，直接定义数组即可
 func (f *Field) AppendEnum(enums ...Enum) *Field {
+	if f.Schema == nil {
+		f.Schema = &Schema{}
+	}
+	f.Schema.Enums = append(f.Schema.Enums, enums...)
+	for _, enum := range enums {
+		if enum.IsDefault {
+			f.Schema.Default = enum.Key
+		}
+	}
+	return f
+}
+func (f *Field) AppendEnums(enums Enums) *Field {
 	if f.Schema == nil {
 		f.Schema = &Schema{}
 	}
