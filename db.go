@@ -94,7 +94,8 @@ var (
 // -------------------------- 核心管理器（单实例&重连核心） --------------------------
 // DBManager 数据库管理器（单例，管理所有数据库实例）
 type DBManager struct {
-	sync.RWMutex
+	sqlDBLock  sync.RWMutex
+	gormDBLock sync.RWMutex
 	sqlDBs     map[string]*sql.DB  // 缓存sql.DB实例（key: 驱动+DSN）
 	gormDBs    map[string]*gorm.DB // 缓存gorm.DB实例（key: 驱动+DSN）
 	signalOnce sync.Once           // 确保信号监听只执行一次
@@ -108,12 +109,7 @@ var globalDBManager = &DBManager{
 }
 
 // -------------------------- 配置校验&辅助方法 --------------------------
-// validate 校验DBConfig合法性
-func (c *DBConfig) validate() error {
-	if c.DriverType == "" {
-		return errors.New("驱动类型DriverType不能为空")
-	}
-
+func (c *DBConfig) Format() *DBConfig {
 	// 补全默认配置
 	if c.DBPoolConfig.MaxOpenConns == 0 {
 		c.DBPoolConfig = defaultPoolConfig
@@ -121,12 +117,7 @@ func (c *DBConfig) validate() error {
 	if c.ReconnectConfig.MaxRetries == 0 {
 		c.ReconnectConfig = defaultReconnectConfig
 	}
-
-	// MySQL必须指定DSN或账号密码等信息
 	if c.DriverType == DriverMySQL && c.DSN == "" {
-		if c.UserName == "" || c.Host == "" || c.DatabaseName == "" {
-			return errors.New("MySQL驱动必须指定DSN或UserName+Host+DatabaseName")
-		}
 		if c.Port == 0 {
 			c.Port = 3306 // 默认MySQL端口
 		}
@@ -134,7 +125,22 @@ func (c *DBConfig) validate() error {
 			c.QueryParams = "charset=utf8mb4&parseTime=False&timeout=300s&loc=Local"
 		}
 	}
+	return c
 
+}
+
+// validate 校验DBConfig合法性
+func (c *DBConfig) validate() error {
+	if c.DriverType == "" {
+		return errors.New("驱动类型DriverType不能为空")
+	}
+
+	// MySQL必须指定DSN或账号密码等信息
+	if c.DriverType == DriverMySQL && c.DSN == "" {
+		if c.UserName == "" || c.Host == "" || c.DatabaseName == "" {
+			return errors.New("MySQL驱动必须指定DSN或UserName+Host+DatabaseName")
+		}
+	}
 	// SQLite必须指定DSN或文件路径
 	if c.DriverType == DriverSQLite && c.DSN == "" && c.DatabaseName == "" {
 		return errors.New("SQLite驱动必须指定DSN或DatabaseName（文件路径）")
@@ -192,6 +198,7 @@ func GetSQLDB(cfg DBConfig) func() *sql.DB {
 // -------------------------- 核心方法（单实例&重连） --------------------------
 // getSQLDB 获取sql.DB实例（单例，自动重连）
 func getSQLDB(cfg DBConfig) (*sql.DB, error) {
+	cfg = *cfg.Format()
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("配置校验失败：%w", err)
 	}
@@ -204,9 +211,9 @@ func getSQLDB(cfg DBConfig) (*sql.DB, error) {
 	key := fmt.Sprintf("%s_%s", cfg.DriverType, dsn)
 
 	// 1. 尝试从缓存获取
-	globalDBManager.RLock()
+	globalDBManager.sqlDBLock.RLock()
 	db, exists := globalDBManager.sqlDBs[key]
-	globalDBManager.RUnlock()
+	globalDBManager.sqlDBLock.RUnlock()
 
 	// 2. 缓存存在且连接有效，直接返回
 	if exists && !globalDBManager.closed {
@@ -217,8 +224,8 @@ func getSQLDB(cfg DBConfig) (*sql.DB, error) {
 	}
 
 	// 3. 缓存不存在/连接失效，创建新连接（加写锁）
-	globalDBManager.Lock()
-	defer globalDBManager.Unlock()
+	globalDBManager.sqlDBLock.Lock()
+	defer globalDBManager.sqlDBLock.Unlock()
 
 	// 双重检查（避免并发创建）
 	if exists && !globalDBManager.closed {
@@ -259,22 +266,17 @@ func GetGormDB(cfg DBConfig, gormCfg ...*gorm.Config) func() *gorm.DB {
 
 // getGormDB 获取gorm.DB实例（单例，自动重连）
 func getGormDB(cfg DBConfig, gormCfg ...*gorm.Config) (*gorm.DB, error) {
-	// 1. 获取sql.DB实例
-	sqlDB, err := getSQLDB(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("获取sql.DB失败：%w", err)
-	}
-
-	// 2. 构建唯一key
+	cfg = *cfg.Format()
+	// 1. 构建唯一key
 	dsn, _ := cfg.buildDSN()
 	key := fmt.Sprintf("%s_%s_gorm", cfg.DriverType, dsn)
 
-	// 3. 尝试从缓存获取
-	globalDBManager.RLock()
+	// 2. 尝试从缓存获取
+	globalDBManager.gormDBLock.RLock()
 	gormDB, exists := globalDBManager.gormDBs[key]
-	globalDBManager.RUnlock()
+	globalDBManager.gormDBLock.RUnlock()
 
-	// 4. 缓存存在且连接有效，直接返回
+	// 3. 缓存存在且连接有效，直接返回
 	if exists && !globalDBManager.closed {
 		if sqlDB, err := gormDB.DB(); err == nil && pingWithRetry(sqlDB, cfg.ReconnectConfig) == nil {
 			return gormDB, nil
@@ -282,21 +284,20 @@ func getGormDB(cfg DBConfig, gormCfg ...*gorm.Config) (*gorm.DB, error) {
 		log.Printf("GORM连接失效（key：%s），准备重建连接", key)
 	}
 
-	// 5. 创建新GORM连接（加写锁）
-	globalDBManager.Lock()
-	defer globalDBManager.Unlock()
+	// 4. 创建新GORM连接（加写锁）
+	globalDBManager.gormDBLock.Lock()
+	defer globalDBManager.gormDBLock.Unlock()
 
-	// 双重检查
-	if exists && !globalDBManager.closed {
-		if sqlDB, err := gormDB.DB(); err == nil && pingWithRetry(sqlDB, cfg.ReconnectConfig) == nil {
-			return gormDB, nil
-		}
-	}
-
-	// 6. 构建GORM配置
+	// 5. 构建GORM配置
 	config := defaultGormConfig
 	if len(gormCfg) > 0 && gormCfg[0] != nil {
 		config = gormCfg[0]
+	}
+
+	// 6. 获取sql.DB实例
+	sqlDB, err := getSQLDB(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("获取sql.DB失败：%w", err)
 	}
 
 	// 7. 创建GORM连接
@@ -324,8 +325,8 @@ func getGormDB(cfg DBConfig, gormCfg ...*gorm.Config) (*gorm.DB, error) {
 
 // Close 关闭所有数据库连接
 func Close() {
-	globalDBManager.Lock()
-	defer globalDBManager.Unlock()
+	globalDBManager.sqlDBLock.Lock()
+	defer globalDBManager.sqlDBLock.Unlock()
 
 	if globalDBManager.closed {
 		return
@@ -340,6 +341,8 @@ func Close() {
 		}
 		delete(globalDBManager.sqlDBs, key)
 	}
+	globalDBManager.gormDBLock.Lock()
+	defer globalDBManager.gormDBLock.Unlock()
 
 	// 关闭所有gorm.DB（实际还是关闭底层sql.DB）
 	for key, gormDB := range globalDBManager.gormDBs {
@@ -428,4 +431,9 @@ var GetDB = func() *sql.DB {
 		log.Panicf("获取默认SQLite连接失败：%v", err)
 	}
 	return db
+}
+
+var SQliteConfigExample = DBConfig{
+	DriverType:   DriverSQLite,
+	DatabaseName: "sqlbuilder_example.db",
 }
