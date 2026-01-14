@@ -197,7 +197,8 @@ func makeIdentityEventISubscriber[IdentityEvent IdentityEventI, Model any](publi
 			field := col.GetField().SetModelRequered(true).SetValue(event.GetIdentityValue())
 			fs := Fields{field}
 			ruleModel := new(Model)
-			err = publishTable.Repository().FirstMustExists(ruleModel, fs)
+			ctx := context.Background()
+			err = publishTable.Repository().FirstMustExists(ctx, ruleModel, fs)
 			if err != nil {
 				return err
 			}

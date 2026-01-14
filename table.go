@@ -1145,7 +1145,8 @@ func GetRecordForUpdate[Model any](fs Fields) (record *Model, err error) {
 	fs1 = fs1.Add(limitField)
 	records := make([]Model, 0)
 	fs1.CleanSelectColumns() // 清理select字段，重新设置
-	err = table.Repository().All(&records, fs1)
+	ctx := context.Background()
+	err = table.Repository().All(ctx, &records, fs1)
 	if err != nil {
 		return nil, err
 	}
