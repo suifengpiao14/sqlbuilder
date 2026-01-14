@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/doug-martin/goqu/v9"
 	"github.com/doug-martin/goqu/v9/exp"
 	"github.com/google/uuid"
@@ -250,13 +249,42 @@ func (t TableConfig) Init() (err error) { //init 会挂载在 t.GetHandler 方�
 
 // }
 
-func (t *TableConfig) GetPublisher(routeKey string) message.Publisher {
-	return GetPublisher(t.GetTopic(routeKey))
+// func (t *TableConfig) GetPublisher(routeKey string) message.Publisher {
+// 	return _GetPublisher(t.GetTopic(routeKey))
+// }
+
+type Topic string
+
+func (t Topic) String() string {
+	return string(t)
 }
 
-func (t TableConfig) GetTopic(routeKey string) string {
+func (t Topic) Subscribe(workFns ...func(message *Message) (err error)) (err error) {
+	for _, workFn := range workFns {
+		consumer := Consumer{
+			Topic:  t,
+			WorkFn: workFn,
+		}
+		err = consumer.Consume()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t Topic) Publish(message *Message) (err error) {
+	var pubSub = _GetPublisher(t)
+	err = pubSub.Publish(t.String(), message)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t TableConfig) GetTopic(routeKey string) Topic {
 	topic := fmt.Sprintf("topic_table_%s_routeKey_%s", t.Name, routeKey) // 这地方目前是兼容历史，后续t.topc 比定不能为空
-	return topic
+	return Topic(topic)
 }
 
 // func (t TableConfig) WithTopic(topic string) TableConfig { // 有时候topic需要固定为封装模块内置的表，所以此处支持自定义topic，一般是用内置表topic赋值给当前表
@@ -281,12 +309,11 @@ func (t TableConfig) Publish(topicRouteKey string, event EventMessage) (err erro
 	if err != nil {
 		return err
 	}
-	var pubSub = t.GetPublisher(topicRouteKey)
-	msg, err := event.ToMessage()
+	message, err := event.ToMessage()
 	if err != nil {
-		return err
+		return
 	}
-	err = pubSub.Publish(t.GetTopic(topicRouteKey), msg)
+	err = t.GetTopic(topicRouteKey).Publish(message)
 	if err != nil {
 		return err
 	}

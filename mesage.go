@@ -24,7 +24,7 @@ func newGoChannel() (pubsub *gochannel.GoChannel) {
 	return pubsub
 }
 
-func GetPublisher(topicWithRouteKey string) (publisher message.Publisher) {
+func _GetPublisher(topicWithRouteKey Topic) (publisher message.Publisher) {
 	value, ok := gochannelPool.Load(topicWithRouteKey)
 	if ok {
 		publisher = value.(message.Publisher)
@@ -36,7 +36,7 @@ func GetPublisher(topicWithRouteKey string) (publisher message.Publisher) {
 	return publisher
 }
 
-func GetSubscriber(topicWithRouteKey string) (subscriber message.Subscriber) {
+func _GetSubscriber(topicWithRouteKey Topic) (subscriber message.Subscriber) {
 	value, ok := gochannelPool.Load(topicWithRouteKey)
 	if ok {
 		subscriber = value.(message.Subscriber)
@@ -50,7 +50,7 @@ func GetSubscriber(topicWithRouteKey string) (subscriber message.Subscriber) {
 
 type Consumer struct {
 	Description string                             `json:"description"`
-	Topic       string                             `json:"topic"`
+	Topic       Topic                              `json:"topic"`
 	subscriber  message.Subscriber                 `json:"-"` //这里固定使用gochannel 作为订阅者，减少库依赖，确保库稳定，外部订阅者可以监听gochannel转发
 	WorkFn      func(message *Message) (err error) `json:"-"`
 	Logger      watermill.LoggerAdapter            `json:"-"` // 日志适配器，如果不设置则使用默认日志适配器
@@ -79,9 +79,9 @@ func (s Consumer) Consume() (err error) {
 		err = errors.Errorf("Subscriber.Consume WorkFn required, consume:%s", s.String())
 		return err
 	}
-	s.subscriber = GetSubscriber(s.Topic)
+	s.subscriber = _GetSubscriber(s.Topic)
 	go func() {
-		msgChan, err := s.subscriber.Subscribe(context.Background(), s.Topic)
+		msgChan, err := s.subscriber.Subscribe(context.Background(), s.Topic.String())
 		if err != nil {
 			logger.Error("Subscriber.Consumer.Subscribe", err, nil)
 			return
