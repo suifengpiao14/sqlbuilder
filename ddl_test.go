@@ -20,7 +20,10 @@ func NewOrderId(orderId string) *sqlbuilder.Field {
 	return sqlbuilder.NewStringField(orderId, "orderId", "订单号", 0)
 }
 
-var table = sqlbuilder.NewTableConfig("pay_order_1").WithHandler(sqlbuilder.NewGormHandler(sqlbuilder.DB2Gorm(sqlbuilder.GetDB, nil))).AddColumns(
+var table = sqlbuilder.NewTableConfig("pay_order_1").WithHandler(sqlbuilder.NewGormHandler(sqlbuilder.GetGormDB(sqlbuilder.DBConfig{
+	DriverType:   sqlbuilder.DriverSQLite,
+	DatabaseName: "./test.db",
+}, nil))).AddColumns(
 	sqlbuilder.NewColumn("order_id", sqlbuilder.GetField(NewOrderId)),
 	sqlbuilder.NewColumn("notify_url", sqlbuilder.GetField(NewNotifyUrl)),
 	sqlbuilder.NewColumn("isAuto", sqlbuilder.GetField(NewAnyAmount)),

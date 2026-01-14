@@ -48,7 +48,7 @@ func (h SqlDBHandler) Transaction(fc func(tx Handler) error, opts ...*sql.TxOpti
 	return err
 }
 func (h SqlDBHandler) GetDialector() string {
-	return DetectDriver(h())
+	return detectDriver(h())
 }
 func (h SqlDBHandler) GetSqlDBHandler() SqlDBHandler {
 	return h
@@ -164,8 +164,26 @@ func (h _TxHandler) Transaction(fc func(tx Handler) error, opts ...*sql.TxOption
 	return err
 }
 func (h _TxHandler) GetDialector() string {
-	return detectDriverTx(h.tx)
+	return detectDriver(h.tx)
 }
+
+type QueryRow interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+func detectDriver(tx QueryRow) string {
+	var version string
+	// 尝试执行 SQLite 语句
+	if err := tx.QueryRow("SELECT sqlite_version()").Scan(&version); err == nil {
+		return Driver_sqlite3.String()
+	}
+	// 尝试 MySQL
+	if err := tx.QueryRow("SELECT VERSION()").Scan(&version); err == nil {
+		return Driver_mysql.String()
+	}
+	return "unknown"
+}
+
 func (h _TxHandler) GetSqlDBHandler() SqlDBHandler {
 	err := errors.Errorf("事务中不能再重新获取数据库句柄，避免循环调用，导致死锁")
 	panic(err)
